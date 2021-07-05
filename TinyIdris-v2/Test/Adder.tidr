@@ -1,0 +1,35 @@
+data Bit : Type where
+     O : Bit
+     I : Bit
+
+xor : Bit -> Bit -> Bit
+xor O O = O
+xor O I = I
+xor I O = I
+xor I I = O
+
+or : Bit -> Bit -> Bit
+or O O = O
+or O I = I
+or I O = I
+or I I = I
+
+and : Bit -> Bit -> Bit
+and O O = O
+and O I = O
+and I O = O
+and I I = I
+
+data Pair : Type -> Type where
+     MkP : (a : Type) -> a -> a -> Pair a
+
+dup : Bit -> Pair Bit
+pat b : Bit =>
+    dup b = MkP Bit b b
+
+fa : Bit -> Bit -> Bit -> Pair Bit
+pat a : Bit, b : Bit, cin : Bit =>
+    fa a b cin = let axorb : Bit
+                           = xor a b
+                 in MkP _ (xor axorb cin)
+                          (or (and axorb cin) (and a b))
