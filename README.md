@@ -1,5 +1,7 @@
-Adventures in Hardware with Tiny Idris
-======================================
+# Toatie
+
+> A spicy Hardware Description Language with dependent types
+> and a covid fever dream
 
 We poke, bend, and otherwise abuse Tiny Idris --- introduced by
 [Edwin Brady](https://github.com/edwinb) at
@@ -16,3 +18,18 @@ We'll work towards:
   + Conversion of Terms to something like Clash's ANF, with a little more unrolling.
   + Generating netlists from this ANF.
   + Encoding _synchronous_ logic
+
+<pre>
+
+"Y8888888888888888888888888888888888888888888888888888888Y"
+  "Y888888888888888888888888888888888888888888888888888Y"
+   88                                                 88
+   88   888                     888    d8b            88
+   88   888                     888    Y8P            88
+   88   888                     888                   88
+   88   888888 .d88b.   8888b.  888888 888  .d88b.    88
+   88   888   d88""88b     "88b 888    888 d8P  Y8b   88
+   88   888   888  888 .d888888 888    888 88888888   88
+   88   Y88b. Y88..88P 888  888 Y88b.  888 Y8b.       88
+ .e88e   "Y888 "Y88P"  "Y888888  "Y888 888  "Y8888   e88e. 
+</pre>                                               
