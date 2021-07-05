@@ -58,6 +58,8 @@ parameters (defs : Defs)
         = evalMeta env name (map (MkClosure locs env) args) stk
     eval env locs (Bind x (Lam _ ty) scope) (thunk :: stk)
         = eval env (thunk :: locs) scope stk
+    eval env locs (Bind x (Let tm ty) scope) stk
+        = eval env (MkClosure locs env tm :: locs) scope stk
     eval env locs (Bind x b scope) stk
         = do b' <- traverse (\tm => eval env locs tm []) b
              pure $ NBind x b'
@@ -320,6 +322,10 @@ mutual
   quoteBinder q defs bounds env (Pi p ty)
       = do ty' <- quoteGenNF q defs bounds env ty
            pure (Pi p ty')
+  quoteBinder q defs bounds env (Let val ty)
+      = do val' <- quoteGenNF q defs bounds env val
+           ty'  <- quoteGenNF q defs bounds env ty
+           pure (Let val' ty')
   quoteBinder q defs bounds env (PVar ty)
       = do ty' <- quoteGenNF q defs bounds env ty
            pure (PVar ty')

@@ -5,6 +5,8 @@ import Core.TT
 public export
 data RawImp : Type where
      IVar : Name -> RawImp
+     ILet : Name -> (argTy : RawImp) -> (argVal : RawImp) -> (scope : RawImp) ->
+            RawImp
      IPi : PiInfo -> Maybe Name ->
            (argTy : RawImp) -> (retTy : RawImp) -> RawImp
      ILam : PiInfo -> Maybe Name ->

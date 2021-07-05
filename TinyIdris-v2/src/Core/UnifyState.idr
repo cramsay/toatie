@@ -103,6 +103,8 @@ export
 abstractEnvType : {vars : _} ->
                   Env Term vars -> (tm : Term vars) -> Term []
 abstractEnvType [] tm = tm
+abstractEnvType (Let val ty :: env) tm
+    = abstractEnvType env (Bind _ (Let val ty) tm)
 abstractEnvType (Pi e ty :: env) tm
     = abstractEnvType env (Bind _ (Pi e ty) tm)
 abstractEnvType (b :: env) tm

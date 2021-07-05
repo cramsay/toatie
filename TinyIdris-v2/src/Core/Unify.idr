@@ -244,6 +244,8 @@ instantiate {newvars} env mname mdef locs tm
             = Just (Lam p !(updateIVars ivs t))
         updateIVarsB ivs (Pi p t)
             = Just (Pi p !(updateIVars ivs t))
+        updateIVarsB ivs (Let val t)
+            = Just (Let !(updateIVars ivs val) !(updateIVars ivs t))
         updateIVarsB ivs (PVar t)
             = Just (PVar !(updateIVars ivs t))
         updateIVarsB ivs (PVTy t)
@@ -260,6 +262,11 @@ instantiate {newvars} env mname mdef locs tm
     mkDef (v :: vs) vars soln (Bind x (Pi _ ty) sc)
        = do sc' <- mkDef vs (ICons (Just v) vars) soln sc
             pure $ Bind x (Lam Explicit Erased) sc'
+    mkDef vs vars soln (Bind x b@(Let val ty) sc)
+      = do sc' <- mkDef vs (ICons Nothing vars) soln sc
+           let Just scs = shrinkTerm sc' (DropCons SubRefl)
+               | Nothing => pure $ Bind x b sc'
+           pure scs
     mkDef [] vars soln ty
        = do let Just soln' = updateIVars vars soln
                 | Nothing => ufail ("Can't make solution for " ++ show mname)

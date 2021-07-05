@@ -182,6 +182,21 @@ mutual
        bindAll ((n, ty) :: rest) scope
            = ILam Explicit (Just n) ty (bindAll rest scope)
 
+  let_ : FileName -> IndentInfo -> Rule RawImp
+  let_ fname indents
+       = do keyword "let"
+            n <- name
+            symbol ":"
+            valTy <- expr fname indents
+            symbol "="
+            commit
+            val <- expr fname indents
+            continue indents
+            keyword "in"
+            scope <- typeExpr fname indents
+            end <- location
+            pure (ILet n valTy val scope)
+
   pat : FileName -> IndentInfo -> Rule RawImp
   pat fname indents
       = do keyword "pat"
@@ -204,6 +219,7 @@ mutual
     <|> explicitPi fname indents
     <|> lam fname indents
     <|> pat fname indents
+    <|> let_ fname indents
 
 tyDecl : FileName -> IndentInfo -> Rule ImpTy
 tyDecl fname indents

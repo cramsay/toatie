@@ -39,6 +39,14 @@ checkExp env term got (Just exp)
                       ctm <- newConstant env term cty cs
                       pure (ctm, got)
 
+weakenExp : {x, vars : _} ->
+            Env Term (x :: vars) ->
+            Maybe (Glued vars) -> Core (Maybe (Glued (x :: vars)))
+weakenExp env Nothing = pure Nothing
+weakenExp env (Just gtm)
+    = do tm <- getTerm gtm
+         pure (Just (gnf env (weaken tm)))
+
 -- Check a raw term, given (possibly) the current environment and its expected 
 -- type, if known.
 -- Returns a pair of checked term and its type.
@@ -70,6 +78,16 @@ checkTerm env (IVar n) exp
                               TCon t a => TyCon t a
                               _ => Func
                 checkExp env (Ref nt n) (gnf env (embed (type gdef))) exp
+checkTerm env (ILet n argTy argVal scope) exp
+    = do (argTytm, gargTyty) <- checkTerm env argTy (Just gType)
+         (argValtm, gargValtmTy) <- checkTerm env argVal (Just $ gnf env argTytm)
+         let env' : Env Term (n :: vars)
+                  = Lam Implicit argTytm :: env
+         expScopeTy <- weakenExp env' exp
+         (scopetm, gscopetmTy) <- checkTerm env' scope expScopeTy
+         scopeTyTerm <- getTerm gscopetmTy
+         pure (Bind n (Let argValtm argTytm) scopetm
+              ,gnf env (Bind n (Let argValtm argTytm) scopeTyTerm))
 checkTerm env (IPi p mn argTy retTy) exp
     = do let n = fromMaybe (MN "_" 0) mn
          (argTytm, gargTyty) <- checkTerm env argTy (Just gType)

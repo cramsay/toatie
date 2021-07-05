@@ -96,7 +96,8 @@ data PiInfo : Type where
 public export
 data Binder : Type -> Type where
      Lam : PiInfo -> ty -> Binder ty
-     Pi : PiInfo -> ty -> Binder ty
+     Pi  : PiInfo -> ty -> Binder ty
+     Let : (val : ty)   -> ty -> Binder ty
 
      PVar : ty -> Binder ty -- pattern bound variables ...
      PVTy : ty -> Binder ty -- ... and their type
@@ -104,7 +105,8 @@ data Binder : Type -> Type where
 export
 binderType : Binder tm -> tm
 binderType (Lam x ty) = ty
-binderType (Pi x ty) = ty
+binderType (Pi  x ty) = ty
+binderType (Let _ ty) = ty
 binderType (PVar ty) = ty
 binderType (PVTy ty) = ty
 
@@ -112,6 +114,7 @@ export
 Functor Binder where
   map func (Lam x ty) = Lam x (func ty)
   map func (Pi x ty) = Pi x (func ty)
+  map func (Let val ty) = Let (func val) (func ty)
   map func (PVar ty) = PVar (func ty)
   map func (PVTy ty) = PVTy (func ty)
 
@@ -413,6 +416,8 @@ mutual
       = Just (Lam p !(shrinkTerm ty prf))
   shrinkBinder (Pi p ty) prf
       = Just (Pi p !(shrinkTerm ty prf))
+  shrinkBinder (Let val ty) prf
+      = Just (Let !(shrinkTerm val prf) !(shrinkTerm ty prf))
   shrinkBinder (PVar ty) prf
       = Just (PVar !(shrinkTerm ty prf))
   shrinkBinder (PVTy ty) prf
@@ -477,6 +482,10 @@ export
       showApp (Bind x (Pi Implicit ty) sc) []
           = "{" ++ show x ++ " : " ++ show ty ++
             "} -> " ++ show sc
+      showApp (Bind x (Let val ty) sc) []
+          = "let " ++ show x ++ " : " ++ show ty ++
+            " = "  ++ show val ++
+            " in " ++ show sc
       showApp (Bind x (PVar ty) sc) []
           = "pat " ++ show x ++ " : " ++ show ty ++
             " => " ++ show sc

@@ -193,6 +193,7 @@ namespace Binder
   traverse : (a -> Core b) -> Binder a -> Core (Binder b)
   traverse f (Lam p ty) = pure $ Lam p !(f ty)
   traverse f (Pi p ty) = pure $ Pi p !(f ty)
+  traverse f (Let var ty) = pure $ Let !(f var) !(f ty)
   traverse f (PVar ty) = pure $ PVar !(f ty)
   traverse f (PVTy ty) = pure $ PVTy !(f ty)
 
