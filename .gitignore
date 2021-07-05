@@ -14,5 +14,6 @@
 # VS Code
 .vscode/*
 
+papers
 /build
 TinyIdris-v2/build
