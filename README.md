@@ -1,12 +1,16 @@
-SPLV 2020
----------
+Adventures in Hardware with Tiny Idris
+======================================
 
-Course notes and supporting code for the Scottish Programming Language and
-Verification summer school course on "The Implementation of Idris 2"
+We poke, bend, and otherwise abuse Tiny Idris --- introduced by
+[Edwin Brady](https://github.com/edwinb) at
+[SPLV20](https://github.com/edwinb/SPLV20).
 
-This includes:
+We'll work towards:
 
-* `Slides` --- containing the (PDF) slides from the lectures
-* `Code` --- containing the code used in the lectures, and exercises
-* `TinyIdris-v1` --- an initial implementation of TinyIdris
-* `TinyIdris-v2` --- an expanded implementation of TinyIdris with unification
+  + Let bindings (useful for sharing)
+  + Seperating `Parameter` types (value known at compile-time) and `Simple` types (value known only at circuit run-time)
+  + Checking GADTs over `Simple` types for decidable sizes
+  + Deriving bit representations for GADTs over `Simple` types
+  + Proto-Quipper D's interpretation of dependent typing with the `Shape` function.
+  + Conversion of Terms to something like Clash's ANF, with a little more unrolling.
+  + Generating netlists from this ANF.
