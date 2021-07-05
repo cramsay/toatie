@@ -78,9 +78,21 @@ checkTerm env (IVar n) exp
                               TCon t a => TyCon t a
                               _ => Func
                 checkExp env (Ref nt n) (gnf env (embed (type gdef))) exp
-checkTerm env (ILet n argTy argVal scope) exp
-    = do (argTytm, gargTyty) <- checkTerm env argTy (Just gType)
-         (argValtm, gargValtmTy) <- checkTerm env argVal (Just $ gnf env argTytm)
+-- Let binding with explicit type
+checkTerm env (ILet n (Just argTy) argVal scope) exp
+    = do (argTytm , _) <- checkTerm env argTy (Just gType)
+         (argValtm, _) <- checkTerm env argVal (Just $ gnf env argTytm)
+         let env' : Env Term (n :: vars)
+                  = Lam Implicit argTytm :: env
+         expScopeTy <- weakenExp env' exp
+         (scopetm, gscopetmTy) <- checkTerm env' scope expScopeTy
+         scopeTyTerm <- getTerm gscopetmTy
+         pure (Bind n (Let argValtm argTytm) scopetm
+              ,gnf env (Bind n (Let argValtm argTytm) scopeTyTerm))
+-- Let binding with implicit type
+checkTerm env (ILet n Nothing argVal scope) exp
+    = do (argValtm, gargValty) <- checkTerm env argVal Nothing
+         argTytm <- getTerm gargValty
          let env' : Env Term (n :: vars)
                   = Lam Implicit argTytm :: env
          expScopeTy <- weakenExp env' exp

@@ -186,8 +186,10 @@ mutual
   let_ fname indents
        = do keyword "let"
             n <- name
-            symbol ":"
-            valTy <- expr fname indents
+            mvalTy <- (do symbol ":"
+                          nTy <- expr fname indents
+                          pure $ Just nTy) <|>
+                      (pure Nothing)
             symbol "="
             commit
             val <- expr fname indents
@@ -195,7 +197,7 @@ mutual
             keyword "in"
             scope <- typeExpr fname indents
             end <- location
-            pure (ILet n valTy val scope)
+            pure (ILet n mvalTy val scope)
 
   pat : FileName -> IndentInfo -> Rule RawImp
   pat fname indents

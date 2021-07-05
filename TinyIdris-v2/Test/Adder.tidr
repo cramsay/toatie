@@ -29,7 +29,6 @@ pat b : Bit =>
 
 fa : Bit -> Bit -> Bit -> Pair Bit
 pat a : Bit, b : Bit, cin : Bit =>
-    fa a b cin = let axorb : Bit
-                           = xor a b
+    fa a b cin = let axorb = xor a b
                  in MkP _ (xor axorb cin)
                           (or (and axorb cin) (and a b))
