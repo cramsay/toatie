@@ -185,19 +185,27 @@ mutual
   let_ : FileName -> IndentInfo -> Rule RawImp
   let_ fname indents
        = do keyword "let"
-            n <- name
-            mvalTy <- (do symbol ":"
-                          nTy <- expr fname indents
-                          pure $ Just nTy) <|>
-                      (pure Nothing)
-            symbol "="
-            commit
-            val <- expr fname indents
+            vars <- block (letVar fname)
             continue indents
             keyword "in"
             scope <- typeExpr fname indents
             end <- location
-            pure (ILet n mvalTy val scope)
+            pure (bindAll vars scope)
+    where
+    letVar : FileName -> IndentInfo -> Rule (Name, Maybe RawImp, RawImp)
+    letVar fname indents =
+      do n <- name
+         mvalTy <- (do symbol ":"
+                       nTy <- expr fname indents
+                       pure $ Just nTy) <|>
+                   (pure Nothing)
+         symbol "="
+         commit
+         val <- expr fname indents
+         pure (n, mvalTy, val)
+    bindAll : List (Name, Maybe RawImp, RawImp) -> RawImp -> RawImp
+    bindAll [] scope = scope
+    bindAll ((n, mnTy, nTm)::xs) scope = ILet n mnTy nTm $ bindAll xs scope
 
   pat : FileName -> IndentInfo -> Rule RawImp
   pat fname indents
