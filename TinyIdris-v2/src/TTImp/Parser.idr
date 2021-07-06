@@ -262,13 +262,18 @@ definition fname indents
 
 dataDecl : FileName -> IndentInfo -> Rule ImpData
 dataDecl fname indents
-    = do keyword "data"
+    = do info <- (do keyword "data"
+                     pure ITyCParam) <|>
+                 (do keyword "simple"
+                     pure ITyCSimp)  <|>
+                 (do keyword "object"
+                     pure ITyCObj)
          n <- name
          symbol ":"
          ty <- expr fname indents
          keyword "where"
          cs <- block (tyDecl fname)
-         pure (MkImpData n ty cs)
+         pure (MkImpData n info ty cs)
 
 -- Declared at the top
 -- topDecl : FileName -> IndentInfo -> Rule ImpDecl

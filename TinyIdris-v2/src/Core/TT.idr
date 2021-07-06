@@ -41,17 +41,36 @@ Ord Name where
   compare x y = compare (nameTag x) (nameTag y)
 
 public export
+data TyConInfo : Type where
+  TyConParam : TyConInfo
+  TyConObj   : TyConInfo
+  TyConSimp  : TyConInfo
+
+export
+Show TyConInfo where
+  show TyConParam = "Parameter"
+  show TyConObj   = "Object"
+  show TyConSimp  = "Simple"
+
+export
+Eq TyConInfo where
+  (==) TyConParam TyConParam = True
+  (==) TyConObj   TyConObj   = True
+  (==) TyConSimp  TyConSimp  = True
+  (==) _          _          = False
+
+public export
 data NameType : Type where
      Func : NameType
      Bound : NameType
-     DataCon : (tag : Int) -> (arity : Nat) -> NameType
-     TyCon : (tag : Int) -> (arity : Nat) -> NameType
+     DataCon :            (tag : Int) -> (arity : Nat) -> NameType
+     TyCon : TyConInfo -> (tag : Int) -> (arity : Nat) -> NameType
 
 export
 Show NameType where
   show Func = "Func"
   show (DataCon t a) = "DataCon " ++ show (t, a)
-  show (TyCon t a) = "TyCon " ++ show (t, a)
+  show (TyCon i t a) = "TyCon " ++ show i ++ show (t, a)
   show Bound = "Bound"
 
 public export

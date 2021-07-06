@@ -434,7 +434,7 @@ sameType {ns} fn env (p :: xs)
 
     headEq : NF ns -> NF ns -> Bool
     headEq (NBind _ (Pi _ _) _) (NBind _ (Pi _ _) _) = True
-    headEq (NTCon n _ _ _) (NTCon n' _ _ _) = n == n'
+    headEq (NTCon n i _ _ _) (NTCon n' i' _ _ _) = n == n' && i == i'
     headEq NType NType = True
     headEq (NApp (NRef _ n) _) (NApp (NRef _ n') _) = n == n'
     headEq NErased _ = True

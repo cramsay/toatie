@@ -107,8 +107,8 @@ parameters (defs : Defs)
     -- if it's a constructor, no need to look it up
     evalRef env (DataCon tag arity) fn stk def
         = pure $ NDCon fn tag arity stk
-    evalRef env (TyCon tag arity) fn stk def
-        = pure $ NTCon fn tag arity stk
+    evalRef env (TyCon info tag arity) fn stk def
+        = pure $ NTCon fn info tag arity stk
     evalRef env Bound fn stk def
         = pure def
     evalRef env nt n stk def
@@ -350,9 +350,9 @@ mutual
   quoteGenNF q defs bound env (NDCon n t ar args)
       = do args' <- quoteArgs q defs bound env args
            pure $ apply (Ref (DataCon t ar) n) args'
-  quoteGenNF q defs bound env (NTCon n t ar args)
+  quoteGenNF q defs bound env (NTCon n info t ar args)
       = do args' <- quoteArgs q defs bound env args
-           pure $ apply (Ref (TyCon t ar) n) args'
+           pure $ apply (Ref (TyCon info t ar) n) args'
   quoteGenNF q defs bound env NErased = pure Erased
   quoteGenNF q defs bound env NType = pure TType
 
@@ -449,8 +449,8 @@ mutual
         = if tag == tag'
              then allConv q defs env args args'
              else pure False
-    convGen q defs env (NTCon nm tag _ args) (NTCon nm' tag' _ args')
-        = if nm == nm'
+    convGen q defs env (NTCon info nm tag _ args) (NTCon info' nm' tag' _ args')
+        = if nm == nm' && info == info'
              then allConv q defs env args args'
              else pure False
     convGen q defs env NErased _ = pure True

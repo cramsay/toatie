@@ -1,4 +1,4 @@
-data Bit : Type where
+object Bit : Type where
      O : Bit
      I : Bit
 

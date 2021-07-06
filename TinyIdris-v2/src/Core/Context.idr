@@ -12,8 +12,8 @@ data Def : Type where
     None : Def -- Not yet defined
     PMDef : (args : List Name) -> (treeCT : CaseTree args) ->
             Def -- Ordinary function definition
-    DCon : (tag : Int) -> (arity : Nat) -> Def -- data constructor
-    TCon : (tag : Int) -> (arity : Nat) -> Def
+    DCon :              (tag : Int) -> (arity : Nat) -> Def -- data constructor
+    TCon : TyConInfo -> (tag : Int) -> (arity : Nat) -> Def
     Hole : Def
     Guess : (guess : Term []) ->
             (constraints : List Int) -> Def -- unification constraints

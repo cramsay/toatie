@@ -34,7 +34,7 @@ mutual
        NApp     : NHead vars -> List (Closure vars) -> NF vars
        NDCon    : Name -> (tag : Int) -> (arity : Nat) ->
                   List (Closure vars) -> NF vars
-       NTCon    : Name -> (tag : Int) -> (arity : Nat) ->
+       NTCon    : Name -> TyConInfo -> (tag : Int) -> (arity : Nat) ->
                   List (Closure vars) -> NF vars
        NType    : NF vars
        NErased  : NF vars

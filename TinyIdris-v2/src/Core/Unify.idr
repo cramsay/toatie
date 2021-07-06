@@ -339,8 +339,8 @@ mutual
         = if t == t'
              then unifyArgs env args args'
              else convertError env nx ny
-    unify env nx@(NTCon n t a args) ny@(NTCon n' t' a' args')
-        = if n == n'
+    unify env nx@(NTCon n info t a args) ny@(NTCon n' info' t' a' args')
+        = if n == n' && info == info'
              then unifyArgs env args args'
              else convertError env nx ny
     -- Unifying an application with something might succeed, if the

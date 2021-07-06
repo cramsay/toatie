@@ -25,13 +25,13 @@ export
 processData : {auto c : Ref Ctxt Defs} ->
               {auto u : Ref UST UState} ->
               ImpData -> Core ()
-processData (MkImpData n tycon datacons)
+processData (MkImpData n info tycon datacons)
     = do (tychk, _) <- checkTerm [] tycon (Just gType)
          -- Add it to the context before checking data constructors
          -- Exercise: We should also check whether it's already defined!
          defs <- get Ctxt
          arity <- getArity defs [] tychk
-         addDef n (newDef tychk (TCon 0 arity))
+         addDef n (newDef tychk (TCon (convTyConInfo info) 0 arity))
          chkcons <- traverse processCon datacons
 
          defs <- get Ctxt
@@ -43,3 +43,9 @@ processData (MkImpData n tycon datacons)
          -- and data constructors (e.g. for totality checking, interactive
          -- editing) but this is enough for our purposes
          coreLift $ putStrLn $ "Processed " ++ show n
+  where convTyConInfo : ImpTyConInfo -> TyConInfo
+        convTyConInfo ITyCParam = TyConParam
+        convTyConInfo ITyCObj   = TyConObj
+        convTyConInfo ITyCSimp  = TyConSimp
+
+

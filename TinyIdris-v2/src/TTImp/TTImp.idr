@@ -28,8 +28,15 @@ data ImpClause : Type where
      PatClause : (lhs : RawImp) -> (rhs : RawImp) -> ImpClause
 
 public export
+data ImpTyConInfo : Type where
+     ITyCParam : ImpTyConInfo
+     ITyCObj   : ImpTyConInfo
+     ITyCSimp  : ImpTyConInfo
+
+public export
 data ImpData : Type where
-     MkImpData : (n : Name) -> 
+     MkImpData : (n : Name) ->
+                 ImpTyConInfo ->
                  (tycon : RawImp) -> -- type constructor type
                  (datacons : List ImpTy) -> -- constructor type declarations
                  ImpData
