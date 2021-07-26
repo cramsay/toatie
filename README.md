@@ -10,7 +10,7 @@ We poke, bend, and otherwise abuse Tiny Idris --- introduced by
 We'll work towards:
 
   - [X] Let bindings (useful for sharing)
-  - [ ] Separating `Parameter` types (value known at compile-time) and `Simple`
+  - [X] Separating `Parameter` types (value known at compile-time) and `Simple`
       types (value known only at circuit run-time)
   - [ ] Checking GADTs over `Simple` types for decidable sizes
   - [ ] Deriving bit representations for GADTs over `Simple` types
