@@ -20,6 +20,7 @@ import Data.List
 
 repl : {auto c : Ref Ctxt Defs} ->
        {auto u : Ref UST UState} ->
+       {auto s : Ref Stg Stage} ->
        Core ()
 repl = do coreLift $ putStr "> "
           inp <- coreLift getLine
@@ -38,6 +39,7 @@ runMain : List ImpDecl -> Core ()
 runMain decls
     = do c <- newRef Ctxt !initDefs
          u <- newRef UST initUState
+         s <- newRef Stg (the Stage 0)
          traverse_ processDecl decls
          repl
 

@@ -17,15 +17,16 @@ getRHSEnv : {vars : _} ->
             Core (vars' ** (Env Term vars', Term vars', Term vars'))
 -- The names have to match here, and if type checking is implemented correctly
 -- they will, but we don't have a way to express that! So we need to check.
-getRHSEnv env (Bind n (PVar ty) sc) (Bind n' (PVTy _) scty) with (nameEq n n')
-  getRHSEnv env (Bind n (PVar ty) sc) (Bind n' (PVTy _) scty) | Nothing
+getRHSEnv env (Bind n (PVar stage ty) sc) (Bind n' (PVTy _ _) scty) with (nameEq n n')
+  getRHSEnv env (Bind n (PVar stage ty) sc) (Bind n' (PVTy _ _) scty) | Nothing
       = throw (GenericMsg "Can't happen: names don't match in getRHSEnv")
-  getRHSEnv env (Bind n (PVar ty) sc) (Bind n (PVTy _) scty) | (Just Refl)
-      = getRHSEnv (PVar ty :: env) sc scty
+  getRHSEnv env (Bind n (PVar stage ty) sc) (Bind n (PVTy _ _) scty) | (Just Refl)
+      = getRHSEnv (PVar stage ty :: env) sc scty
 getRHSEnv env lhs ty = pure (vars ** (env, lhs, ty))
 
 processClause : {auto c : Ref Ctxt Defs} ->
                 {auto u : Ref UST UState} ->
+                {auto s : Ref Stg Stage} ->
                 ImpClause -> Core Clause
 processClause (PatClause lhs rhs)
     = do -- Check the LHS
@@ -42,6 +43,7 @@ processClause (PatClause lhs rhs)
 export
 processDef : {auto c : Ref Ctxt Defs} ->
              {auto u : Ref UST UState} ->
+             {auto s : Ref Stg Stage} ->
              Name -> List ImpClause -> Core ()
 processDef n clauses
     = do defs <- get Ctxt

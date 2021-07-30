@@ -14,6 +14,7 @@ import Data.List
 export
 processCon : {auto c : Ref Ctxt Defs} ->
              {auto u : Ref UST UState} ->
+             {auto s : Ref Stg Stage} ->
              ImpTy -> Core (Name, Term [])
 processCon (MkImpTy n ty)
     = do (tychk, _) <- checkTerm [] ty (Just gType)
@@ -24,6 +25,7 @@ processCon (MkImpTy n ty)
 export
 processData : {auto c : Ref Ctxt Defs} ->
               {auto u : Ref UST UState} ->
+              {auto s : Ref Stg Stage} ->
               ImpData -> Core ()
 processData (MkImpData n info tycon datacons)
     = do (tychk, _) <- checkTerm [] tycon (Just gType)

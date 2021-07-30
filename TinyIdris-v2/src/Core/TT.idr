@@ -113,29 +113,45 @@ data PiInfo : Type where
      Explicit : PiInfo
 
 public export
-data Binder : Type -> Type where
-     Lam : PiInfo -> ty -> Binder ty
-     Pi  : PiInfo -> ty -> Binder ty
-     Let : (val : ty)   -> ty -> Binder ty
+Stage : Type
+Stage = Nat
 
-     PVar : ty -> Binder ty -- pattern bound variables ...
-     PVTy : ty -> Binder ty -- ... and their type
+-- Stage lookup reference
+export
+data Stg : Type where
+
+public export
+data Binder : Type -> Type where
+     Lam : Stage -> PiInfo     -> ty -> Binder ty
+     Pi  : Stage -> PiInfo     -> ty -> Binder ty
+     Let : Stage -> (val : ty) -> ty -> Binder ty
+
+     PVar : Stage -> ty -> Binder ty -- pattern bound variables ...
+     PVTy : Stage -> ty -> Binder ty -- ... and their type
 
 export
 binderType : Binder tm -> tm
-binderType (Lam x ty) = ty
-binderType (Pi  x ty) = ty
-binderType (Let _ ty) = ty
-binderType (PVar ty) = ty
-binderType (PVTy ty) = ty
+binderType (Lam _ x ty) = ty
+binderType (Pi  _ x ty) = ty
+binderType (Let _ _ ty) = ty
+binderType (PVar _ ty) = ty
+binderType (PVTy _ ty) = ty
+
+export
+binderStage : Binder tm -> Stage
+binderStage (Lam s _ _) = s
+binderStage (Pi  s _ _) = s
+binderStage (Let s _ _) = s
+binderStage (PVar s _) = s
+binderStage (PVTy s _) = s
 
 export
 Functor Binder where
-  map func (Lam x ty) = Lam x (func ty)
-  map func (Pi x ty) = Pi x (func ty)
-  map func (Let val ty) = Let (func val) (func ty)
-  map func (PVar ty) = PVar (func ty)
-  map func (PVTy ty) = PVTy (func ty)
+  map func (Lam s x ty) = Lam s x (func ty)
+  map func (Pi s x ty) = Pi s x (func ty)
+  map func (Let s val ty) = Let s (func val) (func ty)
+  map func (PVar s ty) = PVar s (func ty)
+  map func (PVTy s ty) = PVTy s (func ty)
 
 public export
 data Term : List Name -> Type where
@@ -151,6 +167,10 @@ data Term : List Name -> Type where
      App : Term vars -> Term vars -> Term vars -- function application
      TType : Term vars
      Erased : Term vars
+     Quote  : Term vars -> Term vars
+     TCode  : Term vars -> Term vars
+     Eval   : Term vars -> Term vars -- TODO Worth enforcing eval is only on closed terms?
+     Escape : Term vars -> Term vars
 
 public export
 interface Weaken (0 tm : List Name -> Type) where
@@ -222,6 +242,11 @@ insertNames ns (App fn arg)
     = App (insertNames ns fn) (insertNames ns arg)
 insertNames ns Erased = Erased
 insertNames ns TType = TType
+insertNames ns (Quote tm) = Quote $ insertNames ns tm
+insertNames ns (TCode tm) = TCode $ insertNames ns tm
+insertNames ns (Eval tm) = Eval $ insertNames ns tm
+insertNames ns (Escape tm) = Escape $ insertNames ns tm
+
 
 export
 Weaken Term where
@@ -280,6 +305,10 @@ mkLocals bs (App fn arg)
     = App (mkLocals bs fn) (mkLocals bs arg)
 mkLocals bs Erased = Erased
 mkLocals bs TType = TType
+mkLocals bs (Quote tm)  = Quote  $ mkLocals bs tm
+mkLocals bs (TCode tm)  = TCode  $ mkLocals bs tm
+mkLocals bs (Eval tm)   = Eval   $ mkLocals bs tm
+mkLocals bs (Escape tm) = Escape $ mkLocals bs tm
 
 export
 refsToLocals : {bound : _} ->
@@ -347,6 +376,10 @@ namespace SubstEnv
       = App (substEnv env fn) (substEnv env arg)
   substEnv env Erased = Erased
   substEnv env TType = TType
+  substEnv env (Quote tm)  = Quote  $ substEnv env tm
+  substEnv env (TCode tm)  = TCode  $ substEnv env tm
+  substEnv env (Eval tm)   = Eval   $ substEnv env tm
+  substEnv env (Escape tm) = Escape $ substEnv env tm
 
   export
   substs : {drop, vars : _} ->
@@ -431,16 +464,16 @@ mutual
   export
   shrinkBinder : Binder (Term vars) -> SubVars newvars vars ->
                  Maybe (Binder (Term newvars))
-  shrinkBinder (Lam p ty) prf
-      = Just (Lam p !(shrinkTerm ty prf))
-  shrinkBinder (Pi p ty) prf
-      = Just (Pi p !(shrinkTerm ty prf))
-  shrinkBinder (Let val ty) prf
-      = Just (Let !(shrinkTerm val prf) !(shrinkTerm ty prf))
-  shrinkBinder (PVar ty) prf
-      = Just (PVar !(shrinkTerm ty prf))
-  shrinkBinder (PVTy ty) prf
-      = Just (PVTy !(shrinkTerm ty prf))
+  shrinkBinder (Lam s p ty) prf
+      = Just (Lam s p !(shrinkTerm ty prf))
+  shrinkBinder (Pi s p ty) prf
+      = Just (Pi s p !(shrinkTerm ty prf))
+  shrinkBinder (Let s val ty) prf
+      = Just (Let s !(shrinkTerm val prf) !(shrinkTerm ty prf))
+  shrinkBinder (PVar s ty) prf
+      = Just (PVar s !(shrinkTerm ty prf))
+  shrinkBinder (PVTy s ty) prf
+      = Just (PVTy s !(shrinkTerm ty prf))
 
   export
   shrinkVar : Var vars -> SubVars newvars vars -> Maybe (Var newvars)
@@ -462,6 +495,10 @@ mutual
      = Just (App !(shrinkTerm fn prf) !(shrinkTerm arg prf))
   shrinkTerm Erased prf = Just Erased
   shrinkTerm TType prf = Just TType
+  shrinkTerm (Quote tm)  prf = Just (Quote  !(shrinkTerm tm prf))
+  shrinkTerm (TCode tm)  prf = Just (TCode  !(shrinkTerm tm prf))
+  shrinkTerm (Eval tm)   prf = Just (Eval   !(shrinkTerm tm prf))
+  shrinkTerm (Escape tm) prf = Just (Escape !(shrinkTerm tm prf))
 
 --- Show instances
 
@@ -492,24 +529,24 @@ export
       showApp (Ref _ n) [] = show n
       showApp (Meta n args) []
           = "?" ++ show n ++ "_" ++ show args
-      showApp (Bind x (Lam p ty) sc) []
-          = "\\" ++ show x ++ " : " ++ show ty ++
+      showApp (Bind x (Lam s p ty) sc) []
+          = "\\" ++ show x ++ " :_" ++ show s ++ " " ++ show ty ++
             " => " ++ show sc
-      showApp (Bind x (Pi Explicit ty) sc) []
-          = "((" ++ show x ++ " : " ++ show ty ++
+      showApp (Bind x (Pi s Explicit ty) sc) []
+          = "((" ++ show x ++ " :_" ++ show s ++ " " ++ show ty ++
             ") -> " ++ show sc ++ ")"
-      showApp (Bind x (Pi Implicit ty) sc) []
-          = "{" ++ show x ++ " : " ++ show ty ++
+      showApp (Bind x (Pi s Implicit ty) sc) []
+          = "{" ++ show x ++ " :_" ++ show s ++ " " ++ show ty ++
             "} -> " ++ show sc
-      showApp (Bind x (Let val ty) sc) []
-          = "let " ++ show x ++ " : " ++ show ty ++
+      showApp (Bind x (Let s val ty) sc) []
+          = "let " ++ show x ++ " :_" ++ show s ++ " " ++ show ty ++
             " = "  ++ show val ++
             " in " ++ show sc
-      showApp (Bind x (PVar ty) sc) []
-          = "pat " ++ show x ++ " : " ++ show ty ++
+      showApp (Bind x (PVar s ty) sc) []
+          = "pat " ++ show x ++ " :_" ++ show s ++ " " ++ show ty ++
             " => " ++ show sc
-      showApp (Bind x (PVTy ty) sc) []
-          = "pty " ++ show x ++ " : " ++ show ty ++
+      showApp (Bind x (PVTy s ty) sc) []
+          = "pty " ++ show x ++ " :_" ++ show s ++ " " ++ show ty ++
             " => " ++ show sc
       showApp (App _ _) [] = "[can't happen]"
       showApp TType [] = "Type"

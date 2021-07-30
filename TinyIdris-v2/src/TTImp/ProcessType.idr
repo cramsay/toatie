@@ -16,6 +16,7 @@ import TTImp.TTImp
 export
 processType : {auto c : Ref Ctxt Defs} ->
               {auto u : Ref UST UState} ->
+              {auto s : Ref Stg Stage} ->
               Name -> RawImp -> Core ()
 processType n ty
     = do (tychk, _) <- checkTerm [] ty (Just gType)

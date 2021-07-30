@@ -18,6 +18,10 @@ data RawImp : Type where
 
      Implicit : RawImp
      IType : RawImp
+     IQuote  : RawImp -> RawImp
+     ICode   : RawImp -> RawImp
+     IEval   : RawImp -> RawImp
+     IEscape : RawImp -> RawImp
 
 public export
 data ImpTy : Type where

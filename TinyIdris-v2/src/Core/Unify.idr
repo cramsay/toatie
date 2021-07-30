@@ -240,29 +240,33 @@ instantiate {newvars} env mname mdef locs tm
       where
         updateIVarsB : {vs, newvars : _} ->
                        IVars vs newvars -> Binder (Term newvars) -> Maybe (Binder (Term vs))
-        updateIVarsB ivs (Lam p t)
-            = Just (Lam p !(updateIVars ivs t))
-        updateIVarsB ivs (Pi p t)
-            = Just (Pi p !(updateIVars ivs t))
-        updateIVarsB ivs (Let val t)
-            = Just (Let !(updateIVars ivs val) !(updateIVars ivs t))
-        updateIVarsB ivs (PVar t)
-            = Just (PVar !(updateIVars ivs t))
-        updateIVarsB ivs (PVTy t)
-            = Just (PVTy !(updateIVars ivs t))
+        updateIVarsB ivs (Lam s p t)
+            = Just (Lam s p !(updateIVars ivs t))
+        updateIVarsB ivs (Pi s p t)
+            = Just (Pi s p !(updateIVars ivs t))
+        updateIVarsB ivs (Let s val t)
+            = Just (Let s !(updateIVars ivs val) !(updateIVars ivs t))
+        updateIVarsB ivs (PVar s t)
+            = Just (PVar s !(updateIVars ivs t))
+        updateIVarsB ivs (PVTy s t)
+            = Just (PVTy s !(updateIVars ivs t))
     updateIVars ivs (App f a)
         = Just (App !(updateIVars ivs f) !(updateIVars ivs a))
     updateIVars ivs Erased = Just Erased
     updateIVars ivs TType = Just TType
+    updateIVars _ (Quote _)  = ?uivQuote
+    updateIVars _ (TCode _)  = ?uivTCode
+    updateIVars _ (Eval _)   = ?uivEval
+    updateIVars _ (Escape _) = ?uivEscape
 
     mkDef : {vs, newvars : _} ->
             List (Var newvars) ->
             IVars vs newvars -> Term newvars -> Term vs ->
             Core (Term vs)
-    mkDef (v :: vs) vars soln (Bind x (Pi _ ty) sc)
+    mkDef (v :: vs) vars soln (Bind x (Pi s _ ty) sc)
        = do sc' <- mkDef vs (ICons (Just v) vars) soln sc
-            pure $ Bind x (Lam Explicit Erased) sc'
-    mkDef vs vars soln (Bind x b@(Let val ty) sc)
+            pure $ Bind x (Lam s Explicit Erased) sc'
+    mkDef vs vars soln (Bind x b@(Let _ val ty) sc)
       = do sc' <- mkDef vs (ICons Nothing vars) soln sc
            let Just scs = shrinkTerm sc' (DropCons SubRefl)
                | Nothing => pure $ Bind x b sc'

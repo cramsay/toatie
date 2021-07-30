@@ -79,6 +79,10 @@ mutual
            e <- expr fname indents
            symbol ")"
            pure e
+    <|> quote        fname indents
+    <|> code_type    fname indents
+    <|> eval_quote   fname indents
+    <|> escape_quote fname indents
 
   export
   expr : FileName -> IndentInfo -> Rule RawImp
@@ -206,6 +210,35 @@ mutual
     bindAll : List (Name, Maybe RawImp, RawImp) -> RawImp -> RawImp
     bindAll [] scope = scope
     bindAll ((n, mnTy, nTm)::xs) scope = ILet n mnTy nTm $ bindAll xs scope
+
+  quote : FileName -> IndentInfo -> Rule RawImp
+  quote fname indents
+    = do symbol "'"
+         scope <- expr fname indents
+         end <- location
+         pure (IQuote scope)
+
+  code_type : FileName -> IndentInfo -> Rule RawImp
+  code_type fname indents
+    = do symbol "<|"
+         scope <- expr fname indents
+         symbol "|>"
+         end <- location
+         pure (ICode scope)
+
+  eval_quote : FileName -> IndentInfo -> Rule RawImp
+  eval_quote fname indents
+    = do symbol "!"
+         scope <- expr fname indents
+         end <- location
+         pure (IEval scope)
+
+  escape_quote : FileName -> IndentInfo -> Rule RawImp
+  escape_quote fname indents
+    = do symbol "~"
+         scope <- expr fname indents
+         end <- location
+         pure (IEscape scope)
 
   pat : FileName -> IndentInfo -> Rule RawImp
   pat fname indents

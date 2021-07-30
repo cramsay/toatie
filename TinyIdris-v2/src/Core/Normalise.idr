@@ -56,9 +56,9 @@ parameters (defs : Defs)
         = evalRef env nt fn stk (NApp (NRef nt fn) stk)
     eval {vars} {free} env locs (Meta name args) stk
         = evalMeta env name (map (MkClosure locs env) args) stk
-    eval env locs (Bind x (Lam _ ty) scope) (thunk :: stk)
+    eval env locs (Bind x (Lam s _ ty) scope) (thunk :: stk)
         = eval env (thunk :: locs) scope stk
-    eval env locs (Bind x (Let tm ty) scope) stk
+    eval env locs (Bind x (Let s tm ty) scope) stk
         = eval env (MkClosure locs env tm :: locs) scope stk
     eval env locs (Bind x b scope) stk
         = do b' <- traverse (\tm => eval env locs tm []) b
@@ -68,6 +68,10 @@ parameters (defs : Defs)
         = eval env locs fn (MkClosure locs env arg :: stk)
     eval env locs TType stk = pure NType
     eval env locs Erased stk = pure NErased
+    eval _ _ (Quote _) _  = ?evalquote
+    eval _ _ (TCode _) _  = ?evaltcode
+    eval _ _ (Eval _) _   = ?evalEval
+    eval _ _ (Escape _) _ = ?evalEscape
 
     evalLocClosure : {free : _} ->
                      Env Term free ->
@@ -316,22 +320,22 @@ mutual
                 Ref QVar Int -> Defs -> Bounds bound ->
                 Env Term free -> Binder (NF free) ->
                 Core (Binder (Term (bound ++ free)))
-  quoteBinder q defs bounds env (Lam p ty)
+  quoteBinder q defs bounds env (Lam s p ty)
       = do ty' <- quoteGenNF q defs bounds env ty
-           pure (Lam p ty')
-  quoteBinder q defs bounds env (Pi p ty)
+           pure (Lam s p ty')
+  quoteBinder q defs bounds env (Pi s p ty)
       = do ty' <- quoteGenNF q defs bounds env ty
-           pure (Pi p ty')
-  quoteBinder q defs bounds env (Let val ty)
+           pure (Pi s p ty')
+  quoteBinder q defs bounds env (Let s val ty)
       = do val' <- quoteGenNF q defs bounds env val
            ty'  <- quoteGenNF q defs bounds env ty
-           pure (Let val' ty')
-  quoteBinder q defs bounds env (PVar ty)
+           pure (Let s val' ty')
+  quoteBinder q defs bounds env (PVar s ty)
       = do ty' <- quoteGenNF q defs bounds env ty
-           pure (PVar ty')
-  quoteBinder q defs bounds env (PVTy ty)
+           pure (PVar s ty')
+  quoteBinder q defs bounds env (PVTy s ty)
       = do ty' <- quoteGenNF q defs bounds env ty
-           pure (PVTy ty')
+           pure (PVTy s ty')
 
   quoteGenNF : {bound, vars : _} ->
                Ref QVar Int ->
@@ -419,9 +423,9 @@ mutual
   convBinders : {vars : _} ->
                 Ref QVar Int -> Defs -> Env Term vars ->
                 Binder (NF vars) -> Binder (NF vars) -> Core Bool
-  convBinders q defs env (Pi ix tx) (Pi iy ty)
+  convBinders q defs env (Pi _ ix tx) (Pi _ iy ty)
       = convGen q defs env tx ty
-  convBinders q defs env (Lam ix tx) (Lam iy ty)
+  convBinders q defs env (Lam _ ix tx) (Lam _ iy ty)
       = convGen q defs env tx ty
   convBinders q defs env bx by
       = pure False
@@ -471,7 +475,7 @@ mutual
 export
 getValArity : {vars : _} ->
               Defs -> Env Term vars -> NF vars -> Core Nat
-getValArity defs env (NBind x (Pi _ _) sc)
+getValArity defs env (NBind x (Pi _ _ _) sc)
     = pure (S !(getValArity defs env !(sc defs (toClosure env Erased))))
 getValArity defs env val = pure 0
 

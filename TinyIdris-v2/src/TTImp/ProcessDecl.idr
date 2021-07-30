@@ -13,6 +13,7 @@ import TTImp.TTImp
 export
 processDecl : {auto c : Ref Ctxt Defs} ->
               {auto u : Ref UST UState} ->
+              {auto s : Ref Stg Stage} ->
               ImpDecl -> Core ()
 processDecl (IClaim (MkImpTy n ty)) = processType n ty
 processDecl (IData ddef) = processData ddef

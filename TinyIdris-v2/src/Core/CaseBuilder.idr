@@ -67,7 +67,7 @@ updatePats : {vars, todo : _} ->
              Env Term vars ->
              NF vars -> NamedPats vars todo -> Core (NamedPats vars todo)
 updatePats env nf [] = pure []
-updatePats {todo = pvar :: ns} env (NBind _ (Pi _ farg) fsc) (p :: ps)
+updatePats {todo = pvar :: ns} env (NBind _ (Pi _ _ farg) fsc) (p :: ps)
   = case argType p of
          Unknown =>
             do defs <- get Ctxt
@@ -96,7 +96,7 @@ substInPatInfo {pvar} {vars} n tm p ps
                 empty <- clearDefs defs
                 let env = mkEnv vars
                 case !(nf defs env (substName n tm fty)) of
-                     NBind _ (Pi _ farg) fsc =>
+                     NBind _ (Pi _ _ farg) fsc =>
                        pure (record { argType = Known !(quote empty env farg) } p,
                                  !(updatePats env
                                        !(fsc defs (toClosure env
@@ -284,10 +284,10 @@ nextNames {vars} root (p :: pats) fty
           fa_tys <- the (Core (Maybe (NF vars), ArgType vars)) $
               case fty of
                    Nothing => pure (Nothing, Unknown)
-                   Just (NBind _ (Pi _ NErased) fsc) =>
+                   Just (NBind _ (Pi _ _ NErased) fsc) =>
                       pure (Just !(fsc defs (toClosure env (Ref Bound n))),
                         Unknown)
-                   Just (NBind _ (Pi _ farg) fsc) =>
+                   Just (NBind _ (Pi _ _ farg) fsc) =>
                       pure (Just !(fsc defs (toClosure env (Ref Bound n))),
                         Known !(quote empty env farg))
                    Just t =>
@@ -349,8 +349,8 @@ groupCons fn pvars cs
     -- the same name in each of the clauses
     addConG {vars'} {todo'} n tag pargs pats rhs []
         = do cty <- the (Core (NF vars')) $ if n == UN "->"
-                      then pure $ NBind (MN "_" 0) (Pi Explicit NType) $
-                              (\d, a => pure $ NBind (MN "_" 1) (Pi Explicit NErased)
+                      then pure $ NBind (MN "_" 0) (Pi 0 Explicit NType) $ -- TODO we don't need correct staging here, do we?
+                              (\d, a => pure $ NBind (MN "_" 1) (Pi 0 Explicit NErased) -- TODO same as above
                                 (\d, a => pure NType))
                       else do defs <- get Ctxt
                               Just t <- lookupDef n defs
@@ -433,7 +433,7 @@ sameType {ns} fn env (p :: xs)
     firstPat (pinf :: _) = pat pinf
 
     headEq : NF ns -> NF ns -> Bool
-    headEq (NBind _ (Pi _ _) _) (NBind _ (Pi _ _) _) = True
+    headEq (NBind _ (Pi _ _ _) _) (NBind _ (Pi _ _ _) _) = True
     headEq (NTCon n i _ _ _) (NTCon n' i' _ _ _) = n == n' && i == i'
     headEq NType NType = True
     headEq (NApp (NRef _ n) _) (NApp (NRef _ n') _) = n == n'
@@ -669,7 +669,7 @@ mkPatClause fn args ty (ps, rhs)
              fa_tys <- the (Core (Maybe _, ArgType _)) $
                 case fty of
                      Nothing => pure (Nothing, CaseBuilder.Unknown)
-                     Just (NBind _ (Pi _ farg) fsc) =>
+                     Just (NBind _ (Pi _ _ farg) fsc) =>
                         pure (Just !(fsc defs (toClosure [] (Ref Bound arg))),
                                 Known (embed {more = arg :: args}
                                           !(quote empty [] farg)))
@@ -751,7 +751,7 @@ getPMDef fn ty []
          pure (!(getArgs 0 !(nf defs [] ty)) ** (Unmatched "No clauses"))
   where
     getArgs : Int -> NF [] -> Core (List Name)
-    getArgs i (NBind x (Pi _ _) sc)
+    getArgs i (NBind x (Pi _ _ _) sc)
         = do defs <- get Ctxt
              sc' <- sc defs (toClosure [] Erased)
              pure (MN "arg" i :: !(getArgs i sc'))

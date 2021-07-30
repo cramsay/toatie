@@ -66,4 +66,4 @@ defined {vars = x :: xs} n (b :: env)
 export
 mkEnv : (vs : List Name) -> Env Term vs
 mkEnv [] = []
-mkEnv (n :: ns) = PVar Erased :: mkEnv ns
+mkEnv (n :: ns) = PVar 0 Erased :: mkEnv ns
