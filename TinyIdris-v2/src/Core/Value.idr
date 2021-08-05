@@ -38,3 +38,5 @@ mutual
                   List (Closure vars) -> NF vars
        NType    : NF vars
        NErased  : NF vars
+       NQuote   : Closure vars -> NF vars
+       NCode    : Closure vars -> NF vars

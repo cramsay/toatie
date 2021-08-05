@@ -551,7 +551,11 @@ export
       showApp (App _ _) [] = "[can't happen]"
       showApp TType [] = "Type"
       showApp Erased [] = "[_]"
+      showApp (Quote sc) [] = "^" ++ show sc
+      showApp (TCode sc) [] = "<" ++ show sc ++ ">"
+      showApp (Eval  sc) [] = "!" ++ show sc
+      showApp (Escape sc) [] = "~" ++ show sc
       showApp _ [] = "???"
       showApp f args = "(" ++ assert_total (show f) ++ " " ++
-                        assert_total (showSep " " (map show args))
-                     ++ ")"
+                              assert_total (showSep " " (map show args))
+                       ++ ")"

@@ -163,7 +163,8 @@ checkTerm env (IApp f a) exp
                        -- to evaluate the scope with 'atm'
                        sc' <- sc defs (toClosure env atm)
                        checkExp env (App ftm atm) (glueBack defs env sc') exp
-              _ => throw (GenericMsg "Not a function type")
+              _ => throw (GenericMsg $ "Not a function type: " ++
+                          show ftm ++ " of type " ++ show !(getTerm gfty))
 checkTerm env Implicit Nothing
     = throw (GenericMsg "Unknown type for implicit")
 checkTerm env Implicit (Just exp)

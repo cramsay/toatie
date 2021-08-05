@@ -213,16 +213,16 @@ mutual
 
   quote : FileName -> IndentInfo -> Rule RawImp
   quote fname indents
-    = do symbol "'"
+    = do symbol "^"
          scope <- expr fname indents
          end <- location
          pure (IQuote scope)
 
   code_type : FileName -> IndentInfo -> Rule RawImp
   code_type fname indents
-    = do symbol "<|"
+    = do symbol "<"
          scope <- expr fname indents
-         symbol "|>"
+         symbol ">"
          end <- location
          pure (ICode scope)
 

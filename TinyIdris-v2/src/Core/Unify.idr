@@ -254,10 +254,10 @@ instantiate {newvars} env mname mdef locs tm
         = Just (App !(updateIVars ivs f) !(updateIVars ivs a))
     updateIVars ivs Erased = Just Erased
     updateIVars ivs TType = Just TType
-    updateIVars _ (Quote _)  = ?uivQuote
-    updateIVars _ (TCode _)  = ?uivTCode
-    updateIVars _ (Eval _)   = ?uivEval
-    updateIVars _ (Escape _) = ?uivEscape
+    updateIVars ivs (Quote  a)  = Just (Quote  !(updateIVars ivs a))
+    updateIVars ivs (TCode  a)  = Just (TCode  !(updateIVars ivs a))
+    updateIVars ivs (Eval   a)  = Just (Eval   !(updateIVars ivs a))
+    updateIVars ivs (Escape a)  = Just (Escape !(updateIVars ivs a))
 
     mkDef : {vs, newvars : _} ->
             List (Var newvars) ->

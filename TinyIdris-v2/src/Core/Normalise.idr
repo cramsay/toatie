@@ -68,10 +68,13 @@ parameters (defs : Defs)
         = eval env locs fn (MkClosure locs env arg :: stk)
     eval env locs TType stk = pure NType
     eval env locs Erased stk = pure NErased
-    eval _ _ (Quote _) _  = ?evalquote
-    eval _ _ (TCode _) _  = ?evaltcode
-    eval _ _ (Eval _) _   = ?evalEval
-    eval _ _ (Escape _) _ = ?evalEscape
+    eval env locs (Quote  scope) stk = pure $ NQuote $ MkClosure locs env scope -- Quote defers eval
+    eval env locs (TCode  scope) stk = pure $ NCode  $ MkClosure locs env scope -- Code might as well defer eval since cons shouldn't evaluate its arguments
+    eval env locs (Eval   scope) stk = do (NQuote a) <- eval env locs scope stk -- Eval yanks quoted bits out
+                                            | _ => throw (GenericMsg "Eval on unquoted term")
+                                          evalLocClosure env stk a
+    eval env locs (Escape scope) stk = eval env locs scope stk -- Escape yanks quoted bits out
+
 
     evalLocClosure : {free : _} ->
                      Env Term free ->
@@ -359,6 +362,10 @@ mutual
            pure $ apply (Ref (TyCon info t ar) n) args'
   quoteGenNF q defs bound env NErased = pure Erased
   quoteGenNF q defs bound env NType = pure TType
+  quoteGenNF q defs bound env (NQuote sc)
+      = pure $ Quote !(quoteGenNF q defs bound env !(evalClosure defs sc))
+  quoteGenNF q defs bound env (NCode  sc)
+      = pure $ TCode !(quoteGenNF q defs bound env !(evalClosure defs sc))
 
 export
 Quote NF where
@@ -460,6 +467,8 @@ mutual
     convGen q defs env NErased _ = pure True
     convGen q defs env _ NErased = pure True
     convGen q defs env NType NType = pure True
+    convGen q defs env (NQuote x) (NQuote y) = convGen q defs env x y
+    convGen q defs env (NCode  x) (NCode  y) = convGen q defs env x y
     convGen q defs env x y = pure False
 
   export
