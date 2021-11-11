@@ -68,7 +68,7 @@ parameters (defs : Defs)
         = eval env locs fn (MkClosure locs env arg :: stk)
     eval env locs TType stk = pure NType
     eval env locs Erased stk = pure NErased
-    eval env locs (Quote  scope) stk = pure $ NQuote $ MkClosure locs env scope -- Quote defers eval
+    eval env locs (Quote  scope) stk = eval env locs scope stk -- Quote defers eval
     eval env locs (TCode  scope) stk = pure $ NCode  $ MkClosure locs env scope -- Code might as well defer eval since cons shouldn't evaluate its arguments
     eval env locs (Eval   scope) stk = do (NQuote a) <- eval env locs scope stk -- Eval yanks quoted bits out
                                             | _ => throw (GenericMsg "Eval on unquoted term")
@@ -363,7 +363,7 @@ mutual
   quoteGenNF q defs bound env NErased = pure Erased
   quoteGenNF q defs bound env NType = pure TType
   quoteGenNF q defs bound env (NQuote sc)
-      = pure $ Quote !(quoteGenNF q defs bound env !(evalClosure defs sc))
+      = pure $ !(quoteGenNF q defs bound env !(evalClosure defs sc))
   quoteGenNF q defs bound env (NCode  sc)
       = pure $ TCode !(quoteGenNF q defs bound env !(evalClosure defs sc))
 

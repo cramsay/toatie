@@ -40,3 +40,43 @@ mutual
        NErased  : NF vars
        NQuote   : Closure vars -> NF vars
        NCode    : Closure vars -> NF vars
+
+export
+{free : _} -> Show (NHead free) where
+  show (NLocal idx p) = show (nameAt idx p) ++ "[" ++ show idx ++ "]"
+  show (NRef _ n) = show n
+  show (NMeta n args) = "?" ++ show n ++ "_[" ++ show (length args) ++ " closures]"
+
+export
+{free : _} -> Show (Closure free) where
+  show (MkClosure locs env tm) = "[closure for term = " ++ show tm ++ "]"
+
+export
+{free : _} -> Show (LocalEnv free vars) where
+  show [] = "[]"
+  show (x :: y) = show x ++ " :: " ++ show y
+
+export
+{free : _} -> Show (NF free) where
+  show (NBind x (Lam s info ty) _)
+    = "\\" ++ show s ++ show x ++ " : " ++ show ty ++
+      " => [closure]"
+  show (NBind x (Let s val ty) _)
+    = "let " ++ show s ++ show x ++ " : " ++ show ty ++
+      " = " ++ show val ++ " in [closure]"
+  show (NBind x (Pi s info ty) _)
+    = show s ++ show x ++ " : " ++ show ty ++
+      " -> [closure]"
+  show (NBind x (PVar s ty) _)
+    = "pat " ++ show s ++ show x ++ " : " ++ show ty ++
+      " => [closure]"
+  show (NBind x (PVTy s ty) _)
+    = "pty " ++ show s ++ show x ++ " : " ++ show ty ++
+      " => [closure]"
+  show (NApp hd args) = show hd ++ " [" ++ show (length args) ++ " closures]"
+  show (NDCon n _ _ args) = show n ++ " [" ++ show (length args) ++ " closures]"
+  show (NTCon n _ _ _ args) = show n ++ " [" ++ show (length args) ++ " closures]"
+  show (NErased) = "[__]"
+  show (NType) = "Type"
+  show (NQuote _) = "NQuote [closure]"
+  show (NCode  x) = "NCode " ++ show x

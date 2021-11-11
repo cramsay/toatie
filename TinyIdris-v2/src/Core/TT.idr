@@ -520,6 +520,11 @@ nameAt {vars = n :: ns} Z First = n
 nameAt {vars = n :: ns} (S k) (Later p) = nameAt k p
 
 export
+{vars : _} -> Show (Bounds vars) where
+  show None = "[]"
+  show (Add x y z) = "Add (" ++ show x ++ ", " ++ show y ++ ") :: " ++ show z
+
+export
 {vars : _} -> Show (Term vars) where
   show tm = let (fn, args) = getFnArgs tm in showApp fn args
     where

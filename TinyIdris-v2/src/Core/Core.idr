@@ -251,3 +251,7 @@ condC : List (Core Bool, Core a) -> Core a -> Core a
 condC [] def = def
 condC ((x, y) :: xs) def
     = if !x then y else condC xs def
+
+export
+log : String -> Core ()
+log = coreLift . putStrLn
