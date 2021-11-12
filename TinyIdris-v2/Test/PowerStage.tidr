@@ -14,8 +14,28 @@ pat y : Nat =>
 pat k : Nat, y : Nat =>
    mul (S k) y = plus y (mul k y)
 
-power : Nat -> <Nat> -> <Nat>
-pat m : <Nat> =>
-  power Z m = ^(S Z)
-pat n : Nat, m : <Nat> =>
-  power (S n) m = ^(mul (~m) (~(power n m)))
+power : Nat -> < Nat > -> < Nat >
+pat m : < Nat > =>
+  power Z m = [| S Z |]
+pat n : Nat, m : < Nat > =>
+  power (S n) m = [| mul (~m) (~(power n m)) |]
+
+power' : Nat -> < Nat -> Nat >
+power' Z = [| \ x:Nat => S Z |]
+pat n : Nat =>
+  power' (S n) = [| \x => mul x (~(power' n) x) |]
+
+-- Quirk in type checking where we error on a lambda if the
+-- arg is unused and we need to infer it's type
+
+zero : Nat
+zero = Z
+
+one : Nat
+one = S zero
+
+two : Nat
+two = S one
+
+three : Nat
+three = S two

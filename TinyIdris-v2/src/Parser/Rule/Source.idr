@@ -21,7 +21,7 @@ SourceEmptyRule = EmptyRule Token
 export
 eoi : SourceEmptyRule ()
 eoi
-    = do nextIs "Expected end of input" (isEOI . tok)
+    = do nextIs "Source: Expected end of input" (isEOI . tok)
          pure ()
   where
     isEOI : Token -> Bool
@@ -221,6 +221,7 @@ isTerminator (Symbol "]") = True
 isTerminator (Symbol ";") = True
 isTerminator (Symbol "}") = True
 isTerminator (Symbol ")") = True
+isTerminator (Symbol "|]") = True
 isTerminator (Symbol "|") = True
 isTerminator (Keyword "in") = True
 isTerminator (Keyword "then") = True

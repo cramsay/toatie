@@ -334,6 +334,14 @@ resolveNames vars (Bind x b scope)
     = Bind x (map (resolveNames vars) b) (resolveNames (x :: vars) scope)
 resolveNames vars (App fn arg)
     = App (resolveNames vars fn) (resolveNames vars arg)
+resolveNames vars (Quote tm)
+    = Quote $ resolveNames vars tm
+resolveNames vars (Escape tm)
+  = Escape $ resolveNames vars tm
+resolveNames vars (Eval tm)
+  = Eval $ resolveNames vars tm
+resolveNames vars (TCode tm)
+  = TCode $ resolveNames vars tm
 resolveNames vars tm = tm
 
 -- Substitute some explicit terms for names in a term, and remove those
@@ -405,6 +413,10 @@ substName x new (Bind y b scope)
     = Bind y (map (substName x new) b) (substName x (weaken new) scope)
 substName x new (App fn arg)
     = App (substName x new fn) (substName x new arg)
+substName x new (Quote tm) = Quote $ substName x new tm
+substName x new (TCode tm) = TCode $ substName x new tm
+substName x new (Eval tm) = Eval $ substName x new tm
+substName x new (Escape tm) = Escape $ substName x new tm
 substName x new tm = tm
 
 public export
@@ -556,10 +568,10 @@ export
       showApp (App _ _) [] = "[can't happen]"
       showApp TType [] = "Type"
       showApp Erased [] = "[_]"
-      showApp (Quote sc) [] = "^" ++ show sc
+      showApp (Quote sc) [] = "[|" ++ show sc ++ "|]"
       showApp (TCode sc) [] = "<" ++ show sc ++ ">"
-      showApp (Eval  sc) [] = "!" ++ show sc
-      showApp (Escape sc) [] = "~" ++ show sc
+      showApp (Eval  sc) [] = "!(" ++ show sc ++ ")"
+      showApp (Escape sc) [] = "~(" ++ show sc ++ ")"
       showApp _ [] = "???"
       showApp f args = "(" ++ assert_total (show f) ++ " " ++
                               assert_total (showSep " " (map show args))

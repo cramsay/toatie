@@ -45,6 +45,14 @@ evalTop : {free, vars : _} ->
           Defs -> Env Term free -> LocalEnv free vars ->
           Term (vars ++ free) -> Stack free -> Core (NF free)
 
+export
+data QVar : Type where
+
+quoteGenNF : {bound, vars : _} ->
+             Ref QVar Int ->
+             Defs -> Bounds bound ->
+             Env Term vars -> NF vars -> Core (Term (bound ++ vars))
+
 parameters (defs : Defs)
   mutual
     eval : {free, vars : _} ->
@@ -68,13 +76,26 @@ parameters (defs : Defs)
         = eval env locs fn (MkClosure locs env arg :: stk)
     eval env locs TType stk = pure NType
     eval env locs Erased stk = pure NErased
-    eval env locs (Quote  scope) stk = eval env locs scope stk -- Quote defers eval
-    eval env locs (TCode  scope) stk = pure $ NCode  $ MkClosure locs env scope -- Code might as well defer eval since cons shouldn't evaluate its arguments
-    eval env locs (Eval   scope) stk = do (NQuote a) <- eval env locs scope stk -- Eval yanks quoted bits out
-                                            | _ => throw (GenericMsg "Eval on unquoted term")
-                                          evalLocClosure env stk a
-    eval env locs (Escape scope) stk = eval env locs scope stk -- Escape yanks quoted bits out
-
+    eval env locs (Quote  tm) stk -- Quote defers evaluation
+        = pure $ NQuote $ MkClosure locs env tm
+    eval env locs (TCode  tm) stk
+        = do tm' <- eval env locs tm stk
+             pure $ NCode tm'
+    eval env locs (Eval   tm) stk -- Keep Eval simple since we only want this for closed terms
+        = do (NQuote tm') <- eval env locs tm stk
+               | _ => throw (GenericMsg "Eval on unquoted term")
+             evalLocClosure env stk tm'
+    eval env locs (Escape tm) stk
+        = do -- Version for single eval on escaped term
+             tm' <- eval env locs tm stk
+             ---- Version for full eval.quote.eval on escaped term
+             --tmNorm <- quoteGenNF !(newRef QVar 0) defs None env !(eval env locs tm [])
+             --tm' <- eval env locs (weakenNs vars tmNorm) stk
+             case tm' of
+               -- Resolve Escaped NQuote to new local var
+               (NQuote arg) => eval env (arg :: locs) (Local {name = UN "fvar"} _ First) stk
+               -- Keep NEscape tag for any other (probably stuck) terms
+               otherwise    => pure $ NEscape tm'
 
     evalLocClosure : {free : _} ->
                      Env Term free ->
@@ -252,9 +273,6 @@ export
 gType : Glued vars
 gType = MkGlue (pure TType) (const (pure NType))
 
-export
-data QVar : Type where
-
 public export
 interface Quote (0 tm : List Name -> Type) where
     quote : {vars : _} ->
@@ -340,10 +358,6 @@ mutual
       = do ty' <- quoteGenNF q defs bounds env ty
            pure (PVTy s ty')
 
-  quoteGenNF : {bound, vars : _} ->
-               Ref QVar Int ->
-               Defs -> Bounds bound ->
-               Env Term vars -> NF vars -> Core (Term (bound ++ vars))
   quoteGenNF q defs bound env (NBind n b sc)
       = do var <- genName "qv"
            sc' <- quoteGenNF q defs (Add n var bound) env
@@ -362,10 +376,17 @@ mutual
            pure $ apply (Ref (TyCon info t ar) n) args'
   quoteGenNF q defs bound env NErased = pure Erased
   quoteGenNF q defs bound env NType = pure TType
-  quoteGenNF q defs bound env (NQuote sc)
-      = pure $ !(quoteGenNF q defs bound env !(evalClosure defs sc))
-  quoteGenNF q defs bound env (NCode  sc)
-      = pure $ TCode !(quoteGenNF q defs bound env !(evalClosure defs sc))
+  quoteGenNF q defs bound env (NQuote tm)
+      = do tmNf <- evalClosure defs tm
+           tm' <- quoteGenNF q defs bound env tmNf
+           pure $ Quote tm'
+  quoteGenNF q defs bound env (NCode  tm)
+      = pure $ TCode !(quoteGenNF q defs bound env tm)
+  quoteGenNF q defs bound env (NEscape tm)
+      = do case tm of
+             NQuote arg => do argNf <- evalClosure defs arg
+                              quoteGenNF q defs bound env argNf
+             otherwise => pure $ Escape !(quoteGenNF q defs bound env tm)
 
 export
 Quote NF where

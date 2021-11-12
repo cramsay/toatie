@@ -117,7 +117,15 @@ checkTerm env (IPi p mn argTy retTy) exp
          (retTytm, gretTyty) <- checkTerm env' retTy (Just gType)
          checkExp env (Bind n (Pi stage p argTytm) retTytm) gType exp
 checkTerm env (ILam p mn argTy scope) Nothing
-    = throw (GenericMsg "Can't infer type for lambda")
+    = do let n = fromMaybe (MN "_" 0) mn
+         (argTytm, gargTyty) <- checkTerm env argTy (Just gType)
+         stage <- get Stg
+         let env' : Env Term (n :: vars)
+                  = Lam stage p argTytm :: env
+         (scopetm, gscopety) <- checkTerm env' scope Nothing
+         checkExp env (Bind n (Lam stage p argTytm) scopetm)
+                      (gnf env (Bind n (Pi stage p argTytm) !(getTerm gscopety)))
+                      Nothing
 checkTerm env (ILam p mn argTy scope) (Just exp)
     = do let n = fromMaybe (MN "_" 0) mn
          (argTytm, gargTyty) <- checkTerm env argTy (Just gType)
@@ -188,7 +196,10 @@ checkTerm env (IQuote  sc) exp
        checkExp env (Quote sctm) (gnf env $ TCode sctytm) exp
 checkTerm env (ICode scty) exp
   = do -- Is scty of type Type?
+       stage <- get Stg
+       put Stg $ S stage
        (sctytm, gsctyTy) <- checkTerm env scty (Just gType)
+       put Stg stage
        -- Then so is our Code type
        checkExp env (TCode sctytm) gType exp
 checkTerm env (IEval code) exp

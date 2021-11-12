@@ -38,8 +38,10 @@ mutual
                   List (Closure vars) -> NF vars
        NType    : NF vars
        NErased  : NF vars
-       NQuote   : Closure vars -> NF vars
-       NCode    : Closure vars -> NF vars
+       -- Staging constructs
+       NQuote   : Closure vars -> NF vars -- Idris 2's Delay construct also carries it's type as a closure... should we?
+       NCode    : NF vars -> NF vars
+       NEscape  : NF vars -> NF vars -- Perhaps we need a NEval too?
 
 export
 {free : _} -> Show (NHead free) where
@@ -80,3 +82,4 @@ export
   show (NType) = "Type"
   show (NQuote _) = "NQuote [closure]"
   show (NCode  x) = "NCode " ++ show x
+  show (NEscape x) = "NEscape " ++ show x

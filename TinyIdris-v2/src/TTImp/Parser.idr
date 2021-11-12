@@ -74,15 +74,15 @@ mutual
   simpleExpr : FileName -> IndentInfo -> Rule RawImp
   simpleExpr fname indents
       = atom fname
+    <|> quote        fname indents
+    <|> code_type    fname indents
+    <|> eval_quote   fname indents
+    <|> escape_quote fname indents
     <|> binder fname indents
     <|> do symbol "("
            e <- expr fname indents
            symbol ")"
            pure e
-    <|> quote        fname indents
-    <|> code_type    fname indents
-    <|> eval_quote   fname indents
-    <|> escape_quote fname indents
 
   export
   expr : FileName -> IndentInfo -> Rule RawImp
@@ -213,8 +213,9 @@ mutual
 
   quote : FileName -> IndentInfo -> Rule RawImp
   quote fname indents
-    = do symbol "^"
+    = do symbol "[|"
          scope <- expr fname indents
+         symbol "|]"
          end <- location
          pure (IQuote scope)
 
@@ -229,14 +230,14 @@ mutual
   eval_quote : FileName -> IndentInfo -> Rule RawImp
   eval_quote fname indents
     = do symbol "!"
-         scope <- expr fname indents
+         scope <- simpleExpr fname indents
          end <- location
          pure (IEval scope)
 
   escape_quote : FileName -> IndentInfo -> Rule RawImp
   escape_quote fname indents
     = do symbol "~"
-         scope <- expr fname indents
+         scope <- simpleExpr fname indents
          end <- location
          pure (IEscape scope)
 
