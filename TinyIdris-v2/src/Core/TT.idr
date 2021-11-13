@@ -1,6 +1,7 @@
 module Core.TT
 
 import Data.List
+import Data.Maybe
 import Decidable.Equality
 
 -- In Idris2, this is defined in Core.Name
@@ -536,9 +537,22 @@ export
   show None = "[]"
   show (Add x y z) = "Add (" ++ show x ++ ", " ++ show y ++ ") :: " ++ show z
 
+
+tryShowNat : Term vars -> Maybe String
+tryShowNat tm = map show $ go tm
+  where
+  go : Term vars -> Maybe Nat
+  go (Ref (DataCon _ _) (UN "Z")) = Just Z
+  go (App (Ref (DataCon _ _) (UN "S")) arg) = map S $ go arg
+  go _         = Nothing
+
 export
 {vars : _} -> Show (Term vars) where
-  show tm = let (fn, args) = getFnArgs tm in showApp fn args
+  show tm = let (fn, args) = getFnArgs tm in
+            fromMaybe (showApp fn args) ( -- List of special case printers
+                    tryShowNat tm
+              --<|> tryShowNat tm
+            )
     where
       showApp : {vars : _} -> Term vars -> List (Term vars) -> String
       showApp (Local {name} idx p) []

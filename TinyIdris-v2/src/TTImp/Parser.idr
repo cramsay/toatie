@@ -41,6 +41,15 @@ collectDefs : List ImpDecl -> List ImpDecl
 %hide Lexer.Core.(<|>)
 %hide Prelude.(<|>)
 
+natLit : FileName -> Rule RawImp
+natLit fname
+    = do i <- intLit
+         pure $ natToImp (fromInteger i)
+  where
+  natToImp : Nat -> RawImp
+  natToImp 0 = IVar (UN "Z")
+  natToImp (S k) = IApp (IVar (UN "S")) (natToImp k)
+
 atom : FileName -> Rule RawImp
 atom fname
     = do exactIdent "Type"
@@ -49,6 +58,7 @@ atom fname
          pure Implicit
   <|> do x <- name
          pure (IVar x)
+  <|> natLit fname
 
 getRight : Either a b -> Maybe b
 getRight (Left _) = Nothing
