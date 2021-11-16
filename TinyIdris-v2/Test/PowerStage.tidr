@@ -27,15 +27,3 @@ pat n : Nat =>
 
 -- Quirk in type checking where we error on a lambda if the
 -- arg is unused and we need to infer it's type
-
-zero : Nat
-zero = Z
-
-one : Nat
-one = S zero
-
-two : Nat
-two = S one
-
-three : Nat
-three = S two

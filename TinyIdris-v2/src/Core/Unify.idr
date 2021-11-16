@@ -331,13 +331,88 @@ mutual
               then pure success
               else postpone env (NApp f args) tm
 
+  unifyBothBinders: {auto c : Ref Ctxt Defs} ->
+                    {auto u : Ref UST UState} ->
+                    {vars : _} ->
+                    Env Term vars ->
+                    Name -> Binder (NF vars) ->
+                    (Defs -> Closure vars -> Core (NF vars)) ->
+                    Name -> Binder (NF vars) ->
+                   (Defs -> Closure vars -> Core (NF vars)) ->
+                    Core UnifyResult
+  unifyBothBinders env x (Pi sx ix tx) scx y (Pi sy iy ty) scy
+    = do defs <- get Ctxt
+         -- Don't unify if stages are different
+         if sx /= sy
+           then convertError env (NBind x (Pi sx ix tx) scx) (NBind y (Pi sy iy ty) scy)
+           else
+             do empty <- clearDefs defs
+                -- Unify types of bound vars
+                tx' <- quote empty env tx
+                ty' <- quote empty env ty
+                ct  <- unify env tx ty
+                -- Make env' so we can unify scopes
+                xn <- genName "x"
+                let env' : Env Term (x :: _)
+                         = Pi sy Explicit tx' :: env
+                case constraints ct of
+                  [] => -- no constraints, check scopes
+                        do tscx <- scx defs (toClosure env (Ref Bound xn))
+                           tscy <- scy defs (toClosure env (Ref Bound xn))
+                           tmx <- quote empty env tscx
+                           tmy <- quote empty env tscy
+                           unify env'
+                                 (refsToLocals (Add x xn None) tmx)
+                                 (refsToLocals (Add x xn None) tmy)
+                  cs => -- Constraints! Make new guarded constant
+                        do txtm <- quote empty env tx
+                           tytm <- quote empty env ty
+                           c    <- newConstant env
+                                     (Bind x (Lam sy Explicit txtm) (Local _ First))
+                                     (Bind x (Pi  sy Explicit txtm) (weaken tytm))
+                                     cs
+                           tscx <- scx defs (toClosure env (Ref Bound xn))
+                           tscy <- scy defs (toClosure env (App c (Ref Bound xn)))
+                           tmx <- quote empty env tscx
+                           tmy <- quote empty env tscy
+                           cs' <- unify env'
+                                    (refsToLocals (Add x xn None) tmx)
+                                    (refsToLocals (Add x xn None) tmy)
+                           pure (union ct cs')
+  unifyBothBinders env x (Lam sx ix tx) scx y (Lam sy iy ty) scy
+                   = do defs <- get Ctxt
+                        -- Check stages
+                        if sx /= sy
+                          then convertError env
+                                 (NBind x (Lam sx ix tx) scx)
+                                 (NBind y (Lam sy iy ty) scy)
+                          else
+                            do empty <- clearDefs defs
+                               -- Unify types of our bound vars
+                               ct <- unify env tx ty
+                               -- Make env' so we can unify scopes
+                               xn <- genName "x"
+                               txtm <- quote empty env tx
+                               let env' : Env Term (x :: _)
+                                        = Lam sx Explicit txtm :: env
+                               -- Unify scopes
+                               tscx <- scx defs (toClosure env (Ref Bound xn))
+                               tscy <- scy defs (toClosure env (Ref Bound xn))
+                               tmx <- quote empty env tscx
+                               tmy <- quote empty env tscy
+                               cs' <- unify env' (refsToLocals (Add x xn None) tmx)
+                                                 (refsToLocals (Add x xn None) tmy)
+                               pure (union ct cs')
+  unifyBothBinders env x bx scx y by scy = convertError env (NBind x bx scx) (NBind y by scy)
+
   -- This gives the minimal rules for unification of constructor forms,
   -- solving metavariables in constructor arguments. There's more to do in
   -- general!
   export
   Unify NF where
     -- If we have two pi binders, check the arguments and scope
-    unify env (NBind x b sc) (NBind x' b' sc') = ?unifyBinders
+    unify env (NBind x b sc) (NBind x' b' sc') = unifyBothBinders env x b sc x' b' sc'
+    -- TODO Idris2 has option for checking lambda against any tm too
     -- Matching constructors, reduces the problem to unifying the arguments
     unify env nx@(NDCon n t a args) ny@(NDCon n' t' a' args')
         = if t == t'

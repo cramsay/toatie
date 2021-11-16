@@ -1,0 +1,38 @@
+data Nat : Type where
+     Z : Nat
+     S : Nat -> Nat
+
+plus : Nat -> Nat -> Nat
+pat y : Nat =>
+   plus Z y = y
+pat k : Nat, y : Nat =>
+   plus (S k) y = S (plus k y)
+
+mul : Nat -> Nat -> Nat
+pat y : Nat =>
+   mul Z y = Z
+pat k : Nat, y : Nat =>
+   mul (S k) y = plus y (mul k y)
+
+data BNat : Nat -> Type where
+    BZ : (r : Nat) -> BNat r
+    BS : (r : Nat) -> BNat r -> BNat (S r)
+
+plusB : (r : Nat) -> (c : Nat) -> BNat r -> BNat (plus c r)
+pat r : Nat, y : BNat r =>
+  plusB r Z y =  y
+pat r, c : Nat, y : BNat r =>
+  plusB r (S c) y = BS (plus c r) (plusB r c y)
+
+data List : Type -> Type where
+  Nil : (a : Type) -> List a
+  Cons : (a : Type) -> (x : a) -> (xs : List a) -> List a
+
+map : (a : Type) -> (b: Type) -> (a -> b) -> List a -> List b
+pat a : Type, b : Type, f : (a -> b) =>
+  map a b f (Nil a) = (Nil b)
+pat a : Type, b : Type, f : (a -> b), x : a, xs : List a =>
+  map a b f (Cons a x xs) = Cons b (f x) (map a b f xs)
+
+-- Can use map with all type parameters inferred:
+-- e.g. map _ _ S (Cons _ 0 (Cons _ 1 (Nil _)))
