@@ -13,13 +13,13 @@ data Vect : Nat -> Type -> Type where
      Cons : (a : Type) -> (k : Nat) ->
             a -> Vect k a -> Vect (S k) a
 
-append : (a : _) -> (n : _) -> (m : _) ->
+append : (a : Type) -> (n : Nat) -> (m : Nat) ->
          Vect n a -> Vect m a -> Vect (plus n m) a
 pat a : Type, k : Nat, ys : Vect k a =>
     append a Z k (Nil a) ys = ys
 pat a : Type, n : Nat, x : a, xs : Vect n a, k : Nat, ys : Vect k a =>
     append a (S n) k (Cons a n x xs) ys
-        = Cons _ _ x (append _ _ _ xs ys)
+        = Cons a (plus n k) x (append a n k xs ys)
 
 data Test : Type where
      A : Test
@@ -32,3 +32,22 @@ vect1 = Cons _ _ A (Cons _ _ B (Nil _))
 
 vect2 : Vect (S (S Z)) Test
 vect2 = Cons _ _ C (Cons _ _ D (Nil _))
+
+head : (n : Nat) -> (a : Type) -> Vect (S n) a -> a
+pat n : Nat, a : Type, x : a, xs : Vect n a =>
+  head n a (Cons a n x xs) = x
+
+tail : (n : Nat) -> (a : Type) -> Vect (S n) a -> Vect n a
+pat a : Type, n : Nat, xs : Vect n a =>
+  tail n a (Cons a n _ xs) = xs
+
+unrollMap : (n : Nat) -> (a : Type) -> (b : Type) -> (f : < a -> b >) -> < Vect n a -> Vect n b >
+pat a : Type, b : Type, f : < a->b > =>
+  unrollMap Z a b f = [| \ xs : Vect Z a => Nil b |]
+pat n : Nat, a : Type, b : Type, f : < a->b > =>
+  unrollMap (S n) a b f = [|
+    \xs : Vect (S n) a =>
+       let y  = ~f (head n a xs)
+           ys = ~(unrollMap n a b f) (tail n a xs)
+       in Cons b n y ys
+  |]
