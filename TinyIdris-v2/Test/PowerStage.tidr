@@ -1,3 +1,9 @@
+-- An example of our staging constucts with specialised power functions.
+--
+-- We work up to two versions of a power function where all of the unrolling is
+-- performed at "compile"-time, but leaving the application with the base until
+-- run-time.
+
 data Nat : Type where
      Z : Nat
      S : Nat -> Nat
@@ -27,3 +33,7 @@ pat n : Nat =>
 
 -- Quirk in type checking where we error on a lambda if the
 -- arg is unused and we need to infer it's type
+
+-- Examples at REPL:
+-- > power' 6
+-- > \b : <Nat> => power 3 b

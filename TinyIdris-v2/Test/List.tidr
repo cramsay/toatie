@@ -1,0 +1,22 @@
+-- Basics of working with lists
+--
+-- Higher-order functions such as `map` required solving the unifyBinders hole
+-- in TinyIdris v2.
+
+data Nat : Type where
+     Z : Nat
+     S : Nat -> Nat
+
+data List : Type -> Type where
+  Nil : (a : Type) -> List a
+  Cons : (a : Type) -> (x : a) -> (xs : List a) -> List a
+
+map : (a : Type) -> (b: Type) -> (a -> b) -> List a -> List b
+pat a : Type, b : Type, f : (a -> b) =>
+  map a b f (Nil a) = Nil _
+pat a : Type, b : Type, f : (a -> b), x : a, xs : List a =>
+  map a b f (Cons a x xs) = Cons _ (f x) (map a _ f xs)
+
+-- Can use map with all type parameters inferred:
+-- e.g. map _ _ S (Cons _ 0 (Cons _ 1 (Nil _)))
+-- e.g. map _ _ (\x : Nat => S x) (Cons _ 0 (Cons _ 1 (Nil _)))
