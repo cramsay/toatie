@@ -37,6 +37,9 @@ checkExp env term got (Just exp)
                       pure (term, exp)
              cs => do cty <- getTerm exp
                       ctm <- newConstant env term cty cs
+                      -- For now, throw error if we generate extra constraints
+                      -- This might impact more involved proofs later on!!
+                      throw (CantConvert env !(getTerm got) !(getTerm exp))
                       pure (ctm, got)
 
 weakenExp : {x, vars : _} ->
