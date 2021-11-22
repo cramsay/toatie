@@ -70,6 +70,37 @@ bindSymbol
          pure Explicit
 
 mutual
+  listLit : FileName -> IndentInfo -> Rule RawImp
+  listLit fname indents
+      = do symbol "`["
+           elems <- sepBy (symbol ",") (simpleExpr fname indents)
+           symbol "]"
+           pure $ elemsToImp elems
+     where
+     elemsToImp : List RawImp -> RawImp
+     elemsToImp [] = IApp (IVar (UN "Nil")) Implicit
+     elemsToImp (x :: xs) = IApp (IApp (IApp
+                              (IVar (UN "Cons"))
+                              Implicit)
+                              x)
+                              (elemsToImp xs)
+
+  vecLit : FileName -> IndentInfo -> Rule RawImp
+  vecLit fname indents
+      = do symbol "["
+           elems <- sepBy (symbol ",") (simpleExpr fname indents)
+           symbol "]"
+           pure $ elemsToImp elems
+    where
+    elemsToImp : List RawImp -> RawImp
+    elemsToImp [] = IApp (IVar (UN "Nil")) Implicit
+    elemsToImp (x :: xs) = IApp (IApp (IApp (IApp
+                             (IVar (UN "Cons"))
+                             Implicit)
+                             Implicit)
+                             x)
+                             (elemsToImp xs)
+
   appExpr : FileName -> IndentInfo -> Rule RawImp
   appExpr fname indents
       = do f <- simpleExpr fname indents
@@ -88,7 +119,9 @@ mutual
     <|> code_type    fname indents
     <|> eval_quote   fname indents
     <|> escape_quote fname indents
-    <|> binder fname indents
+    <|> binder       fname indents
+    <|> listLit      fname indents
+    <|> vecLit       fname indents
     <|> do symbol "("
            e <- expr fname indents
            symbol ")"

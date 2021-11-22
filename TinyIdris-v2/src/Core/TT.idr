@@ -538,20 +538,13 @@ export
   show (Add x y z) = "Add (" ++ show x ++ ", " ++ show y ++ ") :: " ++ show z
 
 
-tryShowNat : Term vars -> Maybe String
-tryShowNat tm = map show $ go tm
-  where
-  go : Term vars -> Maybe Nat
-  go (Ref (DataCon _ _) (UN "Z")) = Just Z
-  go (App (Ref (DataCon _ _) (UN "S")) arg) = map S $ go arg
-  go _         = Nothing
-
 export
 {vars : _} -> Show (Term vars) where
   show tm = let (fn, args) = getFnArgs tm in
             fromMaybe (showApp fn args) ( -- List of special case printers
                     tryShowNat tm
-              --<|> tryShowNat tm
+                <|> tryShowVect tm
+                <|> tryShowList tm
             )
     where
       showApp : {vars : _} -> Term vars -> List (Term vars) -> String
@@ -590,3 +583,28 @@ export
       showApp f args = "(" ++ assert_total (show f) ++ " " ++
                               assert_total (showSep " " (map show args))
                        ++ ")"
+
+      tryShowNat : Term vars -> Maybe String
+      tryShowNat tm = map show $ go tm
+        where
+        go : Term vars -> Maybe Nat
+        go (Ref (DataCon _ _) (UN "Z")) = Just Z
+        go (App (Ref (DataCon _ _) (UN "S")) arg) = map S $ go arg
+        go _         = Nothing
+
+      tryShowVect : Term vars -> Maybe String
+      tryShowVect tm = map show $ go tm
+        where
+        go : Term vars -> Maybe (List (Term vars))
+        go (App (Ref (DataCon _ _) (UN "Nil")) xty) = Just []
+        go (App (App (App (App (Ref (DataCon _ _) (UN "Cons")) xty) n) xtm) xs) = map (xtm ::) $ go xs
+        go _ = Nothing
+
+      tryShowList : Term vars -> Maybe String
+      tryShowList tm = map (\x => "`" ++ show x) $ go tm
+        where
+        go : Term vars -> Maybe (List (Term vars))
+        go (App (Ref (DataCon _ _) (UN "Nil")) xty) = Just []
+        go (App (App (App (Ref (DataCon _ _) (UN "Cons")) xty) xtm) xs) = map (xtm ::) $ go xs
+        go _ = Nothing
+

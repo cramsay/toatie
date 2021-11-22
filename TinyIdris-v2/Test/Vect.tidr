@@ -21,18 +21,6 @@ pat a : Type, n : Nat, x : a, xs : Vect n a, k : Nat, ys : Vect k a =>
     append a (S n) k (Cons a n x xs) ys
         = Cons a (plus n k) x (append a n k xs ys)
 
-data Test : Type where
-     A : Test
-     B : Test
-     C : Test
-     D : Test
-
-vect1 : Vect (S (S Z)) Test
-vect1 = Cons _ _ A (Cons _ _ B (Nil _))
-
-vect2 : Vect (S (S Z)) Test
-vect2 = Cons _ _ C (Cons _ _ D (Nil _))
-
 head : (n : Nat) -> (a : Type) -> Vect (S n) a -> a
 pat n : Nat, a : Type, x : a, xs : Vect n a =>
   head n a (Cons a n x xs) = x
@@ -41,7 +29,9 @@ tail : (n : Nat) -> (a : Type) -> Vect (S n) a -> Vect n a
 pat a : Type, n : Nat, xs : Vect n a =>
   tail n a (Cons a n _ xs) = xs
 
-unrollMap : (n : Nat) -> (a : Type) -> (b : Type) -> (f : < a -> b >) -> < Vect n a -> Vect n b >
+unrollMap : (n : Nat) -> (a : Type) -> (b : Type) ->
+            (f : < a -> b >) ->
+            < Vect n a -> Vect n b >
 pat a : Type, b : Type, f : < a->b > =>
   unrollMap Z a b f = [| \ xs : Vect Z a => Nil b |]
 pat n : Nat, a : Type, b : Type, f : < a->b > =>
@@ -51,3 +41,35 @@ pat n : Nat, a : Type, b : Type, f : < a->b > =>
            ys = ~(unrollMap n a b f) (tail n a xs)
        in Cons b n y ys
   |]
+
+unrollFoldl : (n : Nat) -> (acc : Type) -> (elem : Type) ->
+              (f : < acc -> elem -> acc >) ->
+              < acc -> Vect n elem -> acc >
+pat acc : Type, elem : Type, f : <acc->elem->acc> =>
+  unrollFoldl Z acc elem f = [| \init : acc => \xs : Vect Z elem => init  |] 
+pat n : Nat, acc : Type, elem : Type, f : <acc->elem->acc> =>
+  unrollFoldl (S n) acc elem f = [|
+    \init : acc =>
+    \xs : Vect (S n) elem =>
+      let init' = ~f init (head n elem xs)
+      in ~(unrollFoldl n acc elem f) init' (tail n elem xs)
+  |]
+-- Error when using acc' in let: 
+--   Stage error: var acc' is bound at stage 1 but used at stage 0
+-- Think this is an issue because I should be tracking stage in context entries,
+-- rather than where the binder is defined?
+-- This happens when we have init _outside_the final bracket, i.e.
+-- unrollFoldl : n -> acc -> elem -> f -> init -> <Vect n elem -> acc>
+
+-- Examples for REPL:
+-- We can see the the main unrolling easily
+-- > unrollMap 3 Nat Nat [| S |]
+--
+-- ...but those head and tail functions still aren't evaluated by the escape.
+-- We can force this by giving names to each of the elements in the vector
+-- > \a:Nat => \b:Nat => \c:Nat => !(unrollMap 3 Nat Nat [| S |]) [a,b,c]
+--
+-- That's the core of how we will flatten functions for recursive data types.
+--
+-- Trying with unrollFoldl:
+-- > \init:Nat => \a:Nat => \b:Nat => \c:Nat => !(unrollFoldl 3 Nat Nat [| plus |]) init [a,b,c]

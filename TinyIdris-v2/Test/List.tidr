@@ -13,10 +13,11 @@ data List : Type -> Type where
 
 map : (a : Type) -> (b: Type) -> (a -> b) -> List a -> List b
 pat a : Type, b : Type, f : (a -> b) =>
-  map a b f (Nil a) = Nil _
+  map a b f (Nil a) = Nil b
 pat a : Type, b : Type, f : (a -> b), x : a, xs : List a =>
-  map a b f (Cons a x xs) = Cons _ (f x) (map a _ f xs)
+  map a b f (Cons a x xs) = Cons b (f x) (map a b f xs)
 
 -- Can use map with all type parameters inferred:
--- e.g. map _ _ S (Cons _ 0 (Cons _ 1 (Nil _)))
--- e.g. map _ _ (\x : Nat => S x) (Cons _ 0 (Cons _ 1 (Nil _)))
+-- Note that `[...] translates to fold with Nil and Cons with implicit `a`s.
+-- > map _ _ (\x : Nat => S x) (Cons _ 0 (Cons _ 1 (Nil _)))
+-- > map _ _ S `[0,1]
