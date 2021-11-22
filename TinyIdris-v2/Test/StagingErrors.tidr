@@ -1,0 +1,81 @@
+data Nat : Type where
+     Z : Nat
+     S : Nat -> Nat
+
+plus : Nat -> Nat -> Nat
+pat y : Nat =>
+   plus Z y = y
+pat k : Nat, y : Nat =>
+   plus (S k) y = S (plus k y)
+
+-- Example of accidental name capture from "A Gentle Introduction to Multi-stage
+-- Programming" by Walid Taha. Demonstrates that we _do not_ accidentally
+-- capture variable names when unstaging (in this case, the repeated use of `x`
+-- during recursion).
+--
+-- Example in paper suggests running h 3 [|1|], which should return [|7|]. 
+h : (n : Nat) -> (z : <Nat>) -> <Nat>
+pat z : <Nat> =>
+  h Z z = z
+pat n : Nat, z : <Nat> =>
+  h (S n) z = [| (\x : Nat => ~(h n [| plus x ~z |]))
+                 (S n)
+              |]
+
+-- Now looking at Walid's thesis...
+-- (https://www.diva-portal.org/smash/get/diva2:413525/fulltext01.pdf)
+-- p24 gives examples of cross-stage persistence (we want this ---
+-- can use free variables bound at one stage in a later stage) and
+-- cross-stage safety (don't want this --- evaluating an expression bound in
+-- a higher stage)
+
+-- Cross-stage persistence. `plus` is free variable bound at level 0, so we
+-- should be able to use it at level 1. For example:
+g : <Nat>
+g = [| plus 2 3 |]
+
+-- Cross-stage safety. We shouldn't be allowed to evaluated at level 0, before
+-- it is bound at level 1. For example:
+--
+-- > [| \x => ~x |]
+-- Stage error: var x is bound at stage 1 but used at stage 0
+--
+-- A similar example that's maybe more exciting:
+-- > \a : Nat => [| \b : Nat => ~(plus a b) |]
+-- Stage error: var y is bound at stage 1 but used at stage 0
+
+-- Walid talks about a true _multi_stage language so escaped quotes or only ever
+-- evaluated when going from stage 2 -> stage 1. Our language is more for two
+-- stages, so we evaluate every stage... the staging is more for spliting
+-- synthesisable code from non-synthesisable generators.
+--
+-- For example, g above, shows [| 5 |] at the REPL. They can wrap it in one
+-- more set of quotes to show that the evaluation really is deferred, but ours
+-- will still reduce the inner expression
+--
+-- > [| g |]
+-- Checked: [|g|]
+-- Type: <<Nat>>
+-- Evaluated: [|[|5|]|]
+
+-- p29 talks about two useful functions. Let's define them here
+back : (a : Type) -> (b : Type) -> (<a> -> <b>) -> <a -> b>
+pat a : Type, b : Type, f : (<a> -> <b>) =>
+  back a b f = [| \x:a => ~(f [|x|]) |]
+
+forth : (a : Type) -> (b : Type) -> <a -> b> -> (<a> -> <b>)
+pat a : Type, b : Type, f : <a -> b> =>
+  forth a b f = \x: <a> => [| (~f) (~x) |]
+
+-- p50 has more on the need for renaming. First define a function with a bound name, x...
+t : <Nat> -> <Nat -> Nat>
+pat e : <Nat> =>
+  t e = [| \x:Nat => plus x ~e |]
+
+-- Now if we call this via a lambda with the same bound name, x, does it mistakenly
+-- expand to \x => \x => x + x or with unique names like \x_1 => \x_2 => x_1 + x_2?
+-- Try with args 2 and 3 at the REPL;
+-- > (\x : Nat => !(t [| x |])) 2 3
+-- Checked: (\x :_0 Nat => !((t [|x[0]|])) 2 3)
+-- Type: Nat
+-- Evaluated: 5

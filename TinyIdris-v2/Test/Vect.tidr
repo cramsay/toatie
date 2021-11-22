@@ -44,22 +44,16 @@ pat n : Nat, a : Type, b : Type, f : < a->b > =>
 
 unrollFoldl : (n : Nat) -> (acc : Type) -> (elem : Type) ->
               (f : < acc -> elem -> acc >) ->
-              < acc -> Vect n elem -> acc >
-pat acc : Type, elem : Type, f : <acc->elem->acc> =>
-  unrollFoldl Z acc elem f = [| \init : acc => \xs : Vect Z elem => init  |] 
-pat n : Nat, acc : Type, elem : Type, f : <acc->elem->acc> =>
-  unrollFoldl (S n) acc elem f = [|
-    \init : acc =>
+              (init : <acc>) ->
+              < Vect n elem -> acc >
+pat acc : Type, elem : Type, f : <acc->elem->acc>, init : <acc> =>
+  unrollFoldl Z acc elem f init = [| \xs : Vect Z elem => ~init |] 
+pat n : Nat, acc : Type, elem : Type, f : <acc->elem->acc>, init : <acc> =>
+  unrollFoldl (S n) acc elem f init = [|
     \xs : Vect (S n) elem =>
-      let init' = ~f init (head n elem xs)
-      in ~(unrollFoldl n acc elem f) init' (tail n elem xs)
+      let init' = ~f ~init (head n elem xs)
+      in ~(unrollFoldl n acc elem f [| init' |]) (tail n elem xs)
   |]
--- Error when using acc' in let: 
---   Stage error: var acc' is bound at stage 1 but used at stage 0
--- Think this is an issue because I should be tracking stage in context entries,
--- rather than where the binder is defined?
--- This happens when we have init _outside_the final bracket, i.e.
--- unrollFoldl : n -> acc -> elem -> f -> init -> <Vect n elem -> acc>
 
 -- Examples for REPL:
 -- We can see the the main unrolling easily
@@ -72,4 +66,4 @@ pat n : Nat, acc : Type, elem : Type, f : <acc->elem->acc> =>
 -- That's the core of how we will flatten functions for recursive data types.
 --
 -- Trying with unrollFoldl:
--- > \init:Nat => \a:Nat => \b:Nat => \c:Nat => !(unrollFoldl 3 Nat Nat [| plus |]) init [a,b,c]
+-- > \init:Nat => \a:Nat => \b:Nat => \c:Nat => !(unrollFoldl 3 Nat Nat [| plus |] [|init|]) [a,b,c]
