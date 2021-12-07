@@ -51,6 +51,10 @@ lookupDef : Name -> Defs -> Core (Maybe GlobalDef)
 lookupDef n defs = pure (SortedMap.lookup n defs)
 
 export
+lookupDefPure : Name -> Defs -> Maybe GlobalDef
+lookupDefPure n defs = SortedMap.lookup n defs
+
+export
 initDefs : Core Defs
 initDefs = pure empty
 

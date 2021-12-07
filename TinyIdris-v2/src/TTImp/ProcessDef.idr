@@ -40,6 +40,11 @@ processClause (PatClause lhs rhs)
          (rhstm, rhsty) <- checkTerm env rhs (Just (gnf env rhsexp))
          pure (MkClause env lhsenv rhstm)
 
+         -- OR: we normalise clauses as we add them
+         --defs <- get Ctxt
+         --rhstmNorm <- normalise defs env rhstm
+         --pure (MkClause env lhsenv rhstmNorm)
+
 export
 processDef : {auto c : Ref Ctxt Defs} ->
              {auto u : Ref UST UState} ->
