@@ -55,10 +55,10 @@ unifyArgs : (Unify tm, Quote tm) =>
             {auto c : Ref Ctxt Defs} ->
             {auto u : Ref UST UState} ->
             Env Term vars ->
-            List (tm vars) -> List (tm vars) ->
+            List (AppInfo, tm vars) -> List (AppInfo, tm vars) ->
             Core UnifyResult
 unifyArgs env [] [] = pure success
-unifyArgs env (cx :: cxs) (cy :: cys)
+unifyArgs env ((ix,cx) :: cxs) ((iy,cy) :: cys)
     = do -- Do later arguments first, since they may depend on earlier
          -- arguments and use their solutions.
          cs <- unifyArgs env cxs cys
@@ -250,8 +250,8 @@ instantiate {newvars} env mname mdef locs tm
             = Just (PVar s !(updateIVars ivs t))
         updateIVarsB ivs (PVTy s t)
             = Just (PVTy s !(updateIVars ivs t))
-    updateIVars ivs (App f a)
-        = Just (App !(updateIVars ivs f) !(updateIVars ivs a))
+    updateIVars ivs (App info f a)
+        = Just (App info !(updateIVars ivs f) !(updateIVars ivs a))
     updateIVars ivs Erased = Just Erased
     updateIVars ivs TType = Just TType
     updateIVars ivs (Quote  a)  = Just (Quote  !(updateIVars ivs a))
@@ -296,11 +296,11 @@ mutual
              {auto c : Ref Ctxt Defs} ->
              {auto u : Ref UST UState} ->
              Env Term vars ->
-             NHead vars -> List (Closure vars) ->
+             NHead vars -> List (AppInfo, Closure vars) ->
              NF vars ->
              Core UnifyResult
   unifyApp env (NMeta n margs) fargs tmnf
-      = do let args = margs ++ fargs
+      = do let args = margs ++ map snd fargs
            case !(patternEnv env args) of
                 Nothing =>
                     -- not in pattern form so postpone
@@ -372,7 +372,7 @@ mutual
                                      (Bind x (Pi  sy Explicit txtm) (weaken tytm))
                                      cs
                            tscx <- scx defs (toClosure env (Ref Bound xn))
-                           tscy <- scy defs (toClosure env (App c (Ref Bound xn)))
+                           tscy <- scy defs (toClosure env (App AExplicit c (Ref Bound xn)))
                            tmx <- quote empty env tscx
                            tmy <- quote empty env tscy
                            cs' <- unify env'
@@ -465,7 +465,8 @@ retry c
                                   pure cs
                          _ => pure cs
               Just (MkSeqConstraint env xs ys) =>
-                 do cs <- unifyArgs env xs ys
+                 do cs <- unifyArgs env (map (\x=>(AExplicit,x)) xs)
+                                        (map (\x=>(AExplicit,x)) ys)
                     -- As above, check whether there are new contraints
                     case (constraints cs) of
                          [] => do deleteConstraint c

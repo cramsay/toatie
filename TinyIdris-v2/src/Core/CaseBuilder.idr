@@ -320,7 +320,7 @@ updatePatNames ns (pi :: ps)
     = record { pat $= update } pi :: updatePatNames ns ps
   where
     update : Pat -> Pat
-    update (PCon n i a ps) = PCon n i a (map update ps)
+    update (PCon n i a ps) = PCon n i a (map (\(i,x)=>(i, update x)) ps)
     update (PLoc n)
         = case lookup n ns of
                Nothing => PLoc n
@@ -339,7 +339,7 @@ groupCons fn pvars cs
   where
     addConG : {vars', todo' : _} ->
               Name -> (tag : Int) ->
-              List Pat -> NamedPats vars' todo' ->
+              List (AppInfo, Pat) -> NamedPats vars' todo' ->
               (rhs : Term vars') ->
               (acc : List (Group vars' todo')) ->
               Core (List (Group vars' todo'))
@@ -356,22 +356,22 @@ groupCons fn pvars cs
                               Just t <- lookupDef n defs
                                    | Nothing => pure NErased
                               nf defs (mkEnv vars') (embed (type t))
-             (patnames ** newargs) <- nextNames {vars=vars'} "e" pargs (Just cty)
+             (patnames ** newargs) <- nextNames {vars=vars'} "e" (map snd pargs) (Just cty)
              -- Update non-linear names in remaining patterns (to keep
              -- explicit dependencies in types accurate)
-             let pats' = updatePatNames (updateNames (zip patnames pargs))
+             let pats' = updatePatNames (updateNames (zip patnames (map snd pargs)))
                                         (weakenNs patnames pats)
              let clause = MkPatClause {todo = patnames ++ todo'}
                               pvars
                               (newargs ++ pats')
                               (weakenNs patnames rhs)
              pure [ConGroup n tag [clause]]
-    addConG {vars'} {todo'} n tag pargs pats rhs (g :: gs) with (checkGroupMatch (CName n tag) pargs g)
+    addConG {vars'} {todo'} n tag pargs pats rhs (g :: gs) with (checkGroupMatch (CName n tag) (map snd pargs) g)
       addConG {vars'} {todo'} n tag pargs pats rhs
               ((ConGroup {newargs} n tag ((MkPatClause pvars ps tm) :: rest)) :: gs)
                    | (ConMatch {newargs} lprf)
-        = do let newps = newPats pargs lprf ps
-             let pats' = updatePatNames (updateNames (zip newargs pargs))
+        = do let newps = newPats (map snd pargs) lprf ps
+             let pats' = updatePatNames (updateNames (zip newargs $ map snd pargs))
                                         (weakenNs newargs pats)
              let newclause : PatClause (newargs ++ vars') (newargs ++ todo')
                    = MkPatClause pvars

@@ -28,7 +28,7 @@ mutual
   public export
   data CaseAlt : List Name -> Type where
        -- Constructor for a data type; bind the arguments and subterms.
-       ConCase : Name -> (tag : Int) -> (args : List Name) ->
+       ConCase : Name -> (tag : Int) -> (args : List Name) -> -- TODO, do I need to track AppInfo here?
                  CaseTree (args ++ vars) -> CaseAlt vars
        -- Catch-all case
        DefaultCase : CaseTree vars -> CaseAlt vars
@@ -67,7 +67,7 @@ Weaken CaseTree where
 public export
 data Pat : Type where
      PCon : Name -> (tag : Int) -> (arity : Nat) ->
-            List Pat -> Pat
+            List (AppInfo, Pat) -> Pat
      PLoc : Name -> Pat
      PUnmatchable : Term [] -> Pat
 
@@ -78,12 +78,12 @@ Show Pat where
   show _ = "_"
 
 export
-mkPat' : List Pat -> Term [] -> Term [] -> Pat
+mkPat' : List (AppInfo, Pat) -> Term [] -> Term [] -> Pat
 mkPat' args orig (Ref Bound n) = PLoc n
 mkPat' args orig (Ref (DataCon t a) n) = PCon n t a args
-mkPat' args orig (App fn arg)
+mkPat' args orig (App info fn arg)
     = let parg = mkPat' [] arg arg in
-                 mkPat' (parg :: args) orig fn
+                 mkPat' ((info, parg) :: args) orig fn
 mkPat' args orig tm = PUnmatchable orig
 
 export
@@ -94,7 +94,7 @@ argToPat tm
 export
 mkTerm : (vars : List Name) -> Pat -> Term vars
 mkTerm vars (PCon n tag arity xs)
-    = apply (Ref (DataCon tag arity) n) (map (mkTerm vars) xs)
+    = apply (Ref (DataCon tag arity) n) (map (\(i,p)=>(i, mkTerm vars p)) xs)
 mkTerm vars (PLoc n)
     = case isVar n vars of
            Just (MkVar prf) => Local _ prf

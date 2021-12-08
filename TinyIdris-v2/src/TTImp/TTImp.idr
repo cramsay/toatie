@@ -14,7 +14,7 @@ data RawImp : Type where
      IPatvar : Name -> (ty : RawImp) -> (scope : RawImp) -> RawImp
         -- ^ Idris doesn't need this since the pattern variable names are
         -- inferred, but in this initial version everything is explicit
-     IApp : RawImp -> RawImp -> RawImp
+     IApp : AppInfo -> RawImp -> RawImp -> RawImp
 
      Implicit : RawImp
      IType : RawImp
@@ -52,11 +52,11 @@ data ImpDecl : Type where
      IDef : Name -> List ImpClause -> ImpDecl
 
 export
-apply : RawImp -> List RawImp -> RawImp
+apply : RawImp -> List (AppInfo, RawImp) -> RawImp
 apply f [] = f
-apply f (x :: xs) = apply (IApp f x) xs
+apply f ((i,x) :: xs) = apply (IApp i f x) xs
 
 export
 getFn : RawImp -> RawImp
-getFn (IApp f arg) = getFn f
+getFn (IApp _ f arg) = getFn f
 getFn f = f

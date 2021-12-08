@@ -48,7 +48,7 @@ natLit fname
   where
   natToImp : Nat -> RawImp
   natToImp 0 = IVar (UN "Z")
-  natToImp (S k) = IApp (IVar (UN "S")) (natToImp k)
+  natToImp (S k) = IApp AExplicit (IVar (UN "S")) (natToImp k)
 
 atom : FileName -> Rule RawImp
 atom fname
@@ -78,8 +78,8 @@ mutual
            pure $ elemsToImp elems
      where
      elemsToImp : List RawImp -> RawImp
-     elemsToImp [] = IApp (IVar (UN "Nil")) Implicit
-     elemsToImp (x :: xs) = IApp (IApp (IApp
+     elemsToImp [] = IApp AExplicit (IVar (UN "Nil")) Implicit
+     elemsToImp (x :: xs) = IApp AExplicit (IApp AExplicit (IApp AExplicit
                               (IVar (UN "Cons"))
                               Implicit)
                               x)
@@ -93,9 +93,9 @@ mutual
            pure $ elemsToImp elems
     where
     elemsToImp : List RawImp -> RawImp
-    elemsToImp [] = IApp (IVar (UN "Nil")) Implicit
-    elemsToImp (x :: xs) = IApp (IApp (IApp (IApp
-                             (IVar (UN "Cons"))
+    elemsToImp [] = IApp AImplicit (IVar (UN "VNil")) Implicit
+    elemsToImp (x :: xs) = IApp AExplicit (IApp AExplicit (IApp AImplicit (IApp AImplicit
+                             (IVar (UN "VCons"))
                              Implicit)
                              Implicit)
                              x)
@@ -107,10 +107,20 @@ mutual
            args <- many (argExpr fname indents)
            pure (apply f args)
 
-  argExpr : FileName -> IndentInfo -> Rule RawImp
+  argExpr : FileName -> IndentInfo -> Rule (AppInfo, RawImp)
   argExpr fname indents
       = do continue indents
-           simpleExpr fname indents
+           impArg <|> expArg
+    where
+      impArg : Rule (AppInfo, RawImp)
+      impArg = do symbol "{"
+                  arg <- simpleExpr fname indents
+                  symbol "}"
+                  pure (AImplicit, arg)
+      expArg : Rule (AppInfo, RawImp)
+      expArg = do arg <- simpleExpr fname indents
+                  pure (AExplicit, arg)
+
 
   simpleExpr : FileName -> IndentInfo -> Rule RawImp
   simpleExpr fname indents
@@ -327,7 +337,7 @@ parseRHS fname indents lhs
   where
     getFn : RawImp -> SourceEmptyRule Name
     getFn (IVar n) = pure n
-    getFn (IApp f a) = getFn f
+    getFn (IApp _ f a) = getFn f
     getFn (IPatvar _ _ sc) = getFn sc
     getFn _ = fail "Not a function application"
 

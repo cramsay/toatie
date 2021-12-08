@@ -31,17 +31,17 @@ mutual
   data NF : List Name -> Type where
        NBind    : (x : Name) -> Binder (NF vars) ->
                   (Defs -> Closure vars -> Core (NF vars)) -> NF vars
-       NApp     : NHead vars -> List (Closure vars) -> NF vars
+       NApp     : NHead vars -> List (AppInfo, Closure vars) -> NF vars
        NDCon    : Name -> (tag : Int) -> (arity : Nat) ->
-                  List (Closure vars) -> NF vars
+                  List (AppInfo, Closure vars) -> NF vars
        NTCon    : Name -> TyConInfo -> (tag : Int) -> (arity : Nat) ->
-                  List (Closure vars) -> NF vars
+                  List (AppInfo, Closure vars) -> NF vars
        NType    : NF vars
        NErased  : NF vars
        -- Staging constructs
        NQuote   : Closure vars -> NF vars -- Idris 2's Delay construct also carries it's type as a closure... should we?
        NCode    : NF vars -> NF vars
-       NEscape  : NF vars -> NF vars -- Perhaps we need a NEval too?
+       NEscape  : NF vars -> NF vars -- Perhaps we need a NEval too? -- Nah, that's only on closed terms, so we can always evalute it straight away.
 
 export
 {free : _} -> Show (NHead free) where

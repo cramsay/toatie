@@ -25,7 +25,15 @@ checkExp env term got (Just exp)
    = -- 'got' had better unify with exp. This might solve some of the
      -- metavariables. If so, recheck any existing constraints.
      do defs <- get Ctxt
-        ures <- unify env !(getNF got) !(getNF exp)
+
+        -- First convert our terms to their extractions
+        let (Just gotExt) = extraction !(getTerm got)
+          | Nothing => throw (GenericMsg "Can't extract from tm")
+        let (Just expExt) = extraction !(getTerm exp)
+          | Nothing => throw (GenericMsg "Can't extract from tm")
+
+        ures <- unify env !(nf defs env gotExt) !(nf defs env expExt)
+        --ures <- unify env !(getNF got) !(getNF exp)
 
         -- If there are constraints, return a guarded definition. Otherwise,
         -- we've won.
@@ -49,6 +57,20 @@ weakenExp env Nothing = pure Nothing
 weakenExp env (Just gtm)
     = do tm <- getTerm gtm
          pure (Just (gnf env (weaken tm)))
+
+checkImplicitness : PiInfo -> AppInfo -> Core Bool
+checkImplicitness Implicit AImplicit = pure True
+checkImplicitness Explicit AExplicit = pure True
+checkImplicitness _        _         = pure False
+
+checkLamFV : (n:Name) -> PiInfo -> (scope: Term (n::vars)) -> Core ()
+checkLamFV n Explicit scopetm = pure ()
+checkLamFV n Implicit scopetm
+  = case extraction scopetm of
+      Nothing => throw (GenericMsg "Extraction failed, var bound by implicit lam appears in body?")
+      (Just scopetmE) => if isFreeVar n scopetmE
+                           then throw (GenericMsg "Var bound by implicit lambda exists in the extraction of it's body")
+                           else pure ()
 
 -- Check a raw term, given (possibly) the current environment and its expected 
 -- type, if known.
@@ -126,6 +148,10 @@ checkTerm env (ILam p mn argTy scope) Nothing
          let env' : Env Term (n :: vars)
                   = Lam stage p argTytm :: env
          (scopetm, gscopety) <- checkTerm env' scope Nothing
+
+         -- If implicit, check that name isn't free var in extraction of scope
+         checkLamFV n p scopetm
+
          checkExp env (Bind n (Lam stage p argTytm) scopetm)
                       (gnf env (Bind n (Pi stage p argTytm) !(getTerm gscopety)))
                       Nothing
@@ -138,12 +164,16 @@ checkTerm env (ILam p mn argTy scope) (Just exp)
          expTyNF <- getNF exp
          defs <- get Ctxt
          case !(quote defs env expTyNF) of
-              Bind _ (Pi _ _ ty) sc =>
+              Bind _ (Pi _ p' ty) sc =>
                  do let env' : Env Term (n :: vars)
                              = Lam stage p argTytm :: env
                     let scty = renameTop n sc
                     (scopetm, gscopety) <-
                               checkTerm env' scope (Just (gnf env' scty))
+                    let True = p == p'
+                          | _ => throw (GenericMsg "Lambda binding does not have same implicitness as its type")
+                    checkLamFV n p scopetm
+                    
                     checkExp env (Bind n (Lam stage p argTytm) scopetm)
                                  (gnf env (Bind n (Pi stage p argTytm) !(getTerm gscopety)))
                                  (Just exp)
@@ -157,23 +187,29 @@ checkTerm env (IPatvar n ty scope) exp
          checkExp env (Bind n (PVar stage ty) scopetm)
                       (gnf env (Bind n (PVTy stage ty) !(getTerm gscopety)))
                       exp
-checkTerm env (IApp f a) exp
+checkTerm env (IApp i f a) exp
     = do -- Get the function type (we don't have an expected type)
          (ftm, gfty) <- checkTerm env f Nothing
          fty <- getNF gfty
          -- We can only proceed if it really does have a function type
          case fty of
               -- Ignoring the implicitness for now
-              NBind x (Pi stage _ ty) sc =>
+              NBind x (Pi stage bInfo ty) sc =>
                     do defs <- get Ctxt
                        -- Check the argument type, given the expected argument
                        -- type
                        (atm, gaty) <- checkTerm env a
                                                 (Just (glueBack defs env ty))
+
+                       -- Check implicitness of application and binder match
+                       True <- checkImplicitness bInfo i
+                         | _ => throw (GenericMsg $ "Can't apply " ++ show i ++
+                                       " argument (" ++ show atm ++ ") to " ++
+                                       show bInfo ++ " binder (" ++ show x ++ ")" )
                        -- Calculate the type of the application by continuing
                        -- to evaluate the scope with 'atm'
                        sc' <- sc defs (toClosure env atm)
-                       checkExp env (App ftm atm) (glueBack defs env sc') exp
+                       checkExp env (App i ftm atm) (glueBack defs env sc') exp
               _ => throw (GenericMsg $ "Not a function type: " ++
                           show ftm ++ " of type " ++ show !(getTerm gfty))
 checkTerm env Implicit Nothing

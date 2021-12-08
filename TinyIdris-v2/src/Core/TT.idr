@@ -3,6 +3,7 @@ module Core.TT
 import Data.List
 import Data.Maybe
 import Decidable.Equality
+import Debug.Trace
 
 -- In Idris2, this is defined in Core.Name
 public export
@@ -155,6 +156,23 @@ Functor Binder where
   map func (PVTy s ty) = PVTy s (func ty)
 
 public export
+data AppInfo : Type where
+  AImplicit : AppInfo
+  AExplicit : AppInfo
+
+export
+Eq AppInfo where
+  AImplicit == AImplicit = True
+  AExplicit == AExplicit = True
+  _         == _         = False
+
+export
+Eq PiInfo where
+  Implicit == Implicit = True
+  Explicit == Explicit = True
+  _        == _        = False
+
+public export
 data Term : List Name -> Type where
      Local : (idx : Nat) -> -- de Bruijn index
              (0 p : IsVar name idx vars) -> -- proof that index is valid
@@ -165,7 +183,7 @@ data Term : List Name -> Type where
             Binder (Term vars) ->
             (scope : Term (x :: vars)) -> -- one more name in scope
             Term vars
-     App : Term vars -> Term vars -> Term vars -- function application
+     App : AppInfo -> Term vars -> Term vars -> Term vars -- function application
      TType : Term vars
      Erased : Term vars
      Quote  : Term vars -> Term vars
@@ -185,9 +203,9 @@ interface Weaken (0 tm : List Name -> Type) where
 
 -- Term manipulation
 export
-apply : Term vars -> List (Term vars) -> Term vars
+apply : Term vars -> List (AppInfo, Term vars) -> Term vars
 apply fn [] = fn
-apply fn (a :: args) = apply (App fn a) args
+apply fn ((i,a) :: args) = apply (App i fn a) args
 
 export
 embed : Term vars -> Term (vars ++ more)
@@ -199,8 +217,17 @@ getFnArgs tm = getFA [] tm
   where
     getFA : List (Term vars) -> Term vars ->
             (Term vars, List (Term vars))
-    getFA args (App f a) = getFA (a :: args) f
+    getFA args (App info f a) = getFA (a :: args) f
     getFA args tm = (tm, args)
+
+getFnInfoArgs : Term vars -> (Term vars, List (AppInfo, Term vars))
+getFnInfoArgs tm = getFA [] tm
+  where
+  getFA : List (AppInfo, Term vars) -> Term vars ->
+          (Term vars, List (AppInfo, Term vars))
+  getFA args (App info f a) = getFA ((info, a) :: args) f
+  getFA args tm = (tm, args)
+
 
 export
 isVar : (n : Name) -> (ns : List Name) -> Maybe (Var ns)
@@ -239,8 +266,8 @@ insertNames ns (Meta name args)
 insertNames {outer} {inner} ns (Bind x b scope)
     = Bind x (assert_total (map (insertNames ns) b))
            (insertNames {outer = x :: outer} {inner} ns scope)
-insertNames ns (App fn arg)
-    = App (insertNames ns fn) (insertNames ns arg)
+insertNames ns (App info fn arg)
+    = App info (insertNames ns fn) (insertNames ns arg)
 insertNames ns Erased = Erased
 insertNames ns TType = TType
 insertNames ns (Quote tm) = Quote $ insertNames ns tm
@@ -302,8 +329,8 @@ mkLocals bs (Meta name xs)
 mkLocals {later} bs (Bind x b scope)
     = Bind x (map (mkLocals bs) b)
            (mkLocals {later = x :: later} bs scope)
-mkLocals bs (App fn arg)
-    = App (mkLocals bs fn) (mkLocals bs arg)
+mkLocals bs (App info fn arg)
+    = App info (mkLocals bs fn) (mkLocals bs arg)
 mkLocals bs Erased = Erased
 mkLocals bs TType = TType
 mkLocals bs (Quote tm)  = Quote  $ mkLocals bs tm
@@ -333,8 +360,8 @@ resolveNames vars (Meta n xs)
     = Meta n (map (resolveNames vars) xs)
 resolveNames vars (Bind x b scope)
     = Bind x (map (resolveNames vars) b) (resolveNames (x :: vars) scope)
-resolveNames vars (App fn arg)
-    = App (resolveNames vars fn) (resolveNames vars arg)
+resolveNames vars (App info fn arg)
+    = App info (resolveNames vars fn) (resolveNames vars arg)
 resolveNames vars (Quote tm)
     = Quote $ resolveNames vars tm
 resolveNames vars (Escape tm)
@@ -381,8 +408,8 @@ namespace SubstEnv
   substEnv {outer} env (Bind x b scope)
       = Bind x (map (substEnv env) b)
                (substEnv {outer = x :: outer} env scope)
-  substEnv env (App fn arg)
-      = App (substEnv env fn) (substEnv env arg)
+  substEnv env (App info fn arg)
+      = App info (substEnv env fn) (substEnv env arg)
   substEnv env Erased = Erased
   substEnv env TType = TType
   substEnv env (Quote tm)  = Quote  $ substEnv env tm
@@ -412,8 +439,8 @@ substName x new (Meta n xs)
 -- resolved to a Local, so no need to check that x isn't shadowing
 substName x new (Bind y b scope)
     = Bind y (map (substName x new) b) (substName x (weaken new) scope)
-substName x new (App fn arg)
-    = App (substName x new fn) (substName x new arg)
+substName x new (App info fn arg)
+    = App info (substName x new fn) (substName x new arg)
 substName x new (Quote tm) = Quote $ substName x new tm
 substName x new (TCode tm) = TCode $ substName x new tm
 substName x new (Eval tm) = Eval $ substName x new tm
@@ -504,14 +531,56 @@ mutual
           Just (Meta x xs')
   shrinkTerm (Bind x b scope) prf
      = Just (Bind x !(shrinkBinder b prf) !(shrinkTerm scope (KeepCons prf)))
-  shrinkTerm (App fn arg) prf
-     = Just (App !(shrinkTerm fn prf) !(shrinkTerm arg prf))
+  shrinkTerm (App info fn arg) prf
+     = Just (App info !(shrinkTerm fn prf) !(shrinkTerm arg prf))
   shrinkTerm Erased prf = Just Erased
   shrinkTerm TType prf = Just TType
   shrinkTerm (Quote tm)  prf = Just (Quote  !(shrinkTerm tm prf))
   shrinkTerm (TCode tm)  prf = Just (TCode  !(shrinkTerm tm prf))
   shrinkTerm (Eval tm)   prf = Just (Eval   !(shrinkTerm tm prf))
   shrinkTerm (Escape tm) prf = Just (Escape !(shrinkTerm tm prf))
+
+-- Extraction, as defined by Barras in "The Implicit Calculus of Constructions
+-- as a Programming Language with Dependent Types"
+export
+extraction : Term vars -> Maybe (Term vars)
+
+-- Binders
+extraction (Bind n (Lam s Implicit ty) scope)
+  = case shrinkTerm scope (DropCons SubRefl) of
+      Just scope' => extraction scope'
+      Nothing => Nothing -- "Imp-lam name is free var in its scope..."
+extraction (Bind n (Lam s Explicit ty) scope)
+  = Just $ Bind n (Lam s Explicit !(extraction ty)) !(extraction scope)
+extraction (Bind n (Pi  s Implicit ty) scope)
+    -- We're not going to ICC, so just keep implicit Pi instead of forall
+  = Just $ Bind n (Pi s Implicit !(extraction ty)) !(extraction scope)
+extraction (Bind n (Pi  s Explicit ty) scope)
+  = Just $ Bind n (Pi s Explicit !(extraction ty)) !(extraction scope)
+extraction (Bind n (Let s val ty) scope)
+  = Just $ Bind n (Let s !(extraction val) !(extraction ty)) !(extraction scope)
+extraction (Bind n (PVar s ty) scope)
+  = Just $ Bind n (PVar s !(extraction ty)) !(extraction scope)
+extraction (Bind n (PVTy s ty) scope)
+  = Just $ Bind n (PVTy s !(extraction ty)) !(extraction scope)
+
+-- Application
+extraction (App AImplicit f a) = extraction f
+extraction (App AExplicit f a) = Just $ App AExplicit !(extraction f) !(extraction a)
+
+extraction (Local idx p) = Just $ Local idx p -- Should I be doing this with reference to an env/stack?
+extraction (Ref nt n) = Just $ Ref nt n       -- Same as above
+extraction (Meta n args) = Just $ Meta n !(sequence $ map extraction args)
+extraction TType = Just TType
+extraction Erased = Just Erased
+extraction (Quote  tm) = Just $ Quote  !(extraction tm)
+extraction (TCode  tm) = Just $ TCode  !(extraction tm)
+extraction (Eval   tm) = Just $ Eval   !(extraction tm)
+extraction (Escape tm) = Just $ Escape !(extraction tm)
+
+export
+isFreeVar : (n : Name) -> Term (n::vars) -> Bool
+isFreeVar n tm = isNothing $ shrinkTerm tm (DropCons SubRefl)
 
 --- Show instances
 
@@ -537,24 +606,40 @@ export
   show None = "[]"
   show (Add x y z) = "Add (" ++ show x ++ ", " ++ show y ++ ") :: " ++ show z
 
+export
+Show PiInfo where
+  show Implicit = "Implicit"
+  show Explicit = "Explicit"
+
+export
+Show AppInfo where
+  show AImplicit = "Implicit"
+  show AExplicit = "Explicit"
 
 export
 {vars : _} -> Show (Term vars) where
-  show tm = let (fn, args) = getFnArgs tm in
+  show tm = let (fn, args) = getFnInfoArgs tm in
             fromMaybe (showApp fn args) ( -- List of special case printers
                     tryShowNat tm
                 <|> tryShowVect tm
                 <|> tryShowList tm
             )
     where
-      showApp : {vars : _} -> Term vars -> List (Term vars) -> String
+      showArg : {vars : _} -> (AppInfo, Term vars) -> String
+      showArg (AExplicit, arg) = show arg
+      showArg (AImplicit, arg) = "{" ++ show arg ++ "}"
+
+      showApp : {vars : _} -> Term vars -> List (AppInfo, Term vars) -> String
       showApp (Local {name} idx p) []
          = show (nameAt idx p) ++ "[" ++ show idx ++ "]"
       showApp (Ref _ n) [] = show n
       showApp (Meta n args) []
           = "?" ++ show n ++ "_" ++ show args
-      showApp (Bind x (Lam s p ty) sc) []
+      showApp (Bind x (Lam s Explicit ty) sc) []
           = "\\" ++ show x ++ " :_" ++ show s ++ " " ++ show ty ++
+            " => " ++ show sc
+      showApp (Bind x (Lam s Implicit ty) sc) []
+          = "\\{" ++ show x ++ "} :_" ++ show s ++ " " ++ show ty ++
             " => " ++ show sc
       showApp (Bind x (Pi s Explicit ty) sc) []
           = "((" ++ show x ++ " :_" ++ show s ++ " " ++ show ty ++
@@ -572,7 +657,7 @@ export
       showApp (Bind x (PVTy s ty) sc) []
           = "pty " ++ show x ++ " :_" ++ show s ++ " " ++ show ty ++
             " => " ++ show sc
-      showApp (App _ _) [] = "[can't happen]"
+      showApp (App _ _ _) [] = "[can't happen]"
       showApp TType [] = "Type"
       showApp Erased [] = "[_]"
       showApp (Quote sc) [] = "[|" ++ show sc ++ "|]"
@@ -581,7 +666,7 @@ export
       showApp (Escape sc) [] = "~(" ++ show sc ++ ")"
       showApp _ [] = "???"
       showApp f args = "(" ++ assert_total (show f) ++ " " ++
-                              assert_total (showSep " " (map show args))
+                              assert_total (showSep " " (map showArg args))
                        ++ ")"
 
       tryShowNat : Term vars -> Maybe String
@@ -589,22 +674,22 @@ export
         where
         go : Term vars -> Maybe Nat
         go (Ref (DataCon _ _) (UN "Z")) = Just Z
-        go (App (Ref (DataCon _ _) (UN "S")) arg) = map S $ go arg
+        go (App _ (Ref (DataCon _ _) (UN "S")) arg) = map S $ go arg
         go _         = Nothing
 
       tryShowVect : Term vars -> Maybe String
       tryShowVect tm = map show $ go tm
         where
         go : Term vars -> Maybe (List (Term vars))
-        go (App (Ref (DataCon _ _) (UN "Nil")) xty) = Just []
-        go (App (App (App (App (Ref (DataCon _ _) (UN "Cons")) xty) n) xtm) xs) = map (xtm ::) $ go xs
+        go (App _ (Ref (DataCon _ _) (UN "VNil")) xty) = Just []
+        go (App _ (App _ (App _ (App _ (Ref (DataCon _ _) (UN "VCons")) xty) n) xtm) xs) = map (xtm ::) $ go xs
         go _ = Nothing
 
       tryShowList : Term vars -> Maybe String
       tryShowList tm = map (\x => "`" ++ show x) $ go tm
         where
         go : Term vars -> Maybe (List (Term vars))
-        go (App (Ref (DataCon _ _) (UN "Nil")) xty) = Just []
-        go (App (App (App (Ref (DataCon _ _) (UN "Cons")) xty) xtm) xs) = map (xtm ::) $ go xs
+        go (App _ (Ref (DataCon _ _) (UN "Nil")) xty) = Just []
+        go (App _ (App _ (App _ (Ref (DataCon _ _) (UN "Cons")) xty) xtm) xs) = map (xtm ::) $ go xs
         go _ = Nothing
 

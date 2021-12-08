@@ -26,7 +26,7 @@ getNF : {auto c : Ref Ctxt Defs} -> Glued vars -> Core (NF vars)
 getNF {c} (MkGlue _ nf) = nf c
 
 Stack : List Name -> Type
-Stack vars = List (Closure vars)
+Stack vars = List (AppInfo, Closure vars)
 
 export
 evalClosure : {free : _} -> Defs -> Closure free -> Core (NF free)
@@ -65,15 +65,15 @@ parameters (defs : Defs)
     eval {vars} {free} env locs (Meta name args) stk
         = evalMeta env name (map (MkClosure locs env) args) stk
     eval env locs (Bind x (Lam s _ ty) scope) (thunk :: stk)
-        = eval env (thunk :: locs) scope stk
+        = eval env (snd thunk :: locs) scope stk
     eval env locs (Bind x (Let s tm ty) scope) stk
         = eval env (MkClosure locs env tm :: locs) scope stk
     eval env locs (Bind x b scope) stk
         = do b' <- traverse (\tm => eval env locs tm []) b
              pure $ NBind x b'
                       (\defs', arg => evalTop defs' env (arg :: locs) scope stk)
-    eval env locs (App fn arg) stk
-        = eval env locs fn (MkClosure locs env arg :: stk)
+    eval env locs (App info fn arg) stk
+        = eval env locs fn ((info, MkClosure locs env arg) :: stk)
     eval env locs TType stk = pure NType
     eval env locs Erased stk = pure NErased
     eval env locs (Quote  tm) stk -- Quote defers evaluation
@@ -126,7 +126,8 @@ parameters (defs : Defs)
                Name -> List (Closure free) ->
                Stack free -> Core (NF free)
     evalMeta env nm args stk
-        = evalRef env Func nm (args ++ stk) (NApp (NMeta nm args) stk)
+        = evalRef env Func nm ((map (\x=>(AExplicit,x)) args) ++ stk) (NApp (NMeta nm args) stk)
+          -- TODO, I don't think we should be assuming Meta vars use their args explicitly here
 
     evalRef : {free : _} ->
               Env Term free ->
@@ -144,21 +145,21 @@ parameters (defs : Defs)
                   | Nothing => pure def
              evalDef env (definition res) stk def
 
-    getCaseBound : List (Closure free) ->
+    getCaseBound : List (AppInfo, Closure free) ->
                    (args : List Name) ->
                    LocalEnv free more ->
                    Maybe (LocalEnv free (args ++ more))
     getCaseBound []            []        loc = Just loc
     getCaseBound []            (_ :: _)  loc = Nothing -- mismatched arg length
     getCaseBound (arg :: args) []        loc = Nothing -- mismatched arg length
-    getCaseBound (arg :: args) (n :: ns) loc = (arg ::) <$> getCaseBound args ns loc
+    getCaseBound (arg :: args) (n :: ns) loc = (snd arg ::) <$> getCaseBound args ns loc
 
     evalConAlt : {more, free : _} ->
                  Env Term free ->
                  LocalEnv free more ->
                  Stack free ->
                  (args : List Name) ->
-                 List (Closure free) ->
+                 List (AppInfo, Closure free) ->
                  CaseTree (args ++ more) ->
                  Core (CaseResult (NF free))
     evalConAlt env loc stk args args' sc
@@ -216,12 +217,12 @@ parameters (defs : Defs)
     -- Take arguments from the stack, as long as there's enough.
     -- Returns the arguments, and the rest of the stack
     takeFromStack : (arity : Nat) -> Stack free ->
-                    Maybe (Vect arity (Closure free), Stack free)
+                    Maybe (Vect arity (AppInfo, Closure free), Stack free)
     takeFromStack arity stk = takeStk arity stk []
       where
         takeStk : (remain : Nat) -> Stack free ->
-                  Vect got (Closure free) ->
-                  Maybe (Vect (got + remain) (Closure free), Stack free)
+                  Vect got (AppInfo, Closure free) ->
+                  Maybe (Vect (got + remain) (AppInfo, Closure free), Stack free)
         takeStk {got} Z stk acc = Just (rewrite plusZeroRightNeutral got in
                                     reverse acc, stk)
         takeStk (S k) [] acc = Nothing
@@ -236,7 +237,7 @@ parameters (defs : Defs)
     argsFromStack (n :: ns) [] = Nothing
     argsFromStack (n :: ns) (arg :: args)
          = do (loc', stk') <- argsFromStack ns args
-              pure (arg :: loc', stk')
+              pure (snd arg :: loc', stk')
 
     evalDef : {free : _} ->
               Env Term free ->
@@ -294,11 +295,11 @@ genName n
 mutual
   quoteArgs : {bound, free : _} ->
               Ref QVar Int -> Defs -> Bounds bound ->
-              Env Term free -> List (Closure free) ->
-              Core (List (Term (bound ++ free)))
+              Env Term free -> List (AppInfo, Closure free) ->
+              Core (List (AppInfo, Term (bound ++ free)))
   quoteArgs q defs bounds env [] = pure []
-  quoteArgs q defs bounds env (a :: args)
-      = pure $ (!(quoteGenNF q defs bounds env !(evalClosure defs a)) ::
+  quoteArgs q defs bounds env ((ia,a) :: args)
+      = pure $ ( (ia, !(quoteGenNF q defs bounds env !(evalClosure defs a))) ::
                 !(quoteArgs q defs bounds env args))
 
   quoteHead : {bound, free : _} ->
@@ -334,8 +335,8 @@ mutual
                Just (MkVar (Later p))
   quoteHead q defs bounds env (NRef nt n) = pure $ Ref nt n
   quoteHead q defs bounds env (NMeta n args)
-      = do args' <- quoteArgs q defs bounds env args
-           pure $ Meta n args'
+      = do args' <- quoteArgs q defs bounds env (map (\x=>(AExplicit,x)) args)
+           pure $ Meta n (map snd args')
 
   quoteBinder : {bound, free : _} ->
                 Ref QVar Int -> Defs -> Bounds bound ->
@@ -431,10 +432,11 @@ interface Convert (tm : List Name -> Type) where
 mutual
   allConv : {vars : _} ->
             Ref QVar Int -> Defs -> Env Term vars ->
-            List (Closure vars) -> List (Closure vars) -> Core Bool
+            List (AppInfo, Closure vars) -> List (AppInfo, Closure vars) -> Core Bool
   allConv q defs env [] [] = pure True
-  allConv q defs env (x :: xs) (y :: ys)
-      = pure $ !(convGen q defs env x y) && !(allConv q defs env xs ys)
+  allConv q defs env ((ix,x) :: xs) ((iy,y) :: ys)
+      = pure $ ix == iy &&
+               !(convGen q defs env x y) && !(allConv q defs env xs ys)
   allConv q defs env _ _ = pure False
 
   chkConvHead : {vars : _} ->
@@ -444,7 +446,8 @@ mutual
   chkConvHead q defs env (NRef _ n) (NRef _ n') = pure $ n == n'
   chkConvHead q defs env (NMeta n args) (NMeta n' args')
      = if n == n'
-          then allConv q defs env args args'
+          then allConv q defs env (map (\x=>(AExplicit,x)) args)
+                                  (map (\x=>(AExplicit,x)) args')
           else pure False
   chkConvHead q defs env _ _ = pure False
 
