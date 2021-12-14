@@ -516,3 +516,50 @@ export
 getArity : {vars : _} ->
            Defs -> Env Term vars -> Term vars -> Core Nat
 getArity defs env tm = getValArity defs env !(nf defs env tm)
+
+
+{-
+export
+extractionF : Defs -> Env Term vars -> Term vars -> Core (Term vars)
+
+-- Binders
+extractionF defs env (Bind n (Lam s Implicit ty) scope)
+  = case shrinkTerm scope (DropCons SubRefl) of
+      Just scope' => extractionF defs env scope'
+      Nothing => throw (GenericMsg "Imp-lam name is free var in its scope...")
+extractionF defs env (Bind n b@(Lam s Explicit ty) scope)
+  = pure $ Bind n (Lam s Explicit !(extractionF defs env ty)) !(extractionF defs (b::env) scope)
+extractionF defs env (Bind n b@(Pi  s Implicit ty) scope)
+    -- We're not going to ICC, so just keep implicit Pi instead of forall
+  = pure $ Bind n (Pi s Implicit !(extractionF defs env ty)) !(extractionF defs (b::env) scope)
+extractionF defs env (Bind n b@(Pi  s Explicit ty) scope)
+  = pure $ Bind n (Pi s Explicit !(extractionF defs env ty)) !(extractionF defs (b::env) scope)
+extractionF defs env (Bind n b@(Let s val ty) scope)
+  = pure $ Bind n (Let s !(extractionF defs env val) !(extractionF defs env ty)) !(extractionF defs (b::env) scope)
+extractionF defs env (Bind n b@(PVar s ty) scope)
+  = pure $ Bind n (PVar s !(extractionF defs env ty)) !(extractionF defs (b::env) scope)
+extractionF defs env (Bind n b@(PVTy s ty) scope)
+  = pure $ Bind n (PVTy s !(extractionF defs env ty)) !(extractionF defs (b::env) scope)
+
+-- Application
+extractionF defs env (App AImplicit f a) = extractionF defs env f
+extractionF defs env (App AExplicit f a) = pure $ App AExplicit !(extractionF defs env f) !(extractionF defs env a)
+
+extractionF defs env (Local idx p) = pure $ Local idx p -- Should I be doing this with reference to an env/stack?
+extractionF defs env (Ref nt n)
+  = do (Just gdef) <- lookupDef n defs
+         | Nothing => throw $ GenericMsg $ "EF: Couldn't find name in defs, " ++ show n
+       case gdef of
+         (MkGlobalDef type (PMDef args (Case idx p scTy xs))) => ?super__g
+         (MkGlobalDef type (PMDef args (STerm x))) => ?super__4
+         (MkGlobalDef type (PMDef args (Unmatched msg))) => ?super__5
+         (MkGlobalDef type (PMDef args Impossible)) => ?super__
+         (MkGlobalDef type def) => pure $ Ref nt n
+extractionF defs env (Meta n args) = pure $ Meta n !(traverse (extractionF defs env) args)
+extractionF defs env TType = pure TType
+extractionF defs env Erased = pure Erased
+extractionF defs env (Quote  tm) = pure $ Quote  !(extractionF defs env tm)
+extractionF defs env (TCode  tm) = pure $ TCode  !(extractionF defs env tm)
+extractionF defs env (Eval   tm) = pure $ Eval   !(extractionF defs env tm)
+extractionF defs env (Escape tm) = pure $ Escape !(extractionF defs env tm)
+-}

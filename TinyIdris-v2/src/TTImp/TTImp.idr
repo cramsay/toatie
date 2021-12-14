@@ -60,3 +60,21 @@ export
 getFn : RawImp -> RawImp
 getFn (IApp _ f arg) = getFn f
 getFn f = f
+
+export
+toTTImp : {vars : _} -> Term vars -> Maybe RawImp
+toTTImp (Local idx p) = Just $ IVar (nameAt idx p)
+toTTImp (Ref   _   n) = Just $ IVar n
+toTTImp (Meta n   args) = Nothing
+toTTImp (Bind n (Lam s i ty) scope) = Just $ ILam i (Just n) !(toTTImp ty) !(toTTImp scope)
+toTTImp (Bind n (Pi  s i ty) scope) = Just $ IPi  i (Just n) !(toTTImp ty) !(toTTImp scope)
+toTTImp (Bind n (Let s val ty) scope) = Just $ ILet n (toTTImp ty) !(toTTImp val) !(toTTImp scope)
+toTTImp (Bind n (PVar s ty) scope) = Just $ IPatvar n !(toTTImp ty) !(toTTImp scope)
+toTTImp (Bind n (PVTy s ty) scope) = Nothing
+toTTImp (App i f a) = Just $ IApp i !(toTTImp f) !(toTTImp a)
+toTTImp (Quote  tm) = Just $ IQuote  !(toTTImp tm)
+toTTImp (TCode  tm) = Just $ ICode   !(toTTImp tm)
+toTTImp (Eval   tm) = Just $ IEval   !(toTTImp tm)
+toTTImp (Escape tm) = Just $ IEscape !(toTTImp tm)
+toTTImp TType  = Just IType
+toTTImp Erased = Nothing

@@ -47,7 +47,7 @@ repl = do coreLift $ putStr "> "
           --coreLift $ putStrLn $ "Use Map: " ++ show useMap
 
           -- Print out extraction of our term too
-          coreLift $ putStrLn $ "Extraction: " ++ fromMaybe ("Failed") (map show $ extraction nf)
+          coreLift $ putStrLn $ "Extraction: " ++ (show $ extraction nf)
 
           repl
 

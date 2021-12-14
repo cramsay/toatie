@@ -27,10 +27,8 @@ checkExp env term got (Just exp)
      do defs <- get Ctxt
 
         -- First convert our terms to their extractions
-        let (Just gotExt) = extraction !(getTerm got)
-          | Nothing => throw (GenericMsg "Can't extract from tm")
-        let (Just expExt) = extraction !(getTerm exp)
-          | Nothing => throw (GenericMsg "Can't extract from tm")
+        let gotExt = extraction !(getTerm got)
+        let expExt = extraction !(getTerm exp)
 
         ures <- unify env !(nf defs env gotExt) !(nf defs env expExt)
         --ures <- unify env !(getNF got) !(getNF exp)
@@ -63,14 +61,13 @@ checkImplicitness Implicit AImplicit = pure True
 checkImplicitness Explicit AExplicit = pure True
 checkImplicitness _        _         = pure False
 
-checkLamFV : (n:Name) -> PiInfo -> (scope: Term (n::vars)) -> Core ()
+checkLamFV : {vars:_} -> (n:Name) -> PiInfo -> (scope: Term (n::vars)) -> Core ()
 checkLamFV n Explicit scopetm = pure ()
 checkLamFV n Implicit scopetm
-  = case extraction scopetm of
-      Nothing => throw (GenericMsg "Extraction failed, var bound by implicit lam appears in body?")
-      (Just scopetmE) => if isFreeVar n scopetmE
-                           then throw (GenericMsg "Var bound by implicit lambda exists in the extraction of it's body")
-                           else pure ()
+  = let scopetmE = extraction scopetm in
+    if isFreeVar {outer=[]} n scopetmE
+       then throw (GenericMsg $ "Var bound by implicit lambda exists in the extraction of it's body; " ++ show n ++ " in " ++ show scopetmE)
+       else pure ()
 
 -- Check a raw term, given (possibly) the current environment and its expected 
 -- type, if known.
