@@ -72,6 +72,43 @@ findImpTop : {vars : _} ->
 findImpTop tm = do imps <- findImp False (length vars) tm
                    pure $ nub imps
 
+{- Old code from when I was trying to wrap each RHS up in lambdas and apply the pat vars to it
+patName : Name -> Name
+patName (UN n) = UN (n++"_pat")
+patName (MN n i) = MN (n++"_pat") i
+
+patNameEq : Name -> Name -> Name
+patNameEq a b = if a==b then patName b else b
+
+renameIVar : Name -> RawImp -> RawImp
+renameIVar n (IVar x) = IVar $ patNameEq n x
+renameIVar n (ILet x margTy argVal scope)
+  = ILet (patNameEq n x) (map (renameIVar n) margTy) (renameIVar n argVal) (renameIVar n scope)
+renameIVar n (IPi i x argTy retTy)
+  = IPi i (map (patNameEq n) x) (renameIVar n argTy) (renameIVar n retTy)
+renameIVar n (ILam i x argTy scope)
+  = ILam i (map (patNameEq n) x) (renameIVar n argTy) (renameIVar n scope)
+renameIVar n (IPatvar x ty scope)
+  = IPatvar (patNameEq n x) (renameIVar n ty) (renameIVar n scope)
+renameIVar n (IApp i f a) = IApp i (renameIVar n f) (renameIVar n a)
+renameIVar n Implicit = Implicit
+renameIVar n IType = IType
+renameIVar n (IQuote  tm) = IQuote  $ renameIVar n tm
+renameIVar n (ICode   tm) = ICode   $ renameIVar n tm
+renameIVar n (IEval   tm) = IEval   $ renameIVar n tm
+renameIVar n (IEscape tm) = IEscape $ renameIVar n tm
+
+wrapRHSWithLams : {vars: _} -> Env Term vars -> (imps : List Name) -> RawImp -> RawImp
+wrapRHSWithLams [] _ rhs = rhs
+wrapRHSWithLams {vars=v::vs} (b :: bs) imps rhs
+  = let ty = fromMaybe Implicit (toTTImp $ binderType b)
+        info : PiInfo = if elem v imps then Implicit else Explicit
+        ainfo : AppInfo = if info == Implicit then AImplicit else AExplicit
+        lambind = ILam info (Just $ patName v) ty (renameIVar v rhs)
+        var     = IVar v
+    in wrapRHSWithLams bs imps $ IApp ainfo lambind var
+-}
+
 wrapRHSWithLams : {vars: _} -> Env Term vars -> (imps : List Name) -> (rhs : Term vars) -> Term (vars)
 wrapRHSWithLams [] _ rhs = rhs
 wrapRHSWithLams {vars=v::vs} (b :: bs) imps rhs
@@ -79,13 +116,6 @@ wrapRHSWithLams {vars=v::vs} (b :: bs) imps rhs
         info : PiInfo = if elem v imps then Implicit else Explicit
         rec = wrapRHSWithLams bs imps $ Bind v (Lam (binderStage b) info ty) rhs
     in weaken $ rec
-
-implicitPVarsToLams : {vars : _} -> (imps : List Name) -> Env Term vars -> Env Term vars
-implicitPVarsToLams imps [] = []
-implicitPVarsToLams {vars = v :: vs} imps ((PVar s ty) :: bs)
-  = if elem v imps then (Lam s Implicit ty) :: implicitPVarsToLams imps bs
-                   else (PVar s ty)          :: implicitPVarsToLams imps bs
-implicitPVarsToLams imps (b :: bs)           = b :: implicitPVarsToLams imps bs
 
 rhsTypeToPi : {vars: _} -> Env Term vars -> (imps : List Name) -> (rhsty : Term vars) -> Term vars
 rhsTypeToPi [] _ rhsty = rhsty
@@ -95,6 +125,20 @@ rhsTypeToPi {vars=v::vs} (b :: bs) imps rhsty
         rec = rhsTypeToPi bs imps $ Bind v (Pi (binderStage b) info ty) rhsty
     in weaken rec
 
+processImplicitUse : {auto c : Ref Ctxt Defs} ->
+                     {auto u : Ref UST UState} ->
+                     {auto s : Ref Stg Stage} ->
+                     {vars:_} -> Env Term vars -> (lhstm : Term vars) -> (rhstm : Term vars) -> (exprhsty : Term vars) -> Core ()
+processImplicitUse env lhstm rhstm exprhsty
+  = do imps <- findImpTop lhstm
+       let rhstm'    = wrapRHSWithLams env imps rhstm
+       let exprhsty' = rhsTypeToPi env imps exprhsty
+       case toTTImp rhstm' of
+         Nothing      => throw $ GenericMsg "Can't convert back to TTImp"
+         Just rhswrap => do (rhstm', rhsty')
+                               <- checkTerm env rhswrap (Just (gnf env exprhsty'))
+                            pure ()
+
 processClause : {auto c : Ref Ctxt Defs} ->
                 {auto u : Ref UST UState} ->
                 {auto s : Ref Stg Stage} ->
@@ -102,35 +146,17 @@ processClause : {auto c : Ref Ctxt Defs} ->
 processClause (PatClause lhs rhs)
     = do -- Check the LHS
          (lhstm, lhsty) <- checkTerm [] lhs Nothing
-         --coreLift $ putStrLn $ show lhstm
+
          -- Get the pattern variables from the LHS, and the expected type, 
          -- and check the RHS in that context
-
          (vars ** (env, lhsenv, rhsexp)) <-
              getRHSEnv [] lhstm !(getTerm lhsty)
-         --coreLift $ putStrLn $ "Env <- " ++ show vars
-         --coreLift $ putStrLn $ "LHS env tm = " ++ show lhsenv
-         --coreLift $ putStrLn $ "Implicit patvars in LHS are " ++ show !(findImpTop lhsenv)
-         --coreLift $ putStrLn $ "LHS got ty = " ++ show !(getTerm lhsty)
-         --coreLift $ putStrLn $ "RHS exp ty = " ++ show rhsexp
 
-         --let env' = implicitPVarsToLams !(findImpTop lhsenv) env
-         -- Check the RHS in that context
          (rhstm, rhsty) <- checkTerm env rhs (Just (gnf env rhsexp))
 
-         -- Wrap rhs in lambdas defining the implicitness of each patvar, and apply
-         -- TODO Can't wrap on Terms since we want to check (with RawImp)
-         --        Try 1) convert Terms back to rawimp?! Madness
-         --        or  2) Can we replace PVars with Lams in env? Does that fuck up the case tree stuff?
-         --                 Nope because body of `wrong` is just a ref, not an application
-         let wrappedRhs = wrapRHSWithLams env !(findImpTop lhsenv) rhstm
-         let wrappedRhsExp = rhsTypeToPi env !(findImpTop lhsenv) rhsexp
-         case toTTImp wrappedRhs of
-           Nothing => coreLift $ putStrLn $ "Can't convert to TTImp"
-           Just rhswrap => do (rhstm', rhsty') <- checkTerm env rhswrap (Just (gnf env wrappedRhsExp))
-                              pure ()
+         -- Check that implicit/explicit arg use is correct on the RHS
+         processImplicitUse env lhsenv rhstm rhsexp
 
-         --coreLift $ putStrLn $ "RHS tm = " ++ show rhstm
          pure (MkClause env lhsenv rhstm)
 
 export
@@ -149,5 +175,4 @@ processDef n clauses
 
          -- Update the definition with the compiled tree
          updateDef n (record { definition = PMDef args tree })
-         --coreLift $ putStrLn $ "With gdef type = " ++ show (type gdef)
          coreLift $ putStrLn $ "Processed " ++ show n

@@ -69,7 +69,7 @@ checkLamFV n Implicit scopetm
        then throw (GenericMsg $ "Var bound by implicit lambda exists in the extraction of it's body; " ++ show n ++ " in " ++ show scopetmE)
        else pure ()
 
--- Check a raw term, given (possibly) the current environment and its expected 
+-- Check a raw term, given (possibly) the current environment and its expected
 -- type, if known.
 -- Returns a pair of checked term and its type.
 -- A type is 'Glued', that is, a pair of a term and its normal form, though

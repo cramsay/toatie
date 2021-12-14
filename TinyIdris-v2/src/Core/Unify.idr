@@ -316,9 +316,13 @@ mutual
                        tm <- quote empty env tmnf
                        case shrinkTerm tm submv of
                             Nothing =>
-                              -- Not well scoped, but it might be if we
-                              -- normalise (TODO: Exercise)
-                              postpone env (NApp (NMeta n margs) fargs) tmnf
+                              do tm' <- quote defs env tmnf
+                                 case shrinkTerm tm' submv of
+                                   Nothing => postpone env (NApp (NMeta n margs) fargs) tmnf
+                                   Just stm => do Just gdef <- lookupDef n defs
+                                                    | Nothing => throw (UndefinedName n)
+                                                  instantiate env n gdef locs stm
+                                                  pure solvedHole
                             Just stm =>
                                  do Just gdef <- lookupDef n defs
                                          | Nothing => throw (UndefinedName n)
@@ -414,6 +418,16 @@ mutual
     unify env (NBind x b sc) (NBind x' b' sc') = unifyBothBinders env x b sc x' b' sc'
     -- TODO Idris2 has option for checking lambda against any tm too
     -- Matching constructors, reduces the problem to unifying the arguments
+    unify env tmx@(NBind x (Lam sx ix tx) scx) tmy
+        = do defs <- get Ctxt
+             --TODO Handle case where tmy is a hole app
+             empty <- clearDefs defs
+             domty <- quote empty env tx
+             etay <- nf defs env
+                      $ Bind x (Lam sx Explicit domty)
+                      $ App AExplicit (weaken !(quote empty env tmy))
+                                      (Local 0 First)
+             unify env tmx etay
     unify env nx@(NDCon n t a args) ny@(NDCon n' t' a' args')
         = if t == t'
              then unifyArgs env args args'
