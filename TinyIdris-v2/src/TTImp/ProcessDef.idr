@@ -157,7 +157,10 @@ processClause (PatClause lhs rhs)
          -- Check that implicit/explicit arg use is correct on the RHS
          processImplicitUse env lhsenv rhstm rhsexp
 
-         pure (MkClause env lhsenv rhstm)
+         defs <- get Ctxt
+         rhsnf <- normalise defs env rhstm
+
+         pure (MkClause env lhsenv rhstm) --rhsnf)
 
 export
 processDef : {auto c : Ref Ctxt Defs} ->
@@ -175,4 +178,8 @@ processDef n clauses
 
          -- Update the definition with the compiled tree
          updateDef n (record { definition = PMDef args tree })
+
+         coreLift $ putStrLn $ "Complete ----------------------"
+         coreLift $ putStrLn $ "Args = " ++ show args
+         coreLift $ putStrLn $ "Tree = " ++ show tree
          coreLift $ putStrLn $ "Processed " ++ show n

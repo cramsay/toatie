@@ -62,6 +62,17 @@ getPatInfo : NamedPats vars todo -> List Pat
 getPatInfo [] = []
 getPatInfo (x :: xs) = pat x :: getPatInfo xs
 
+{pvar: _} -> {vars : _} -> Show (PatInfo pvar vars) where
+  show (MkInfo pat loc argType) = "(pat = " ++ show pat ++ ", name = " ++ show pvar ++ ", argType = " ++ show argType ++ ")"
+
+{vars: _} -> {todo: _} -> Show (NamedPats vars todo) where
+  show = show . toList
+    where
+    toList : {v:_} -> {ns:_} -> NamedPats v ns -> List String
+    toList [] = []
+    toList {ns=pvar::ns} (pi :: npss) = show pi :: toList npss
+
+-- Update the type of our patterns
 updatePats : {vars, todo : _} ->
              {auto c : Ref Ctxt Defs} ->
              Env Term vars ->
@@ -191,11 +202,11 @@ clauseType (MkPatClause pvars (MkInfo arg _ ty :: rest) rhs)
   where
     -- used to get the remaining clause types
     clauseType' : Pat -> ClauseType
-    clauseType' (PCon _ _ _ xs) = ConClause
-    clauseType' _                 = VarClause
+    clauseType' (PCon AExplicit _ _ _ xs) = ConClause
+    clauseType' _               = VarClause
 
     getClauseType : Pat -> ClauseType
-    getClauseType (PCon _ _ _ xs) = ConClause
+    getClauseType (PCon AExplicit _ _ _ xs) = ConClause
     getClauseType l = clauseType' l
 
 partition : {a, as, vars : _} ->
@@ -311,7 +322,7 @@ updateNames : List (Name, Pat) -> List (Name, Name)
 updateNames = mapMaybe update
   where
     update : (Name, Pat) -> Maybe (Name, Name)
-    update (n, PLoc p) = Just (p, n)
+    update (n, PLoc _ p) = Just (p, n)
     update _ = Nothing
 
 updatePatNames : List (Name, Name) -> NamedPats vars todo -> NamedPats vars todo
@@ -320,11 +331,11 @@ updatePatNames ns (pi :: ps)
     = record { pat $= update } pi :: updatePatNames ns ps
   where
     update : Pat -> Pat
-    update (PCon n i a ps) = PCon n i a (map (\(i,x)=>(i, update x)) ps)
-    update (PLoc n)
+    update (PCon info n i a ps) = PCon info n i a (map (\(i,x)=>(i, update x)) ps)
+    update (PLoc i n)
         = case lookup n ns of
-               Nothing => PLoc n
-               Just n' => PLoc n'
+               Nothing => PLoc i n
+               Just n' => PLoc i n'
     update p = p
 
 groupCons : {a, vars, todo : _} ->
@@ -349,8 +360,8 @@ groupCons fn pvars cs
     -- the same name in each of the clauses
     addConG {vars'} {todo'} n tag pargs pats rhs []
         = do cty <- the (Core (NF vars')) $ if n == UN "->"
-                      then pure $ NBind (MN "_" 0) (Pi 0 Explicit NType) $ -- TODO we don't need correct staging here, do we?
-                              (\d, a => pure $ NBind (MN "_" 1) (Pi 0 Explicit NErased) -- TODO same as above
+                      then pure $ NBind (MN "_" 0) (Pi 0 Explicit NType) $ -- We don't care about staging here. We only have case trees on top-level defs, i.e. stage 0.
+                              (\d, a => pure $ NBind (MN "_" 1) (Pi 0 Explicit NErased)
                                 (\d, a => pure NType))
                       else do defs <- get Ctxt
                               Just t <- lookupDef n defs
@@ -390,7 +401,7 @@ groupCons fn pvars cs
                NamedPats vars todo -> Term vars ->
                List (Group vars todo) ->
                Core (List (Group vars todo))
-    addGroup (PCon n t a pargs) pprf pats rhs acc
+    addGroup (PCon i n t a pargs) pprf pats rhs acc
          = if a == length pargs
               then addConG n t pargs pats rhs acc
               else throw (CaseCompile fn (NotFullyApplied n))
@@ -459,9 +470,9 @@ samePat (pi :: xs)
   where
     samePatAs : Pat -> List Pat -> Bool
     samePatAs p [] = True
-    samePatAs (PCon n t a args) (PCon n' t' _ _ :: ps)
-        = n == n' && t == t' && samePatAs (PCon n t a args) ps
-    samePatAs (PLoc n) (PLoc _ :: ps) = samePatAs (PLoc n) ps
+    samePatAs (PCon i n t a args) (PCon i' n' t' _ _ :: ps)
+        = n == n' && t == t' && i == i' && samePatAs (PCon i n t a args) ps
+    samePatAs (PLoc i n) (PLoc i' _ :: ps) = i == i' && samePatAs (PLoc i n) ps
     samePatAs x y = False
 
 getFirstCon : NamedPats ns (p :: ps) -> Pat
@@ -472,12 +483,12 @@ countDiff : List (NamedPats ns (p :: ps)) -> Nat
 countDiff xs = length (distinct [] (map getFirstCon xs))
   where
     isVar : Pat -> Bool
-    isVar (PCon _ _ _ _) = False
+    isVar (PCon _ _ _ _ _) = False
     isVar _ = True
 
     -- Return whether two patterns would lead to the same match
     sameCase : Pat -> Pat -> Bool
-    sameCase (PCon _ t _ _) (PCon _ t' _ _) = t == t'
+    sameCase (PCon _ _ t _ _) (PCon _ _ t' _ _) = t == t'
     sameCase x y = isVar x && isVar y
 
     distinct : List Pat -> List Pat -> List Pat
@@ -522,6 +533,93 @@ pickNext {ps = q :: qs} fn npss
                     _ => do (_ ** MkNVar var) <- pickNext fn (map tail npss)
                             pure (_ ** MkNVar (Later var))
 
+isAccessible : Pat -> Bool
+isAccessible (PCon i cn tag arity xs) = i == AExplicit
+isAccessible (PLoc i vn) = i == AExplicit
+isAccessible (PUnmatchable tm) = True
+
+splitByAccess : {ns, ps : _} -> NamedPats ns ps -> ((aps ** NamedPats ns aps)
+                                                   ,(ips ** NamedPats ns ips))
+splitByAccess [] = (([] ** [])
+                     ,([] ** []))
+splitByAccess {ps=p::ps'} (pi :: nps)
+  = case isAccessible (pat pi) of
+      True  => let ((a ** as), (i ** is)) = splitByAccess nps in
+                   (( p::a ** pi::as), (i ** is))
+      False => let ((a ** as), (i ** is)) = splitByAccess nps in
+                   ((a ** as), (p::i ** pi::is))
+
+reorderByAccess : {ns, ps : _} -> NamedPats ns ps -> (ps' ** NamedPats ns ps')
+reorderByAccess nps = let ((a**as),(i**is)) = splitByAccess nps in
+                      (_ ** as ++ is)
+
+reorderNPSS : {ns, ps : _} -> List (NamedPats ns ps) -> (ps' ** List (NamedPats ns ps'))
+reorderNPSS [] = ([] ** [])
+reorderNPSS (nps :: npss) = let (names ** newpats) = reorderByAccess nps in
+                            (names ** newpats :: believe_me (snd (reorderNPSS npss))) --Yuck!!
+
+splitByAccessC : {ns, ps : _} -> PatClause ns ps -> ((aps ** PatClause ns aps)
+                                                   ,(ips ** PatClause ns ips))
+splitByAccessC (MkPatClause names [] rhs) = (([] ** MkPatClause names [] rhs) ,([] ** MkPatClause names [] rhs))
+splitByAccessC {ps=p::ps'} (MkPatClause names (pi :: nps) rhs)
+  = case isAccessible (pat pi) of
+      True  => let ((a ** as), (i ** is)) = splitByAccessC (MkPatClause names nps rhs) in
+               (( p::a ** MkPatClause names (pi:: getNPs as) rhs), (i ** is))
+      False => let ((a ** as), (i ** is)) = splitByAccessC (MkPatClause names nps rhs) in
+               ((a ** as), (p::i ** MkPatClause names (pi:: getNPs is) rhs ))
+
+reorderByAccessC : {ns, ps : _} -> PatClause ns ps -> (ps' ** PatClause ns ps')
+reorderByAccessC pc@(MkPatClause names lhs rhs) = let ((a**as),(i**is)) = splitByAccessC pc in
+  (_ ** MkPatClause names (getNPs as ++ getNPs is) rhs)
+
+reorderClauses : {ns, ps : _} -> List (PatClause ns ps) -> (ps' ** List (PatClause ns ps'))
+reorderClauses [] = ([] ** [])
+reorderClauses (pc :: pcs) = let (names ** newclause) = reorderByAccessC pc in
+  (names ** newclause :: believe_me (snd (reorderClauses pcs))) --Yuck!!
+
+--getAccsNVars [] = []
+--getAccsNVars {ps=pvar::ps'} ((MkInfo pat loc _) :: nps)
+--  = case isAccessible pat of
+--      False => map nLater $ getAccsNVars nps
+--      True  => (pvar ** MkNVar First) :: (map nLater $ getAccsNVars nps)
+--  where
+
+--deferInaccs : {vars, todo : _} -> List (NamedPats vars todo) -> (ns ** List(NamedPats vars ns))
+--deferInaccs {todo=[]}  []          = ([] ** [])
+--deferInaccs {todo=[]} ([] :: npss) = ([] ** [])
+--deferInaccs {todo=pname::ps} ((pi :: nps) :: npss)
+--  = let (ns' ** npss') = deferInaccs npss in
+--    case isAccessible (pat pi) of
+--      False => ?addtoend
+--      True  => believe_me (pname :: ns' ** (pi :: nps) :: npss')
+--deferInaccs            []          = ([] ** [])
+
+  {-
+-- Pick the leftmost matchable thing with all constructors in the
+-- same family, or all variables, or all the same type constructor.
+pickNext : {p, ns, ps : _} ->
+           {auto i : Ref PName Int} ->
+           {auto c : Ref Ctxt Defs} ->
+           Name -> List (NamedPats ns (p :: ps)) ->
+           Core (n ** NVar n (p :: ps))
+-- last possible variable
+pickNext {ps = []} fn npss
+  = if samePat npss
+       then pure (_ ** MkNVar First)
+       else do Right () <- getScore fn npss
+                 | Left err => throw (CaseCompile fn err)
+               pure (_ ** MkNVar First)
+pickNext {ps = q :: qs} fn npss
+  = case nextExplicit fn npss of
+      Just e => pure ()
+    if samePat npss
+       then pure (_ ** MkNVar First)
+       else case !(getScore fn npss) of
+              Right () => pure (_ ** MkNVar First)
+              _        => do (_ ** MkNVar var) <- pickNext fn (map tail npss)
+                             pure (_ ** MkNVar (Later var))
+  -}
+
 moveFirst : {idx : Nat} -> (0 el : IsVar name idx ps) -> NamedPats ns ps ->
             NamedPats ns (name :: dropVar ps el)
 moveFirst el nps = getPat el nps :: dropPat el nps
@@ -548,8 +646,11 @@ mutual
   -- inspect next has a concrete type that is the same in all cases, and
   -- has the most distinct constructors (via pickNext)
   match {todo = (_ :: _)} fn clauses err
-      = do (n ** MkNVar next) <- pickNext fn (map getNPs clauses)
-           let clauses' = map (shuffleVars next) clauses
+      = do let ((newheadname :: newnames) ** clauses'') = reorderClauses clauses
+             | _ => throw $ GenericMsg $ "Got zero patterns after reordering clauses"
+           coreLift $ putStrLn $ "Matching on clauses: " ++ show (map getNPs clauses'')
+           (n ** MkNVar next) <- pickNext fn (map getNPs clauses'')
+           let clauses' = map (shuffleVars next) clauses''
            let ps = partition clauses'
            maybe (pure (Unmatched "No clauses"))
                  Core.pure
@@ -615,7 +716,7 @@ mutual
     where
       updateVar : PatClause vars (a :: todo) -> Core (PatClause vars todo)
       -- replace the name with the relevant variable on the rhs
-      updateVar (MkPatClause pvars (MkInfo (PLoc n) prf fty :: pats) rhs)
+      updateVar (MkPatClause pvars (MkInfo (PLoc i n) prf fty :: pats) rhs)
           = pure $ MkPatClause (n :: pvars)
                         !(substInPats a (Local _ prf) pats)
                         (substName n (Local _ prf) rhs)
@@ -716,7 +817,7 @@ toPatClause : {auto c : Ref Ctxt Defs} ->
               Name -> (Term [], Term []) ->
               Core (List Pat, Term [])
 toPatClause n (lhs, rhs)
-    = case getFnArgs lhs of
+    = case getFnInfoArgs lhs of
            (Ref Func fn, args)
               => do defs <- get Ctxt
                     if n == fn
@@ -759,7 +860,7 @@ getPMDef fn ty []
 getPMDef fn ty clauses
     = do defs <- get Ctxt
          let cs = map (toClosed defs) (labelPat 0 clauses)
-         (_ ** t) <- simpleCase fn ty Nothing cs
+         (_ ** t) <- simpleCase fn ty Nothing $ cs
          pure (_ ** t)
   where
     labelPat : Int -> List a -> List (String, a)

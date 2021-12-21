@@ -66,36 +66,38 @@ Weaken CaseTree where
 -- case trees
 public export
 data Pat : Type where
-     PCon : Name -> (tag : Int) -> (arity : Nat) ->
+     PCon : AppInfo -> Name -> (tag : Int) -> (arity : Nat) ->
             List (AppInfo, Pat) -> Pat
-     PLoc : Name -> Pat
+     PLoc : AppInfo -> Name -> Pat
      PUnmatchable : Term [] -> Pat
 
 export
 Show Pat where
-  show (PCon n t a args) = show n ++ show (t, a) ++ show args
-  show (PLoc n) = "{" ++ show n ++ "}"
+  show (PCon AExplicit n t a args) = show n ++ show (t, a) ++ show args
+  show (PCon AImplicit n t a args) = "{" ++ show n ++ show (t, a) ++ show args ++ "}"
+  show (PLoc AExplicit n) = "(" ++ show n ++ ")"
+  show (PLoc AImplicit n) = "{" ++ show n ++ "}"
   show _ = "_"
 
 export
-mkPat' : List (AppInfo, Pat) -> Term [] -> Term [] -> Pat
-mkPat' args orig (Ref Bound n) = PLoc n
-mkPat' args orig (Ref (DataCon t a) n) = PCon n t a args
-mkPat' args orig (App info fn arg)
-    = let parg = mkPat' [] arg arg in
-                 mkPat' ((info, parg) :: args) orig fn
-mkPat' args orig tm = PUnmatchable orig
+mkPat' : AppInfo -> List (AppInfo, Pat) -> Term [] -> Term [] -> Pat
+mkPat' i args orig (Ref Bound n) = PLoc i n
+mkPat' i args orig (Ref (DataCon t a) n) = PCon i n t a args
+mkPat' i args orig (App info fn arg)
+    = let parg = mkPat' i [] arg arg in
+                 mkPat' i ((info, parg) :: args) orig fn
+mkPat' i args orig tm = PUnmatchable orig
 
 export
-argToPat : Term [] -> Pat
-argToPat tm
-    = mkPat' [] tm tm
+argToPat : (AppInfo, Term []) -> Pat
+argToPat (i,tm)
+    = mkPat' i [] tm tm
 
 export
 mkTerm : (vars : List Name) -> Pat -> Term vars
-mkTerm vars (PCon n tag arity xs)
+mkTerm vars (PCon i n tag arity xs)
     = apply (Ref (DataCon tag arity) n) (map (\(i,p)=>(i, mkTerm vars p)) xs)
-mkTerm vars (PLoc n)
+mkTerm vars (PLoc i n)
     = case isVar n vars of
            Just (MkVar prf) => Local _ prf
            _ => Ref Bound n
@@ -120,3 +122,52 @@ mutual
           show sc
     show (DefaultCase sc)
         = "_ => " ++ show sc
+{-
+
+
+  -- ORIGINAL CLAUSES
+
+  [ ["(pat = {{pat0::2}}, name = {arg:0}, argType = Known Type)",
+     "(pat = {Z(0, 0)[]}, name = {arg:1}, argType = Known Nat)",
+     "(pat = {{pat0::1}}, name = {arg:2}, argType = Known Nat)",
+     "(pat = VNil(0, 1)[(Implicit, ({pat0::2}))], name = {arg:3}, argType = Known (Vect {arg:1} {arg:0}))",
+     "(pat = ({pat0::0}), name = {arg:4}, argType = Known (Vect {arg:2} {arg:0}))"
+    ],
+
+    ["(pat = {{pat1::5}}, name = {arg:0}, argType = Known Type)",
+     "(pat = {S(1, 1)[(Explicit, {{pat1::4}})]}, name = {arg:1}, argType = Known Nat)",
+     "(pat = {{pat1::3}}, name = {arg:2}, argType = Known Nat)",
+     "(pat = VCons(1, 4)[(Implicit, ({pat1::5})), (Implicit, ({pat1::4})), (Explicit, ({pat1::2})), (Explicit, ({pat1::1}))], name = {arg:3}, argType = Known (Vect {arg:1} {arg:0}))",
+     "(pat = ({pat1::0}), name = {arg:4}, argType = Known (Vect {arg:2} {arg:0}))"]]
+
+  -- PASS 1
+  [ ["(pat = {Z(0, 0)[]}, name = {arg:1}, argType = Known Nat)",
+     "(pat = {{pat0::1}}, name = {arg:2}, argType = Known Nat)",
+     "(pat = VNil(0, 1)[(Implicit, ({pat0::2}))], name = {arg:3}, argType = Known (Vect {arg:1} {arg:0}[0]))",
+     "(pat = ({pat0::0}), name = {arg:4}, argType = Known (Vect {arg:2} {arg:0}[0]))"
+    ],
+
+    ["(pat = {S(1, 1)[(Explicit, {{pat1::4}})]}, name = {arg:1}, argType = Known Nat)",
+     "(pat = {{pat1::3}}, name = {arg:2}, argType = Known Nat)",
+     "(pat = VCons(1, 4)[(Implicit, ({pat1::5})), (Implicit, ({pat1::4})), (Explicit, ({pat1::2})), (Explicit, ({pat1::1}))], name = {arg:3}, argType = Known (Vect {arg:1} {arg:0}[0]))",
+     "(pat = ({pat1::0}), name = {arg:4}, argType = Known (Vect {arg:2} {arg:0}[0]))"]
+    ]
+
+  Got rid of patterns for arg:0 (pat0::2 and pat1::5) via VAR
+
+
+  -- PASS 2
+    [["(pat = {{pat0::1}}, name = {arg:2}, argType = Known Nat)",
+      "(pat = VNil(0, 1)[(Implicit, ({pat0::2}))], name = {arg:3}, argType = Known (Vect 0 {arg:0}[0]))",
+      "(pat = ({pat0::0}), name = {arg:4}, argType = Known (Vect {arg:2} {arg:0}[0]))"],
+
+     ["(pat = {{pat1::3}}, name = {arg:2}, argType = Known Nat)",
+      "(pat = VCons(1, 4)[(Implicit, ({pat1::5})), (Implicit, ({pat1::4})), (Explicit, ({pat1::2})), (Explicit, ({pat1::1}))], name = {arg:3}, argType = Known (Vect (S {pat1::4}) {arg:0}[0]))",
+      "(pat = ({pat1::0}), name = {arg:4}, argType = Known (Vect {arg:2} {arg:0}[0]))"]
+      ]
+
+  We're trying to VAR on the implicit length patterns...
+    Z creeps into the first clause's vect type
+    the second clause's vect type references pat1::4, which used to exist but we've just VARed on it! Should we be replacing (S pat1::4) with arg:1?
+
+-}
