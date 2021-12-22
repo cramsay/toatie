@@ -202,7 +202,8 @@ clauseType (MkPatClause pvars (MkInfo arg _ ty :: rest) rhs)
   where
     -- used to get the remaining clause types
     clauseType' : Pat -> ClauseType
-    clauseType' (PCon AExplicit _ _ _ xs) = ConClause
+    clauseType' (PCon AExplicit _ _ _ xs) = ConClause -- TODO Circuit runtime, want AExplicit. Compile time, want _
+                                                      -- TODO think about if we can use explicit -> implicit applications
     clauseType' _               = VarClause
 
     getClauseType : Pat -> ClauseType
@@ -472,7 +473,7 @@ samePat (pi :: xs)
     samePatAs p [] = True
     samePatAs (PCon i n t a args) (PCon i' n' t' _ _ :: ps)
         = n == n' && t == t' && i == i' && samePatAs (PCon i n t a args) ps
-    samePatAs (PLoc i n) (PLoc i' _ :: ps) = i == i' && samePatAs (PLoc i n) ps
+    samePatAs (PLoc i n) (PLoc i' n' :: ps) = n == n' && i == i' && samePatAs (PLoc i n) ps
     samePatAs x y = False
 
 getFirstCon : NamedPats ns (p :: ps) -> Pat
@@ -577,49 +578,6 @@ reorderClauses [] = ([] ** [])
 reorderClauses (pc :: pcs) = let (names ** newclause) = reorderByAccessC pc in
   (names ** newclause :: believe_me (snd (reorderClauses pcs))) --Yuck!!
 
---getAccsNVars [] = []
---getAccsNVars {ps=pvar::ps'} ((MkInfo pat loc _) :: nps)
---  = case isAccessible pat of
---      False => map nLater $ getAccsNVars nps
---      True  => (pvar ** MkNVar First) :: (map nLater $ getAccsNVars nps)
---  where
-
---deferInaccs : {vars, todo : _} -> List (NamedPats vars todo) -> (ns ** List(NamedPats vars ns))
---deferInaccs {todo=[]}  []          = ([] ** [])
---deferInaccs {todo=[]} ([] :: npss) = ([] ** [])
---deferInaccs {todo=pname::ps} ((pi :: nps) :: npss)
---  = let (ns' ** npss') = deferInaccs npss in
---    case isAccessible (pat pi) of
---      False => ?addtoend
---      True  => believe_me (pname :: ns' ** (pi :: nps) :: npss')
---deferInaccs            []          = ([] ** [])
-
-  {-
--- Pick the leftmost matchable thing with all constructors in the
--- same family, or all variables, or all the same type constructor.
-pickNext : {p, ns, ps : _} ->
-           {auto i : Ref PName Int} ->
-           {auto c : Ref Ctxt Defs} ->
-           Name -> List (NamedPats ns (p :: ps)) ->
-           Core (n ** NVar n (p :: ps))
--- last possible variable
-pickNext {ps = []} fn npss
-  = if samePat npss
-       then pure (_ ** MkNVar First)
-       else do Right () <- getScore fn npss
-                 | Left err => throw (CaseCompile fn err)
-               pure (_ ** MkNVar First)
-pickNext {ps = q :: qs} fn npss
-  = case nextExplicit fn npss of
-      Just e => pure ()
-    if samePat npss
-       then pure (_ ** MkNVar First)
-       else case !(getScore fn npss) of
-              Right () => pure (_ ** MkNVar First)
-              _        => do (_ ** MkNVar var) <- pickNext fn (map tail npss)
-                             pure (_ ** MkNVar (Later var))
-  -}
-
 moveFirst : {idx : Nat} -> (0 el : IsVar name idx ps) -> NamedPats ns ps ->
             NamedPats ns (name :: dropVar ps el)
 moveFirst el nps = getPat el nps :: dropPat el nps
@@ -648,7 +606,7 @@ mutual
   match {todo = (_ :: _)} fn clauses err
       = do let ((newheadname :: newnames) ** clauses'') = reorderClauses clauses
              | _ => throw $ GenericMsg $ "Got zero patterns after reordering clauses"
-           coreLift $ putStrLn $ "Matching on clauses: " ++ show (map getNPs clauses'')
+           --coreLift $ putStrLn $ "Matching on clauses: " ++ show (map getNPs clauses'')
            (n ** MkNVar next) <- pickNext fn (map getNPs clauses'')
            let clauses' = map (shuffleVars next) clauses''
            let ps = partition clauses'

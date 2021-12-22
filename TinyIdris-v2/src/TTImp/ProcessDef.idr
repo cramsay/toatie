@@ -27,102 +27,67 @@ getRHSEnv env (Bind n (PVar stage ty) sc) (Bind n' (PVTy _ _) scty) with (nameEq
       = getRHSEnv (PVar stage ty :: env) sc scty
 getRHSEnv env lhs ty = pure (vars ** (env, lhs, ty))
 
--- List all of the PVar names which are used implicitly in the LHS
+-- List all of the PVar names which are used explicit positions in the LHS
 -- Based on idris2's findLinear function
-findImp : {vars : _} ->
+findExp : {vars : _} ->
              {auto c : Ref Ctxt Defs} ->
-             Bool -> Nat -> (lhsenv : Term vars) ->
+             Nat -> (lhsenv : Term vars) ->
              Core (List Name)
-findImp inImp bound (Bind n b sc)
-    = findImp inImp (S bound) sc
-findImp inImp bound tm
+findExp bound (Bind n b sc)
+    = findExp (S bound) sc
+findExp bound tm
     = case getFnInfoArgs tm of
            (Ref _  n, []) => pure []
            (Ref nt n, args)
               => do defs <- get Ctxt
                     Just (MkGlobalDef nty _) <- lookupDef n (defs)
                          | Nothing => pure []
-                    findImpArg !(nf defs [] nty) args
+                    findExpArg !(nf defs [] nty) args
            _ => pure []
     where
-
-      findImpArg : {vars : _} ->
+      findExpArg : {vars : _} ->
                    NF [] -> List (AppInfo, Term vars) ->
                    Core (List Name)
-      findImpArg (NBind x (Pi _ Implicit _ ) sc) ((_, Local {name=a} idx prf) :: as)
+      findExpArg (NBind x (Pi _ Explicit _ ) sc) ((_, Local {name=a} idx prf) :: as)
           = do defs <- get Ctxt
                let a = nameAt idx prf
                if idx < bound
                  then do sc' <- sc defs (toClosure [] (Ref Bound x))
-                         pure $ a :: !(findImpArg sc' as)
+                         pure $ a :: !(findExpArg sc' as)
                  else do sc' <- sc defs (toClosure [] (Ref Bound x))
-                         findImpArg sc' as
-      findImpArg (NBind x (Pi _ Implicit _) sc) ((_, a) :: as)
+                         findExpArg sc' as
+      findExpArg (NBind x (Pi _ Explicit _) sc) ((_, a) :: as)
           = do defs <- get Ctxt
-               pure $ !(findImp True bound a) ++
-                      !(findImpArg !(sc defs (toClosure [] (Ref Bound x))) as)
-      findImpArg ty ((ia, a) :: as)
-          = pure $ !(findImp (inImp || AImplicit == ia) bound a) ++ !(findImpArg ty as)
-      findImpArg _ [] = pure []
+               pure $ !(findExp bound a) ++
+                      !(findExpArg !(sc defs (toClosure [] (Ref Bound x))) as)
+      findExpArg (NBind x (Pi _ Implicit _) sc) ((_, a) :: as) --TODO unsure
+          = do defs <- get Ctxt
+               pure !(findExpArg !(sc defs (toClosure [] (Ref Bound x))) as)
+      findExpArg ty ((ia, a) :: as)
+          = pure $ !(findExp bound a) ++ !(findExpArg ty as)
+      findExpArg _ [] = pure []
 
-findImpTop : {vars : _} ->
+findExpTop : {vars : _} ->
              {auto c : Ref Ctxt Defs} ->
              Term vars ->
              Core (List Name)
-findImpTop tm = do imps <- findImp False (length vars) tm
+findExpTop tm = do imps <- findExp (length vars) tm
                    pure $ nub imps
 
-{- Old code from when I was trying to wrap each RHS up in lambdas and apply the pat vars to it
-patName : Name -> Name
-patName (UN n) = UN (n++"_pat")
-patName (MN n i) = MN (n++"_pat") i
-
-patNameEq : Name -> Name -> Name
-patNameEq a b = if a==b then patName b else b
-
-renameIVar : Name -> RawImp -> RawImp
-renameIVar n (IVar x) = IVar $ patNameEq n x
-renameIVar n (ILet x margTy argVal scope)
-  = ILet (patNameEq n x) (map (renameIVar n) margTy) (renameIVar n argVal) (renameIVar n scope)
-renameIVar n (IPi i x argTy retTy)
-  = IPi i (map (patNameEq n) x) (renameIVar n argTy) (renameIVar n retTy)
-renameIVar n (ILam i x argTy scope)
-  = ILam i (map (patNameEq n) x) (renameIVar n argTy) (renameIVar n scope)
-renameIVar n (IPatvar x ty scope)
-  = IPatvar (patNameEq n x) (renameIVar n ty) (renameIVar n scope)
-renameIVar n (IApp i f a) = IApp i (renameIVar n f) (renameIVar n a)
-renameIVar n Implicit = Implicit
-renameIVar n IType = IType
-renameIVar n (IQuote  tm) = IQuote  $ renameIVar n tm
-renameIVar n (ICode   tm) = ICode   $ renameIVar n tm
-renameIVar n (IEval   tm) = IEval   $ renameIVar n tm
-renameIVar n (IEscape tm) = IEscape $ renameIVar n tm
-
-wrapRHSWithLams : {vars: _} -> Env Term vars -> (imps : List Name) -> RawImp -> RawImp
+wrapRHSWithLams : {vars: _} -> Env Term vars -> (exps : List Name) -> (rhs : Term vars) -> Term (vars)
 wrapRHSWithLams [] _ rhs = rhs
-wrapRHSWithLams {vars=v::vs} (b :: bs) imps rhs
-  = let ty = fromMaybe Implicit (toTTImp $ binderType b)
-        info : PiInfo = if elem v imps then Implicit else Explicit
-        ainfo : AppInfo = if info == Implicit then AImplicit else AExplicit
-        lambind = ILam info (Just $ patName v) ty (renameIVar v rhs)
-        var     = IVar v
-    in wrapRHSWithLams bs imps $ IApp ainfo lambind var
--}
-
-wrapRHSWithLams : {vars: _} -> Env Term vars -> (imps : List Name) -> (rhs : Term vars) -> Term (vars)
-wrapRHSWithLams [] _ rhs = rhs
-wrapRHSWithLams {vars=v::vs} (b :: bs) imps rhs
+wrapRHSWithLams {vars=v::vs} (b :: bs) exps rhs
   = let ty = binderType b
-        info : PiInfo = if elem v imps then Implicit else Explicit
-        rec = wrapRHSWithLams bs imps $ Bind v (Lam (binderStage b) info ty) rhs
+        info : PiInfo = if elem v exps then Explicit else Implicit
+        rec = wrapRHSWithLams bs exps $ Bind v (Lam (binderStage b) info ty) rhs
     in weaken $ rec
 
-rhsTypeToPi : {vars: _} -> Env Term vars -> (imps : List Name) -> (rhsty : Term vars) -> Term vars
+rhsTypeToPi : {vars: _} -> Env Term vars -> (exps : List Name) -> (rhsty : Term vars) -> Term vars
 rhsTypeToPi [] _ rhsty = rhsty
-rhsTypeToPi {vars=v::vs} (b :: bs) imps rhsty
+rhsTypeToPi {vars=v::vs} (b :: bs) exps rhsty
   = let ty = binderType b
-        info : PiInfo = if elem v imps then Implicit else Explicit
-        rec = rhsTypeToPi bs imps $ Bind v (Pi (binderStage b) info ty) rhsty
+        info : PiInfo = if elem v exps then Explicit else Implicit
+        rec = rhsTypeToPi bs exps $ Bind v (Pi (binderStage b) info ty) rhsty
     in weaken rec
 
 processImplicitUse : {auto c : Ref Ctxt Defs} ->
@@ -130,9 +95,9 @@ processImplicitUse : {auto c : Ref Ctxt Defs} ->
                      {auto s : Ref Stg Stage} ->
                      {vars:_} -> Env Term vars -> (lhstm : Term vars) -> (rhstm : Term vars) -> (exprhsty : Term vars) -> Core ()
 processImplicitUse env lhstm rhstm exprhsty
-  = do imps <- findImpTop lhstm
-       let rhstm'    = wrapRHSWithLams env imps rhstm
-       let exprhsty' = rhsTypeToPi env imps exprhsty
+  = do exps <- findExpTop lhstm
+       let rhstm'    = wrapRHSWithLams env exps rhstm
+       let exprhsty' = rhsTypeToPi env exps exprhsty
        case toTTImp rhstm' of
          Nothing      => throw $ GenericMsg "Can't convert back to TTImp"
          Just rhswrap => do (rhstm', rhsty')
@@ -179,7 +144,7 @@ processDef n clauses
          -- Update the definition with the compiled tree
          updateDef n (record { definition = PMDef args tree })
 
-         coreLift $ putStrLn $ "Complete ----------------------"
-         coreLift $ putStrLn $ "Args = " ++ show args
-         coreLift $ putStrLn $ "Tree = " ++ show tree
+         --coreLift $ putStrLn $ "Complete ----------------------"
+         --coreLift $ putStrLn $ "Args = " ++ show args
+         --coreLift $ putStrLn $ "Tree = " ++ show tree
          coreLift $ putStrLn $ "Processed " ++ show n

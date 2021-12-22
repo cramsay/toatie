@@ -56,8 +56,9 @@ weakenExp env (Just gtm)
     = do tm <- getTerm gtm
          pure (Just (gnf env (weaken tm)))
 
+-- Check that the implicitness of a binder is compatible with the implicitness of an application
 checkImplicitness : PiInfo -> AppInfo -> Core Bool
-checkImplicitness Implicit AImplicit = pure True
+checkImplicitness Implicit AImplicit         = pure True -- TODO not sure if we should match exactly explicit to explicit, maybe!
 checkImplicitness Explicit AExplicit = pure True
 checkImplicitness _        _         = pure False
 

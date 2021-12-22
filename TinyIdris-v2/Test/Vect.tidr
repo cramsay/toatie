@@ -43,43 +43,47 @@ pat a : Type, m : Nat, ys : Vect m a =>
 pat a : Type, n : Nat, m : Nat, x : a, xs : Vect n a, ys : Vect m a =>
   append {a} {(S n)} {m} (VCons {a} {n} x xs) ys = VCons {a} {(plus n m)} x (append {a} {n} {m} xs ys)
 
-unrollMap : {n : Nat} -> {a : Type} -> {b : Type} ->
+-- TODO:
+--
+-- * Finish examples here
+-- * Should we use implicit arguments if we can?  == Yes! If all explicit args are synthable, we can use it in a circuit!
+
+unrollMap : (n : Nat) -> {a : Type} -> {b : Type} ->
             (f : < a -> b >) ->
             < Vect n a -> Vect n b >
 pat a : Type, b : Type, f : < a->b > =>
-  unrollMap {Z} {a} {b} f = [| \ xs : Vect Z a => VNil {b} |]
+  unrollMap Z {a} {b} f = [| \ xs : Vect Z a => VNil {b} |]
 pat n : Nat, a : Type, b : Type, f : < a->b > =>
-  unrollMap {(S n)} {a} {b} f = [|
+  unrollMap (S n) {a} {b} f = [|
     \xs : Vect (S n) a =>
        let y  = ~f (head {a} {n} xs)
-           ys = ~(unrollMap {n} {a} {b} f) (tail {a} {n} xs)
+           ys = ~(unrollMap n {a} {b} f) (tail {a} {n} xs)
        in VCons {b} {n} y ys
   |]
 
-umap : {n : Nat} -> {a : Type} -> {b : Type} ->
-       (f : < a -> b>) ->
-       < Vect n a > -> < Vect n b >
-pat a : Type, b : Type, f : <a->b>, n : Nat =>
-  umap {Z} {a} {b} f ([| VNil {a} |]) = [| VNil {b} |]
-pat a : Type, b : Type, f : <a->b>, n : Nat, x : a, xs : Vect n a =>
-  umap {(S n)} {a} {b} f ([| VCons {a} {n} x xs |]) = [| VCons {b} {n} ((~f) x) (~(umap {n} {a} {b} f [|xs|])) |]
-
-unrollMap3S : <Vect 3 Nat -> Vect 3 Nat>
-unrollMap3S = unrollMap {3} {Nat} {Nat} [| S |]
-
-unrollFoldl : {n : Nat} -> {acc : Type} -> {elem : Type} ->
-              (f : < acc -> elem -> acc >) ->
-              (init : <acc>) ->
-              < Vect n elem -> acc >
-pat acc : Type, elem : Type, f : <acc->elem->acc>, init : <acc> =>
-  unrollFoldl {Z} {acc} {elem} f init = [| \xs : Vect Z elem => ~init |] 
-pat n : Nat, acc : Type, elem : Type, f : <acc->elem->acc>, init : <acc> =>
-  unrollFoldl {(S n)} {acc} {elem} f init = [|
-    \xs : Vect (S n) elem =>
-      let init' = ~f ~init (head {elem} {n} xs)
-      in ~(unrollFoldl {n} {acc} {elem} f [| init' |]) (tail {elem} {n} xs)
-  |]
-
+--umap : {n : Nat} -> {a : Type} -> {b : Type} ->
+--       (f : < a -> b>) ->
+--       < Vect n a > -> < Vect n b >
+--pat a : Type, b : Type, f : <a->b>, n : Nat =>
+--  umap {Z} {a} {b} f ([| VNil {a} |]) = [| VNil {b} |]
+--pat a : Type, b : Type, f : <a->b>, n : Nat, x : a, xs : Vect n a =>
+--  umap {(S n)} {a} {b} f ([| VCons {a} {n} x xs |]) = [| VCons {b} {n} ((~f) x) (~(umap {n} {a} {b} f [|xs|])) |]
+--
+--unrollMap3S : <Vect 3 Nat -> Vect 3 Nat>
+--unrollMap3S = unrollMap {3} {Nat} {Nat} [| S |]
+--
+--unrollFoldl : {n : Nat} -> {acc : Type} -> {elem : Type} ->
+--              (f : < acc -> elem -> acc >) ->
+--              (init : <acc>) ->
+--              < Vect n elem -> acc >
+--pat acc : Type, elem : Type, f : <acc->elem->acc>, init : <acc> =>
+--  unrollFoldl {Z} {acc} {elem} f init = [| \xs : Vect Z elem => ~init |] 
+--pat n : Nat, acc : Type, elem : Type, f : <acc->elem->acc>, init : <acc> =>
+--  unrollFoldl {(S n)} {acc} {elem} f init = [|
+--    \xs : Vect (S n) elem =>
+--      let init' = ~f ~init (head {elem} {n} xs)
+--      in ~(unrollFoldl {n} {acc} {elem} f [| init' |]) (tail {elem} {n} xs)
+--  |]
 
 --wrong : {x : Nat} -> Nat
 --pat {x : Nat} =>
@@ -101,13 +105,3 @@ pat n : Nat, acc : Type, elem : Type, f : <acc->elem->acc>, init : <acc> =>
 --
 -- Trying with unrollFoldl:
 -- > \init:Nat => \a:Nat => \b:Nat => \c:Nat => !(unrollFoldl {3} {Nat} {Nat} [| plus |] [|init|]) [a,b,c]
-
-
--- Append works now... how do the staged examples work with the implicits? the
--- unrollFunctions shouldn't work I guess... we're pattern matching on
--- implicits! umap should maybe work though? I think we want a Quote pattern and
--- Pattern group, similar to Idris2's Delays.
-
--- TODO: * Want unrollMap to fail since we're matching only on implicits.
---       * Want to handle quotes in patterns to permit umap. Wait is that true?! Can I pattern match on circuit-time stuff? that sounds dodge...
---       * Look at ICC. Can we go explicit -> implicit?
