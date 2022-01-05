@@ -1,7 +1,6 @@
 # Toatie
 
 > A spicy Hardware Description Language with dependent types
-> and a covid fever dream
 
 We poke, bend, and otherwise abuse Tiny Idris --- introduced by
 [Edwin Brady](https://github.com/edwinb) at
@@ -11,13 +10,17 @@ We'll work towards:
 
   - [X] Let bindings (useful for sharing)
   - [X] Multi-stage core TT (See paper "A Verified Staged Interpreter is a
-        Verified Compiler")
+        Verified Compiler"; let's us unroll recursive defs of circuits in our
+        source language rather than the compiler)
+  - [X] Irrelevance/erasure with ICC* (See Barras' paper "The Implicit Calculus
+        of Constructions as a Programming Language with Dependent Types")
+  - [X] Different case tree behaviour --- implicit patterns are inaccessible
+  - [X] A very simple module system (only one namespace)
   - [X] Separating `Parameter` types (value known at compile-time) and `Simple`
         types (value known only at circuit run-time)
   - [ ] Checking GADTs over `Simple` types for decidable sizes
   - [ ] Deriving bit representations for GADTs over `Simple` types
-  - [ ] Conversion of Terms to something like Clash's ANF, with a little more
-        unrolling.
+  - [ ] Conversion of Terms to something like Clash's ANF
   - [ ] Generating netlists from this ANF.
   - [ ] Encoding _synchronous_ logic
 
