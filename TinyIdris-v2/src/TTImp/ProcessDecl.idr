@@ -15,6 +15,7 @@ import Parser.Source
 import Data.Maybe
 import Data.String
 import Data.List1
+import Data.List
 import System.File
 import System.Directory
 
@@ -36,14 +37,11 @@ getBaseDir fname = foldl dirconcat "" (init $ split (=='/') fname)
         dirconcat a e = a ++ e ++ "/"
 
 export
-defaultModulePaths : FileName -> Core (List ModName)
+defaultModulePaths : FileName -> List ModName
 defaultModulePaths fname
- = do cwd <- coreLift $ currentDir
-      let workingDirs = fromMaybe [] (map (\s => (s++"/")::[]) cwd)
-      let dirs = workingDirs ++
-                 [getBaseDir fname]
-                 -- ^ Should eventually include a builtin lib dir too
-      pure dirs
+ = nub [ ""               -- Current dir
+       , getBaseDir fname -- Dir of our source file
+       ] -- ^ Should eventually include a builtin lib dir too
 
 getImportFName : ModName -> DirName -> FileName
 getImportFName mname dir

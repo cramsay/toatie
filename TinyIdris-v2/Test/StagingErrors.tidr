@@ -1,12 +1,6 @@
-data Nat : Type where
-     Z : Nat
-     S : Nat -> Nat
+-- A set of examples testing known edge cases of the multi-stage evaluation
 
-plus : Nat -> Nat -> Nat
-pat y : Nat =>
-   plus Z y = y
-pat k : Nat, y : Nat =>
-   plus (S k) y = S (plus k y)
+import Data.Nat
 
 -- Example of accidental name capture from "A Gentle Introduction to Multi-stage
 -- Programming" by Walid Taha. Demonstrates that we _do not_ accidentally
@@ -44,7 +38,7 @@ g = [| plus 2 3 |]
 -- > \a : Nat => [| \b : Nat => ~(plus a b) |]
 -- Stage error: var y is bound at stage 1 but used at stage 0
 
--- Walid talks about a true _multi_stage language so escaped quotes or only ever
+-- Walid talks about a true _multi_stage language so escaped quotes are only ever
 -- evaluated when going from stage 2 -> stage 1. Our language is more for two
 -- stages, so we evaluate every stage... the staging is more for spliting
 -- synthesisable code from non-synthesisable generators.

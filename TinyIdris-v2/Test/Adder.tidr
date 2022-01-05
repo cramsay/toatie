@@ -1,3 +1,7 @@
+-- Example with a full adder
+-- Building up to demonstrating resource sharing with let bindings
+-- (i.e. the `a xor b` computation should be shared between both outputs)
+
 object Bit : Type where
      O : Bit
      I : Bit
@@ -21,14 +25,14 @@ and I O = O
 and I I = I
 
 data Pair : Type -> Type where
-     MkP : (a : Type) -> a -> a -> Pair a
+     MkP : {a : Type} -> a -> a -> Pair a
 
 dup : Bit -> Pair Bit
 pat b : Bit =>
-    dup b = MkP Bit b b
+    dup b = MkP {Bit} b b
 
 fa : Bit -> Bit -> Bit -> Pair Bit
 pat a : Bit, b : Bit, cin : Bit =>
     fa a b cin = let axorb = xor a b
-                 in MkP _ (xor axorb cin)
-                          (or (and axorb cin) (and a b))
+                 in MkP {Bit} (xor axorb cin)
+                              (or (and axorb cin) (and a b))

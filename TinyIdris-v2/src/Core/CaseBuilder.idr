@@ -449,6 +449,7 @@ sameType {ns} fn env (p :: xs)
     headEq (NTCon n i _ _ _) (NTCon n' i' _ _ _) = n == n' && i == i'
     headEq NType NType = True
     headEq (NApp (NRef _ n) _) (NApp (NRef _ n') _) = n == n'
+    headEq (NApp (NLocal idx _) _) (NApp (NLocal idx' _) _) = idx == idx'
     headEq NErased _ = True
     headEq _ NErased = True
     headEq _ _ = False
@@ -459,7 +460,8 @@ sameType {ns} fn env (p :: xs)
          do defs <- get Ctxt
             if headEq ty !(nf defs env t)
                then sameTypeAs ty xs
-               else throw (CaseCompile fn DifferingTypes)
+               else do coreLift $ putStrLn $ show ty ++ " vs " ++ show !(nf defs env t)
+                       throw (CaseCompile fn DifferingTypes)
     sameTypeAs ty _ = throw (CaseCompile fn DifferingTypes)
 
 -- Check whether all the initial patterns are the same, or are all a variable.

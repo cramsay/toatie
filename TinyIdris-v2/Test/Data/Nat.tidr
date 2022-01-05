@@ -7,3 +7,9 @@ pat y : Nat =>
    plus Z y = y
 pat k : Nat, y : Nat =>
    plus (S k) y = S (plus k y)
+
+mul : Nat -> Nat -> Nat
+pat y : Nat =>
+   mul Z y = Z
+pat k : Nat, y : Nat =>
+   mul (S k) y = plus y (mul k y)

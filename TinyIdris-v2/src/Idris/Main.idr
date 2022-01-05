@@ -57,7 +57,7 @@ runMain fname decls
          u <- newRef UST initUState
          s <- newRef Stg (the Stage 0)
          m <- newRef Mods []
-         dirs <- defaultModulePaths fname
+         let dirs = defaultModulePaths fname
          traverse_ (processDecl dirs) decls
          repl
 

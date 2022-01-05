@@ -4,21 +4,7 @@
 -- performed at "compile"-time, but leaving the application with the base until
 -- run-time.
 
-data Nat : Type where
-     Z : Nat
-     S : Nat -> Nat
-
-plus : Nat -> Nat -> Nat
-pat y : Nat =>
-   plus Z y = y
-pat k : Nat, y : Nat =>
-   plus (S k) y = S (plus k y)
-
-mul : Nat -> Nat -> Nat
-pat y : Nat =>
-   mul Z y = Z
-pat k : Nat, y : Nat =>
-   mul (S k) y = plus y (mul k y)
+import Data.Nat
 
 power : Nat -> < Nat > -> < Nat >
 pat m : < Nat > =>
