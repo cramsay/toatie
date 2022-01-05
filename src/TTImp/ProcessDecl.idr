@@ -49,7 +49,7 @@ getImportFName mname dir
   where replace : Char -> Char -> String -> String
         replace old new = pack . map (\c=>if c==old then new else c) . unpack
         mhead : String
-        mhead = replace '.' '/' mname ++ ".tidr"
+        mhead = replace '.' '/' mname ++ ".tt"
 
 findModule : List DirName -> ModName -> Core FileName
 findModule dirs mname

@@ -1,4 +1,4 @@
-package tinyidris
+package toatie
 
 modules = -- Core TT representations
 
@@ -61,7 +61,7 @@ modules = -- Core TT representations
 
 options = "-p contrib"
 
-main = Idris.Main
+main = Toatie.Main
 sourcedir = "src"
 
-executable = tinyidris
+executable = toatie

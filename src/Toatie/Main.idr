@@ -1,4 +1,4 @@
-module Idris.Main
+module Toatie.Main
 
 import Core.Context
 import Core.Core
