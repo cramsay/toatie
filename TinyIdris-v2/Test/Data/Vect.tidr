@@ -1,33 +1,9 @@
-data Nat : Type where
-     Z : Nat
-     S : Nat -> Nat
-
-plus : Nat -> Nat -> Nat
-pat y : Nat =>
-   plus Z y = y
-pat k : Nat, y : Nat =>
-   plus (S k) y = S (plus k y)
+import Data.Nat
 
 data Vect : Nat -> Type -> Type where
      VNil : {a : Type} -> Vect Z a
      VCons : {a : Type} -> {k : Nat} ->
              a -> Vect k a -> Vect (S k) a
-
-test1 : Vect 3 Nat
-test1 = VCons {Nat} {2} 3 (
-        VCons {Nat} {1} 4 (
-        VCons {Nat} {0} 5 (
-        VNil  {Nat}
-        )))
-
-test2 : Vect 2 Nat
-test2 = VCons {Nat} {1} 1 (
-        VCons {Nat} {0} 2 (
-        VNil  {Nat}
-        ))
-
-test3 : Vect 0 Nat
-test3 = VNil {Nat}
 
 head : {a : Type} -> {n : Nat} -> Vect (S n) a -> a
 pat a : Type, n : Nat, x : a, xs : Vect n a =>

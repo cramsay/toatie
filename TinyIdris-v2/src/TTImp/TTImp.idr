@@ -50,6 +50,7 @@ data ImpDecl : Type where
      IClaim : ImpTy -> ImpDecl
      IData : ImpData -> ImpDecl
      IDef : Name -> List ImpClause -> ImpDecl
+     IImport : String -> ImpDecl
 
 export
 apply : RawImp -> List (AppInfo, RawImp) -> RawImp

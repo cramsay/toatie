@@ -11,6 +11,7 @@ import        Data.List
 import        Data.List.Views
 import        Data.List1
 import        Data.Strings
+import        Data.String.Extra
 
 import Debug.Trace
 
@@ -395,11 +396,19 @@ dataDecl fname indents
          cs <- block (tyDecl fname)
          pure (MkImpData n info ty cs)
 
+import_ : FileName -> IndentInfo -> Rule String
+import_ fname indents
+  = do keyword "import"
+       ns <- namespacedIdent
+       pure . join "." $ reverse ns
+
 -- Declared at the top
 -- topDecl : FileName -> IndentInfo -> Rule ImpDecl
 topDecl fname indents
     = do dat <- dataDecl fname indents
          pure (IData dat)
+  <|> do impstr <- import_ fname indents
+         pure (IImport impstr)
   <|> do claim <- tyDecl fname indents
          pure (IClaim claim)
   <|> definition fname indents

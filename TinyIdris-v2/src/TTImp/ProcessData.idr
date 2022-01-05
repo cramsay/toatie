@@ -19,7 +19,10 @@ processCon : {auto c : Ref Ctxt Defs} ->
 processCon (MkImpTy n ty)
     = do (tychk, _) <- checkTerm [] ty (Just gType)
          -- Exercise: What other checks are needed?
-         -- Name doesn't exist; return type is the data type we're defining
+         -- return type is the data type we're defining
+         defs <- get Ctxt
+         Nothing <- lookupDef n defs
+           | Just gdef => throw (GenericMsg ("Multiple type declarations for " ++ show n))
          pure (n, tychk)
 
 export
@@ -28,7 +31,12 @@ processData : {auto c : Ref Ctxt Defs} ->
               {auto s : Ref Stg Stage} ->
               ImpData -> Core ()
 processData (MkImpData n info tycon datacons)
-    = do (tychk, _) <- checkTerm [] tycon (Just gType)
+    = do -- Check if we've already defined this name
+         defs <- get Ctxt
+         Nothing <- lookupDef n defs
+           | Just gdef => throw (GenericMsg ("Multiple declarations for " ++ show n))
+
+         (tychk, _) <- checkTerm [] tycon (Just gType)
          -- Add it to the context before checking data constructors
          -- Exercise: We should also check whether it's already defined!
          defs <- get Ctxt

@@ -136,6 +136,8 @@ processDef n clauses
     = do defs <- get Ctxt
          Just gdef <- lookupDef n defs
               | Nothing => throw (GenericMsg ("No type declaration for " ++ show n))
+         let None = definition gdef
+           | _ => throw (GenericMsg ("Multiple bodies definied for " ++ show n))
          chkcs <- traverse processClause clauses
 
          -- Now we have all the clauses, make a case tree

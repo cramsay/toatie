@@ -51,12 +51,14 @@ repl = do coreLift $ putStr "> "
 
           repl
 
-runMain : List ImpDecl -> Core ()
-runMain decls
+runMain : FileName -> List ImpDecl -> Core ()
+runMain fname decls
     = do c <- newRef Ctxt !initDefs
          u <- newRef UST initUState
          s <- newRef Stg (the Stage 0)
-         traverse_ processDecl decls
+         m <- newRef Mods []
+         dirs <- defaultModulePaths fname
+         traverse_ (processDecl dirs) decls
          repl
 
 banner : String
@@ -82,6 +84,6 @@ main = do [_, fname] <- getArgs
           Right decls <- parseFile fname (do p <- prog fname; eoi; pure p)
               | Left err => printLn err
           putStrLn banner
-          coreRun (runMain decls)
+          coreRun (runMain fname decls)
                   (\err => printLn err)
                   pure

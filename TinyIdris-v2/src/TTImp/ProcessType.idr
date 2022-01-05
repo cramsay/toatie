@@ -19,6 +19,8 @@ processType : {auto c : Ref Ctxt Defs} ->
               {auto s : Ref Stg Stage} ->
               Name -> RawImp -> Core ()
 processType n ty
-    = do (tychk, _) <- checkTerm [] ty (Just gType)
-         -- Exercise: We should also check whether it's already defined!
+    = do defs <- get Ctxt
+         Nothing <- lookupDef n defs
+           | Just gdef => throw (GenericMsg ("Multiple type declarations for " ++ show n))
+         (tychk, _) <- checkTerm [] ty (Just gType)
          addDef n (newDef tychk None)
