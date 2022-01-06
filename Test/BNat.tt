@@ -1,26 +1,12 @@
--- An example of using proofs with the Leibniz equality
+-- An example of bounded natural numbers using proofs with the Leibniz equality
 --
 -- We work towards a bounded natural number (BNat) whose upper limit is encoded in its type.
 -- (Similar to `Fin`)
 --
 -- Addition of two BNats requires a proof that (S n) + m === n + (S m)
---
--- We use implicits to ensure that our logical proof is completely erased in in the circuit
--- (See eq_ind2 in Barras' paper "The Implicit Calculus of Constructions as a
---  Programming Language with Dependent Types")
 
 import Data.Nat
-
--- Proof that S commutes under plus
--- i.e. (n+1) + m === n + (m+1)
-plusSComm : {p : (Nat -> Type)}    -> -- Given a property, p
-            {n : Nat} -> {m : Nat} -> -- And two Nats, n & m
-            p (plus (S n) m)       -> -- If the property holds for Sn + m
-            p (plus n (S m))          -- We prove that it holds for n + Sm
-pat p : (Nat -> Type), m : Nat, h : p (plus (S Z) m) =>
-  plusSComm {p} {Z} {m} h = h
-pat p : (Nat -> Type), n : Nat, m : Nat, h : p (plus (S (S n)) m) =>
-  plusSComm {p} {(S n)} {m} h = plusSComm {(\y : Nat => p (S y))} {n} {m} h
+import Proofs
 
 -- Bounded Nats
 data BNat : Nat -> Type where
@@ -32,6 +18,16 @@ natToBNat : (x : Nat) -> BNat x
 natToBNat Z = BZ {Z}
 pat n : Nat =>
   natToBNat (S n) = BS {n} (natToBNat n)
+
+-- Take our equality from plusSuccRightSucc and convert it to a type-coersion style function
+-- via eqInd2. We'll need this for our BNat example.
+lemmaSRS : {n : Nat} -> {m : Nat} -> -- And two Nats, n & m
+           BNat (plus (S n) m)       -> -- If the property holds for Sn + m
+           BNat (plus n (S m))          -- We prove that it holds for n + Sm
+pat n, m : Nat, val : BNat (plus (S n) m) =>
+  lemmaSRS {n} {m} val
+    = eqInd2 {Nat} {(plus (S n) m)} {(plus n (S m))}
+             {(plusSuccRightSucc n m)} {BNat} val
 
 -- Additions of two BNats, preserving their bounds.
 -- This relies on our proof of plusSComm
@@ -47,14 +43,14 @@ pat r1 : Nat, r2 : Nat, y : BNat r2 =>
   plusB {r1} {(S r2)} (BZ {r1}) (BS {r2} y)
     = let rec : BNat (S (plus r1 r2))
               = BS {(plus r1 r2)} (plusB {r1} {r2} (BZ {r1}) y)
-      in plusSComm {BNat} {r1} {r2} rec
+      in lemmaSRS {r1} {r2} rec
 
 pat r1 : Nat, r2 : Nat, x : BNat r1, y : BNat r2 =>
   plusB {(S r1)} {r2} (BS {r1} x) y
     = BS {(plus r1 r2)} (plusB {r1} {r2} x y)
 
--- + -- Bugs:
--- + -- Parsing compound expr inside { }... needs inner brackets just now
--- + --
--- + -- Examples at REPL:
--- + -- > plusB {3} {2} (BS {2} (BZ {2})) (natToBNat 2)
+-- Bugs:
+-- Parsing compound expr inside { }... needs inner brackets just now
+--
+-- Examples at REPL:
+-- > plusB {3} {2} (BS {2} (BZ {2})) (natToBNat 2)

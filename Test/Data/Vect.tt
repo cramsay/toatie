@@ -13,16 +13,16 @@ tail : {a : Type} -> {n : Nat} -> Vect (S n) a -> Vect n a
 pat a : Type, n : Nat, x : a, xs : Vect n a =>
   tail {a} {n} (VCons {a} {n} x xs) = xs
 
+-- In append, we can keep n and m implicit since we can just pattern match on
+-- the constuctors of the Vects. Later with unrollMaps and unrollFoldl, we'll
+-- see that we need n to be explicit since we're not pattern matching on Vects
+-- (it's inside the quote)
+
 append : {a : Type} -> {n : Nat} -> {m : Nat} -> Vect n a -> Vect m a -> Vect (plus n m) a
 pat a : Type, m : Nat, ys : Vect m a =>
   append {a} {Z} {m} (VNil {a}) ys = ys
 pat a : Type, n : Nat, m : Nat, x : a, xs : Vect n a, ys : Vect m a =>
   append {a} {(S n)} {m} (VCons {a} {n} x xs) ys = VCons {a} {(plus n m)} x (append {a} {n} {m} xs ys)
-
--- TODO:
---
--- * Finish examples here
--- * Should we use implicit arguments if we can?  == Yes! If all explicit args are synthable, we can use it in a circuit!
 
 unrollMap : (n : Nat) -> {a : Type} -> {b : Type} ->
             (f : < a -> b >) ->
@@ -37,29 +37,18 @@ pat n : Nat, a : Type, b : Type, f : < a->b > =>
        in VCons {b} {n} y ys
   |]
 
---umap : {n : Nat} -> {a : Type} -> {b : Type} ->
---       (f : < a -> b>) ->
---       < Vect n a > -> < Vect n b >
---pat a : Type, b : Type, f : <a->b>, n : Nat =>
---  umap {Z} {a} {b} f ([| VNil {a} |]) = [| VNil {b} |]
---pat a : Type, b : Type, f : <a->b>, n : Nat, x : a, xs : Vect n a =>
---  umap {(S n)} {a} {b} f ([| VCons {a} {n} x xs |]) = [| VCons {b} {n} ((~f) x) (~(umap {n} {a} {b} f [|xs|])) |]
---
---unrollMap3S : <Vect 3 Nat -> Vect 3 Nat>
---unrollMap3S = unrollMap {3} {Nat} {Nat} [| S |]
---
---unrollFoldl : {n : Nat} -> {acc : Type} -> {elem : Type} ->
---              (f : < acc -> elem -> acc >) ->
---              (init : <acc>) ->
---              < Vect n elem -> acc >
---pat acc : Type, elem : Type, f : <acc->elem->acc>, init : <acc> =>
---  unrollFoldl {Z} {acc} {elem} f init = [| \xs : Vect Z elem => ~init |] 
---pat n : Nat, acc : Type, elem : Type, f : <acc->elem->acc>, init : <acc> =>
---  unrollFoldl {(S n)} {acc} {elem} f init = [|
---    \xs : Vect (S n) elem =>
---      let init' = ~f ~init (head {elem} {n} xs)
---      in ~(unrollFoldl {n} {acc} {elem} f [| init' |]) (tail {elem} {n} xs)
---  |]
+unrollFoldl : (n : Nat) -> {acc : Type} -> {elem : Type} ->
+              (f : < acc -> elem -> acc >) ->
+              (init : <acc>) ->
+              < Vect n elem -> acc >
+pat acc : Type, elem : Type, f : <acc->elem->acc>, init : <acc> =>
+  unrollFoldl Z {acc} {elem} f init = [| \xs : Vect Z elem => ~init |] 
+pat n : Nat, acc : Type, elem : Type, f : <acc->elem->acc>, init : <acc> =>
+  unrollFoldl (S n) {acc} {elem} f init = [|
+    \xs : Vect (S n) elem =>
+      let init' = ~f ~init (head {elem} {n} xs)
+      in ~(unrollFoldl n {acc} {elem} f [| init' |]) (tail {elem} {n} xs)
+  |]
 
 --wrong : {x : Nat} -> Nat
 --pat {x : Nat} =>
@@ -71,13 +60,13 @@ pat n : Nat, a : Type, b : Type, f : < a->b > =>
 -- > \a:Nat => \b:Nat => \c:Nat => append {Nat} {2} {1} [a,b] [c]
 --
 -- We can see the the main unrolling easily
--- > unrollMap {3} {Nat} {Nat} [| S |]
+-- > unrollMap 3 {Nat} {Nat} [| S |]
 --
 -- ...but those head and tail functions still aren't evaluated by the escape.
 -- We can force this by giving names to each of the elements in the vector
--- > \a:Nat => \b:Nat => \c:Nat => !(unrollMap {3} {Nat} {Nat} [| S |]) [a,b,c]
+-- > \a:Nat => \b:Nat => \c:Nat => !(unrollMap 3 {Nat} {Nat} [| S |]) [a,b,c]
 --
 -- That's the core of how we will flatten functions for recursive data types.
 --
 -- Trying with unrollFoldl:
--- > \init:Nat => \a:Nat => \b:Nat => \c:Nat => !(unrollFoldl {3} {Nat} {Nat} [| plus |] [|init|]) [a,b,c]
+-- > \init:Nat => \a:Nat => \b:Nat => \c:Nat => !(unrollFoldl 3 {Nat} {Nat} [| plus |] [|init|]) [a,b,c]
