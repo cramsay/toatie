@@ -22,7 +22,7 @@ append : {a : Type} -> {n : Nat} -> {m : Nat} -> Vect n a -> Vect m a -> Vect (p
 pat a : Type, m : Nat, ys : Vect m a =>
   append {a} {Z} {m} (VNil {a}) ys = ys
 pat a : Type, n : Nat, m : Nat, x : a, xs : Vect n a, ys : Vect m a =>
-  append {a} {(S n)} {m} (VCons {a} {n} x xs) ys = VCons {a} {(plus n m)} x (append {a} {n} {m} xs ys)
+  append {a} {S n} {m} (VCons {a} {n} x xs) ys = VCons {a} {plus n m} x (append {a} {n} {m} xs ys)
 
 unrollMap : (n : Nat) -> {a : Type} -> {b : Type} ->
             (f : < a -> b >) ->

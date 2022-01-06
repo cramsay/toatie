@@ -40,7 +40,7 @@ eqInd2 : {A : Type} ->
          (val : P x) ->
          P y
 pat A : Type, x : A, P : (A -> Type), val : P x =>
-  eqInd2 {A} {x} {x} {(Refl {A} {x})} {P} val = val
+  eqInd2 {A} {x} {x} {Refl {A} {x}} {P} val = val
 
 eqSym : {A : Type} ->
         {x : A} ->
@@ -64,7 +64,7 @@ eqCong : {A,B : Type} ->
          (p : Equal A x y) ->
          Equal B (f x) (f y)
 pat A, B : Type, f : (A->B), x : A =>
-  eqCong {A} {B} {f} {x} {x} (Refl {A} {x}) = Refl {B} {(f x)}
+  eqCong {A} {B} {f} {x} {x} (Refl {A} {x}) = Refl {B} {f x}
          
 
 -- Let's try to prove some of the Nat properties from Idris2's base Nat library
@@ -74,7 +74,7 @@ natEqSucc : {left, right : Nat} ->
             Equal Nat left right ->
             Equal Nat (S left) (S right)
 pat left : Nat =>
-  natEqSucc {left} {left} (Refl {Nat} {left}) = Refl {Nat} {(S left)}
+  natEqSucc {left} {left} (Refl {Nat} {left}) = Refl {Nat} {S left}
   -- Still makes me uncomfortable pattern matching on left left
   -- Also, our nats are all implicit since we're only pattern matching on the equality proof
 
@@ -82,7 +82,7 @@ natSuccInjective : {left, right : Nat} ->
                    Equal Nat (S left) (S right) ->
                    Equal Nat left right
 pat left : Nat =>
-  natSuccInjective {left} {left} (Refl {Nat} {(S left)}) = Refl {Nat} {left}
+  natSuccInjective {left} {left} (Refl {Nat} {S left}) = Refl {Nat} {left}
 
 plusZeroLeftNeutral : (right : Nat) -> Equal Nat (plus 0 right) right
 pat right : Nat =>
@@ -93,12 +93,12 @@ plusZeroRightNeutral Z = Refl {Nat} {Z}
 pat left : Nat =>
   plusZeroRightNeutral (S left)
     = let h = plusZeroRightNeutral left
-      in eqCong {Nat} {Nat} {S} {(plus left 0)} {left} h
+      in eqCong {Nat} {Nat} {S} {plus left 0} {left} h
 
 plusSuccRightSucc : (left, right : Nat) -> Equal Nat (S (plus left right)) (plus left (S right))
 pat right : Nat =>
-  plusSuccRightSucc Z right = Refl {Nat} {(S right)}
+  plusSuccRightSucc Z right = Refl {Nat} {S right}
 pat left, right : Nat =>
   plusSuccRightSucc (S left) right
     = let h = plusSuccRightSucc left right
-      in eqCong {Nat} {Nat} {S} {(S (plus left right))} {(plus left (S right))} h
+      in eqCong {Nat} {Nat} {S} {S (plus left right)} {plus left (S right)} h

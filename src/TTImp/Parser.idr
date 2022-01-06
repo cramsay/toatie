@@ -115,7 +115,7 @@ mutual
     where
       impArg : Rule (AppInfo, RawImp)
       impArg = do symbol "{"
-                  arg <- simpleExpr fname indents
+                  arg <- expr fname indents
                   symbol "}"
                   pure (AImplicit, arg)
       expArg : Rule (AppInfo, RawImp)
