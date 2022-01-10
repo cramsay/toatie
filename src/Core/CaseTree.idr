@@ -85,7 +85,12 @@ mkPat' i args orig (Ref Bound n) = PLoc i n
 mkPat' i args orig (Ref (DataCon t a) n) = PCon i n t a args
 mkPat' i args orig (App info fn arg)
     = let parg = mkPat' i [] arg arg in
-                 mkPat' i ((info, parg) :: args) orig fn
+                 mkPat' i ((combineInfo info i, parg) :: args) orig fn
+  where
+  combineInfo : AppInfo -> AppInfo -> AppInfo
+  combineInfo AImplicit _ = AImplicit
+  combineInfo _ AImplicit = AImplicit
+  combineInfo _ _         = AExplicit
 mkPat' i args orig tm = PUnmatchable orig
 
 export

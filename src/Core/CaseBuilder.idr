@@ -202,12 +202,12 @@ clauseType (MkPatClause pvars (MkInfo arg _ ty :: rest) rhs)
   where
     -- used to get the remaining clause types
     clauseType' : Pat -> ClauseType
-    clauseType' (PCon AExplicit _ _ _ xs) = ConClause -- TODO Circuit runtime, want AExplicit. Compile time, want _
+    clauseType' (PCon _ _ _ _ xs) = ConClause -- TODO Circuit runtime, want AExplicit. Compile time, want _
                                                       -- TODO think about if we can use explicit -> implicit applications
     clauseType' _               = VarClause
 
     getClauseType : Pat -> ClauseType
-    getClauseType (PCon AExplicit _ _ _ xs) = ConClause
+    getClauseType (PCon _ _ _ _ xs) = ConClause
     getClauseType l = clauseType' l
 
 partition : {a, as, vars : _} ->
@@ -285,10 +285,10 @@ nextName root
 nextNames : {vars : _} ->
             {auto i : Ref PName Int} ->
             {auto c : Ref Ctxt Defs} ->
-            String -> List Pat -> Maybe (NF vars) ->
+            String -> List (AppInfo, Pat) -> Maybe (NF vars) ->
             Core (args ** NamedPats (args ++ vars) args)
 nextNames root [] fty = pure ([] ** [])
-nextNames {vars} root (p :: pats) fty
+nextNames {vars} root ((pi, p) :: pats) fty
      = do defs <- get Ctxt
           empty <- clearDefs defs
           n <- nextName root
@@ -309,7 +309,12 @@ nextNames {vars} root (p :: pats) fty
                            Unknown => Unknown
                            Known t => Known (weakenNs (n :: args) t)
                            Stuck t => Stuck (weakenNs (n :: args) t)
-          pure (n :: args ** MkInfo p First argTy :: weaken ps)
+          pure (n :: args ** MkInfo (updatePatInfo pi p) First argTy :: weaken ps)
+  where
+  updatePatInfo : AppInfo -> Pat -> Pat
+  updatePatInfo i (PCon x y tag arity xs) = PCon i y tag arity xs
+  updatePatInfo i (PLoc x y) = PLoc i y
+  updatePatInfo i (PUnmatchable x) = PUnmatchable x
 
 -- replace the prefix of patterns with 'pargs'
 newPats : (pargs : List Pat) -> LengthMatch pargs ns ->
@@ -368,7 +373,7 @@ groupCons fn pvars cs
                               Just t <- lookupDef n defs
                                    | Nothing => pure NErased
                               nf defs (mkEnv vars') (embed (type t))
-             (patnames ** newargs) <- nextNames {vars=vars'} "e" (map snd pargs) (Just cty)
+             (patnames ** newargs) <- nextNames {vars=vars'} "e" (pargs) (Just cty)
              -- Update non-linear names in remaining patterns (to keep
              -- explicit dependencies in types accurate)
              let pats' = updatePatNames (updateNames (zip patnames (map snd pargs)))
@@ -538,7 +543,7 @@ pickNext {ps = q :: qs} fn npss
 isAccessible : Pat -> Bool
 isAccessible (PCon i cn tag arity xs) = i == AExplicit
 isAccessible (PLoc i vn) = i == AExplicit
-isAccessible (PUnmatchable tm) = True
+isAccessible (PUnmatchable tm) = False
 
 splitByAccess : {ns, ps : _} -> NamedPats ns ps -> ((aps ** NamedPats ns aps)
                                                    ,(ips ** NamedPats ns ips))
