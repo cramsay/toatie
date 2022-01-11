@@ -6,6 +6,7 @@ import Core.Env
 import public Core.TT
 
 import Data.SortedMap
+import Data.String
 
 public export
 data Def : Type where
@@ -111,3 +112,20 @@ updateDef n upd
          Just gdef <- lookupDef n defs
               | Nothing => throw (UndefinedName n)
          addDef n (upd gdef)
+
+export
+Show Def where
+  show None = "None"
+  show (PMDef args treeCT) = "PMDef [" ++ show args ++ "] " ++ show treeCT
+  show (DCon tag arity) = "DCon " ++ show tag ++ " " ++ show arity
+  show (TCon x tag arity) = "TCon " ++ show x ++ " " ++ show tag ++ " " ++ show arity
+  show Hole = "Hole"
+  show (Guess guess constraints) = "Guess " ++ show guess ++ " " ++ show constraints
+
+export
+Show GlobalDef where
+  show (MkGlobalDef type definition) = show definition ++ " : " ++ show type
+
+export
+Show Defs where
+  show d = unlines . map show $ toList d

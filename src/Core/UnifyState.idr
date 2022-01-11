@@ -176,3 +176,9 @@ newConstant {vars} env tm ty constrs
     envArgs : List (Term vars)
     envArgs = let args = reverse (mkConstantAppArgs {done = []} env []) in
                   rewrite sym (appendNilRightNeutral vars) in args
+
+export
+Show Constraint where
+  show (MkConstraint env x y) = show x ++ " ~~~ " ++ show y
+  show (MkSeqConstraint env xs ys) = show $ map (\(x,y)=>show x ++ " ~~~ " ++ show y) (zip xs ys)
+  show Resolved = "Resolved!"

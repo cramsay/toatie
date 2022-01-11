@@ -14,6 +14,7 @@ import TTImp.TTImp
 
 import Data.Maybe
 import Data.List
+import Data.SortedMap
 
 getRHSEnv : {vars : _} ->
             Env Term vars -> Term vars -> Term vars ->
@@ -124,6 +125,11 @@ processClause (PatClause lhs rhs)
 
          defs <- get Ctxt
          rhsnf <- normalise defs env rhstm
+
+         ust <- get UST
+         let [] = SortedMap.toList $ constraints ust
+                | cs => throw (GenericMsg $ "Constraints present after processing clause: "
+                               ++ show (map snd cs))
 
          pure (MkClause env lhsenv rhstm) --rhsnf)
 
