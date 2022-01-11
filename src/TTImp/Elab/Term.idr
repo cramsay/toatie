@@ -3,6 +3,7 @@ module TTImp.Elab.Term
 import Core.Context
 import Core.Core
 import Core.Env
+import Core.Extraction
 import Core.Normalise
 import Core.TT
 import Core.Unify

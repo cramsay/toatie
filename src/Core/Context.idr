@@ -62,6 +62,10 @@ export
 clearDefs : Defs -> Core Defs
 clearDefs d = pure empty
 
+export
+mapDefs : Defs -> (GlobalDef -> GlobalDef) -> Core Defs
+mapDefs d f = pure . fromList $ map (\(k,v) => (k, f v)) (toList d)
+
 -- A phantom type for finding references to the context
 export
 data Ctxt : Type where

@@ -7,7 +7,8 @@ import Core.Normalise
 import Core.TT
 import Core.UnifyState
 import Core.CaseTree
---import Core.Erasure
+import Core.Extraction
+import Core.Context
 
 import TTImp.Elab.Term
 
@@ -20,6 +21,7 @@ import Parser.Source
 import System
 import Data.List
 import Data.Maybe
+import Data.SortedMap
 
 repl : {auto c : Ref Ctxt Defs} ->
        {auto u : Ref UST UState} ->
@@ -37,17 +39,8 @@ repl = do coreLift $ putStr "> "
           nf <- normalise defs [] tm
           coreLift $ putStrLn $ "Evaluated: " ++ show nf
 
-          -- -- Print out erasure analysis
-          --let tmpMain = UN "main"
-          --let defMain = MkGlobalDef { definition = PMDef [] (STerm nf) , type = !(getTerm ty) }
-          --addDef tmpMain defMain
-          --defs' <- get Ctxt
-          --(usedNames, useMap) <- performUsageAnalysis defs' [tmpMain]
-          --coreLift $ putStrLn $ "Used Names: " ++ show usedNames
-          --coreLift $ putStrLn $ "Use Map: " ++ show useMap
-
-          -- Print out extraction of our term too
-          coreLift $ putStrLn $ "Extraction: " ++ (show $ extraction nf)
+          -- Show extracted versions too
+          coreLift $ putStrLn $ "Extraction Evaluated: " ++ show (extraction nf)
 
           repl
 
