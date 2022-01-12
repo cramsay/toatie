@@ -80,6 +80,28 @@ removeHole n
          put UST (record { holes $= delete n } ust)
 
 export
+saveHoles : {auto u : Ref UST UState} ->
+            Core (SortedSet Name)
+saveHoles
+  = do ust <- get UST
+       put UST (record { holes = empty } ust)
+       pure (holes ust)
+
+export
+getHoles : {auto u : Ref UST UState} ->
+            Core (SortedSet Name)
+getHoles
+  = do ust <- get UST
+       pure (holes ust)
+
+export
+restoreHoles : {auto u : Ref UST UState} ->
+               SortedSet Name -> Core ()
+restoreHoles hs
+  = do ust <- get UST
+       put UST (record { holes = hs } ust)
+
+export
 addConstraint : {auto u : Ref UST UState} ->
                 Constraint -> Core Int
 addConstraint constr

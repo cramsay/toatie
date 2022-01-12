@@ -3,6 +3,7 @@ module Core.CaseTree
 import Core.TT
 
 import Data.List
+import Data.SortedMap
 
 mutual
   -- Case trees
@@ -84,8 +85,8 @@ mkPat' : AppInfo -> List (AppInfo, Pat) -> Term [] -> Term [] -> Pat
 mkPat' i args orig (Ref Bound n) = PLoc i n
 mkPat' i args orig (Ref (DataCon t a) n) = PCon i n t a args
 mkPat' i args orig (App info fn arg)
-    = let parg = mkPat' i [] arg arg in
-                 mkPat' i ((combineInfo info i, parg) :: args) orig fn
+    = let parg = mkPat' (combineInfo info i) [] arg arg
+      in mkPat' i ((combineInfo info i, parg) :: args) orig fn
   where
   combineInfo : AppInfo -> AppInfo -> AppInfo
   combineInfo AImplicit _ = AImplicit
@@ -110,69 +111,83 @@ mkTerm vars (PUnmatchable tm) = embed tm
 
 -- Show instances
 
+showCT : {vars : _} -> (indent : String) -> CaseTree vars -> String
+showCA : {vars : _} -> (indent : String) -> CaseAlt vars  -> String
+
+showCT indent (Case {name} idx prf ty alts)
+  = "case " ++ show name ++ "[" ++ show idx ++ "] : " ++ show ty ++ " of"
+  ++ "\n" ++ indent ++ " { "
+  ++ showSep ("\n" ++ indent ++ " | ")
+             (assert_total (map (showCA ("  " ++ indent)) alts))
+  ++ "\n" ++ indent ++ " }"
+showCT indent (STerm tm) = show tm
+showCT indent (Unmatched msg) = "Error: " ++ show msg
+showCT indent Impossible = "Impossible"
+
+showCA indent (ConCase n tag args sc)
+        = showSep " " (map show (n :: args)) ++ " => " ++
+          showCT indent sc
+showCA indent (DefaultCase sc)
+        = "_ => " ++ showCT indent sc
+
+export
+{vars : _} -> Show (CaseTree vars) where
+  show = showCT ""
+
+export
+{vars : _} -> Show (CaseAlt vars) where
+  show = showCA ""
+
+{-
 mutual
   export
-  {vars : _} -> Show (CaseTree vars) where
-    show (Case {name} idx prf ty alts)
-        = "case " ++ show name ++ "[" ++ show idx ++ "] : " ++ show ty ++ " of { " ++
-                showSep " | " (assert_total (map show alts)) ++ " }"
-    show (STerm tm) = show tm
-    show (Unmatched msg) = "Error: " ++ show msg
-    show Impossible = "Impossible"
+  eqTree : CaseTree vs -> CaseTree vs' -> Bool
+  eqTree (Case i _ _ alts) (Case i' _ _ alts')
+      = i == i'
+       && length alts == length alts'
+       && all (uncurry eqAlt) (zip alts alts')
+  eqTree (STerm t) (STerm t') = eqTerm t t'
+  eqTree (Unmatched _) (Unmatched _) = True
+  eqTree Impossible Impossible = True
+  eqTree _ _ = False
 
-  export
-  {vars : _} -> Show (CaseAlt vars) where
-    show (ConCase n tag args sc)
-        = show n ++ " " ++ showSep " " (map show args) ++ " => " ++
-          show sc
-    show (DefaultCase sc)
-        = "_ => " ++ show sc
-{-
-
-
-  -- ORIGINAL CLAUSES
-
-  [ ["(pat = {{pat0::2}}, name = {arg:0}, argType = Known Type)",
-     "(pat = {Z(0, 0)[]}, name = {arg:1}, argType = Known Nat)",
-     "(pat = {{pat0::1}}, name = {arg:2}, argType = Known Nat)",
-     "(pat = VNil(0, 1)[(Implicit, ({pat0::2}))], name = {arg:3}, argType = Known (Vect {arg:1} {arg:0}))",
-     "(pat = ({pat0::0}), name = {arg:4}, argType = Known (Vect {arg:2} {arg:0}))"
-    ],
-
-    ["(pat = {{pat1::5}}, name = {arg:0}, argType = Known Type)",
-     "(pat = {S(1, 1)[(Explicit, {{pat1::4}})]}, name = {arg:1}, argType = Known Nat)",
-     "(pat = {{pat1::3}}, name = {arg:2}, argType = Known Nat)",
-     "(pat = VCons(1, 4)[(Implicit, ({pat1::5})), (Implicit, ({pat1::4})), (Explicit, ({pat1::2})), (Explicit, ({pat1::1}))], name = {arg:3}, argType = Known (Vect {arg:1} {arg:0}))",
-     "(pat = ({pat1::0}), name = {arg:4}, argType = Known (Vect {arg:2} {arg:0}))"]]
-
-  -- PASS 1
-  [ ["(pat = {Z(0, 0)[]}, name = {arg:1}, argType = Known Nat)",
-     "(pat = {{pat0::1}}, name = {arg:2}, argType = Known Nat)",
-     "(pat = VNil(0, 1)[(Implicit, ({pat0::2}))], name = {arg:3}, argType = Known (Vect {arg:1} {arg:0}[0]))",
-     "(pat = ({pat0::0}), name = {arg:4}, argType = Known (Vect {arg:2} {arg:0}[0]))"
-    ],
-
-    ["(pat = {S(1, 1)[(Explicit, {{pat1::4}})]}, name = {arg:1}, argType = Known Nat)",
-     "(pat = {{pat1::3}}, name = {arg:2}, argType = Known Nat)",
-     "(pat = VCons(1, 4)[(Implicit, ({pat1::5})), (Implicit, ({pat1::4})), (Explicit, ({pat1::2})), (Explicit, ({pat1::1}))], name = {arg:3}, argType = Known (Vect {arg:1} {arg:0}[0]))",
-     "(pat = ({pat1::0}), name = {arg:4}, argType = Known (Vect {arg:2} {arg:0}[0]))"]
-    ]
-
-  Got rid of patterns for arg:0 (pat0::2 and pat1::5) via VAR
-
-
-  -- PASS 2
-    [["(pat = {{pat0::1}}, name = {arg:2}, argType = Known Nat)",
-      "(pat = VNil(0, 1)[(Implicit, ({pat0::2}))], name = {arg:3}, argType = Known (Vect 0 {arg:0}[0]))",
-      "(pat = ({pat0::0}), name = {arg:4}, argType = Known (Vect {arg:2} {arg:0}[0]))"],
-
-     ["(pat = {{pat1::3}}, name = {arg:2}, argType = Known Nat)",
-      "(pat = VCons(1, 4)[(Implicit, ({pat1::5})), (Implicit, ({pat1::4})), (Explicit, ({pat1::2})), (Explicit, ({pat1::1}))], name = {arg:3}, argType = Known (Vect (S {pat1::4}) {arg:0}[0]))",
-      "(pat = ({pat1::0}), name = {arg:4}, argType = Known (Vect {arg:2} {arg:0}[0]))"]
-      ]
-
-  We're trying to VAR on the implicit length patterns...
-    Z creeps into the first clause's vect type
-    the second clause's vect type references pat1::4, which used to exist but we've just VARed on it! Should we be replacing (S pat1::4) with arg:1?
-
+  eqAlt : CaseAlt vs -> CaseAlt vs' -> Bool
+  eqAlt (ConCase n t args tree) (ConCase n' t' args' tree')
+      = n == n' && eqTree tree tree' -- assume arities match, since name does
+  eqAlt (DefaultCase tree) (DefaultCase tree')
+      = eqTree tree tree'
+  eqAlt _ _ = False
 -}
+
+
+total
+getNames : (forall vs . SortedMap Name Bool -> Term vs -> SortedMap Name Bool) ->
+           SortedMap Name Bool -> CaseTree vars -> SortedMap Name Bool
+getNames add ns sc = getSet ns sc
+  where
+    mutual
+      getAltSet : SortedMap Name Bool -> CaseAlt vs -> SortedMap Name Bool
+      getAltSet ns (ConCase n t args sc) = getSet ns sc
+      getAltSet ns (DefaultCase sc) = getSet ns sc
+
+      getAltSets : SortedMap Name Bool -> List (CaseAlt vs) -> SortedMap Name Bool
+      getAltSets ns [] = ns
+      getAltSets ns (a :: as) = getAltSets (getAltSet ns a) as
+
+      getSet : SortedMap Name Bool -> CaseTree vs -> SortedMap Name Bool
+      getSet ns (Case _ x ty xs) = getAltSets ns xs
+      getSet ns (STerm tm) = add ns tm
+      getSet ns (Unmatched msg) = ns
+      getSet ns Impossible = ns
+
+export
+getRefs : (aTotal : Name) -> CaseTree vars -> SortedMap Name Bool
+getRefs at = getNames (addRefs False at) empty
+
+export
+addRefs : (aTotal : Name) -> SortedMap Name Bool -> CaseTree vars -> SortedMap Name Bool
+addRefs at ns = getNames (addRefs False at) ns
+
+export
+getMetas : CaseTree vars -> SortedMap Name Bool
+getMetas = getNames addMetas empty

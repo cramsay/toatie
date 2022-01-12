@@ -8,6 +8,7 @@ import Core.Normalise
 import Core.TT
 import Core.UnifyState
 import Core.Value
+import Core.Unify
 
 import TTImp.Elab.Term
 import TTImp.TTImp
@@ -15,6 +16,132 @@ import TTImp.TTImp
 import Data.Maybe
 import Data.List
 import Data.SortedMap
+import Data.String
+
+mutual
+  mismatchNF : {auto c : Ref Ctxt Defs} ->
+               {vars : _} ->
+               Defs -> NF vars -> NF vars -> Core Bool
+  mismatchNF defs (NTCon xn _ xt _ xargs) (NTCon yn _ yt _ yargs)
+      = if xn /= yn
+           then pure True
+           else anyM (mismatch defs) (zipWith (curry $ mapHom snd) xargs yargs)
+  mismatchNF defs (NDCon _ xt _ xargs) (NDCon _ yt _ yargs)
+      = if xt /= yt
+           then pure True
+           else anyM (mismatch defs) (zipWith (curry $ mapHom snd) xargs yargs)
+  mismatchNF defs (NCode  x) (NCode  y) = mismatchNF defs x y
+  mismatchNF defs (NQuote x) (NQuote y) = mismatchNF defs !(evalClosure defs x) !(evalClosure defs y)
+  mismatchNF defs (NEscape x) (NEscape y) = mismatchNF defs x y
+  mismatchNF _ _ _ = pure False
+
+  mismatch : {auto c : Ref Ctxt Defs} ->
+             {vars : _} ->
+             Defs -> (Closure vars, Closure vars) -> Core Bool
+  mismatch defs (x, y)
+      = mismatchNF defs !(evalClosure defs x) !(evalClosure defs y)
+
+-- If the terms have the same type constructor at the head, and one of
+-- the argument positions has different constructors at its head, then this
+-- is an impossible case, so return True
+export
+impossibleOK : {auto c : Ref Ctxt Defs} ->
+               {vars : _} ->
+               Defs -> NF vars -> NF vars -> Core Bool
+impossibleOK defs (NTCon xn _ xt xa xargs) (NTCon yn _ yt ya yargs)
+    = if xn == yn
+         then anyM (mismatch defs) (zipWith (curry $ mapHom snd) xargs yargs)
+         else pure False
+-- If it's a data constructor, any mismatch will do
+impossibleOK defs (NDCon _ xt _ xargs) (NDCon _ yt _ yargs)
+    = if xt /= yt
+         then pure True
+         else anyM (mismatch defs) (zipWith (curry $ mapHom snd) xargs yargs)
+impossibleOK defs (NTCon _ _ _ _ _) (NType) = pure True
+impossibleOK defs (NType) (NTCon _ _ _ _ _) = pure True
+impossibleOK defs x y = pure False
+
+export
+impossibleErrOK : {auto c : Ref Ctxt Defs} ->
+                  Defs -> Error -> Core Bool
+impossibleErrOK defs (CantConvert env l r)
+    = impossibleOK defs !(nf defs env l)
+                        !(nf defs env r)
+{-
+-- TODO Throw suitable errors and handle them here
+impossibleErrOK defs (CantSolveEq fc env l r)
+    = impossibleOK defs !(nf defs env l)
+                        !(nf defs env r)
+impossibleErrOK defs (BadDotPattern _ _ ErasedArg _ _) = pure True
+impossibleErrOK defs (CyclicMeta _ _ _ _) = pure True
+impossibleErrOK defs (AllFailed errs)
+    = anyM (impossibleErrOK defs) (map snd errs)
+impossibleErrOK defs (WhenUnifying _ _ _ _ err)
+    = impossibleErrOK defs err
+-}
+impossibleErrOK defs _ = pure False
+
+-- If it's a clause we've generated, see if the error is recoverable. That
+-- is, if we have a concrete thing, and we're expecting the same concrete
+-- thing, or a function of something, then we might have a match.
+export
+recoverable : {auto c : Ref Ctxt Defs} ->
+              {vars : _} ->
+              Defs -> NF vars -> NF vars -> Core Bool
+-- Unlike the above, any mismatch will do
+
+-- TYPE CONSTRUCTORS
+recoverable defs (NTCon xn _ xt xa xargs) (NTCon yn _ yt ya yargs)
+    = if xn /= yn
+         then pure False
+         else pure $ not !(anyM (mismatch defs) (zipWith (curry $ mapHom snd) xargs yargs))
+-- Type constructor vs. type
+recoverable defs (NTCon _ _ _ _ _) (NType) = pure False
+recoverable defs (NType) (NTCon _ _ _ _ _) = pure False
+recoverable defs (NTCon _ _ _ _ _) _ = pure True
+recoverable defs _ (NTCon _ _ _ _ _) = pure True
+
+-- DATA CONSTRUCTORS
+recoverable defs (NDCon _ xt _ xargs) (NDCon _ yt _ yargs)
+    = if xt /= yt
+         then pure False
+         else pure $ not !(anyM (mismatch defs) (zipWith (curry $ mapHom snd) xargs yargs))
+recoverable defs (NDCon _ _ _ _) _ = pure True
+recoverable defs _ (NDCon _ _ _ _) = pure True
+
+-- FUNCTION CALLS
+recoverable defs (NApp (NRef _ f) fargs) (NApp (NRef _ g) gargs)
+    = pure True -- both functions; recoverable
+
+-- OTHERWISE: no
+recoverable defs x y = pure False
+
+export
+recoverableErr : {auto c : Ref Ctxt Defs} ->
+                 Defs -> Error -> Core Bool
+recoverableErr defs (CantConvert env l r)
+  = do l <- nf defs env l
+       r <- nf defs env r
+       log "coverage.recover" 10 $ unlines
+         [ "Recovering from CantConvert?"
+         , "Checking:"
+         , "  " ++ show l
+         , "  " ++ show r
+         ]
+       recoverable defs l r
+{-
+-- TODO Throw suitable errors and handle them here
+recoverableErr defs (CantSolveEq env l r)
+    = recoverable defs !(nf defs env l)
+                       !(nf defs env r)
+recoverableErr defs (BadDotPattern _ _ ErasedArg _ _) = pure True
+recoverableErr defs (CyclicMeta _ _ _ _) = pure True
+recoverableErr defs (AllFailed errs)
+    = anyM (recoverableErr defs) (map snd errs)
+recoverableErr defs (WhenUnifying _ _ _ _ err)
+    = recoverableErr defs err
+-}
+recoverableErr defs _ = pure False
 
 getRHSEnv : {vars : _} ->
             Env Term vars -> Term vars -> Term vars ->
@@ -28,7 +155,11 @@ getRHSEnv env (Bind n (PVar stage ty) sc) (Bind n' (PVTy _ _) scty) with (nameEq
       = getRHSEnv (PVar stage ty :: env) sc scty
 getRHSEnv env lhs ty = pure (vars ** (env, lhs, ty))
 
--- List all of the PVar names which are used explicit positions in the LHS
+-- TODO I don't bother with the find/set/combineLinear functions...
+--      I just find names used in an Explicit position at least once
+--      and call it a day. Bad move?
+
+-- List all of the PVar names which are used explicit positions (once or more) in the LHS
 -- Based on idris2's findLinear function
 findExp : {vars : _} ->
              {auto c : Ref Ctxt Defs} ->
@@ -68,6 +199,7 @@ findExp bound tm
           = pure $ !(findExp bound a) ++ !(findExpArg ty as)
       findExpArg _ [] = pure []
 
+-- Easy interface into findExp
 findExpTop : {vars : _} ->
              {auto c : Ref Ctxt Defs} ->
              Term vars ->
@@ -75,6 +207,8 @@ findExpTop : {vars : _} ->
 findExpTop tm = do imps <- findExp (length vars) tm
                    pure $ nub imps
 
+-- Wrap a given rhs term with the binders for all names in env, giving each the accessibility
+-- defined by their presence in the list of explicitly used names
 wrapRHSWithLams : {vars: _} -> Env Term vars -> (exps : List Name) -> (rhs : Term vars) -> Term (vars)
 wrapRHSWithLams [] _ rhs = rhs
 wrapRHSWithLams {vars=v::vs} (b :: bs) exps rhs
@@ -83,6 +217,8 @@ wrapRHSWithLams {vars=v::vs} (b :: bs) exps rhs
         rec = wrapRHSWithLams bs exps $ Bind v (Lam (binderStage b) info ty) rhs
     in weaken $ rec
 
+-- Similar to wrapRHSWithLams but for the _type_ of the RHS
+-- TODO should just combind these two functions
 rhsTypeToPi : {vars: _} -> Env Term vars -> (exps : List Name) -> (rhsty : Term vars) -> Term vars
 rhsTypeToPi [] _ rhsty = rhsty
 rhsTypeToPi {vars=v::vs} (b :: bs) exps rhsty
@@ -105,18 +241,32 @@ processImplicitUse env lhstm rhstm exprhsty
                                <- checkTerm env rhswrap (Just (gnf env exprhsty'))
                             pure ()
 
+processLHS :  {auto c : Ref Ctxt Defs} ->
+              {auto u : Ref UST UState} ->
+              {auto s : Ref Stg Stage} ->
+              {vars : _} ->
+              Env Term vars -> RawImp ->
+              Core (RawImp, -- checkedLHS with implicits added
+                    (vars' ** (Env Term vars'
+                              ,Term vars'
+                              ,Term vars')))
+processLHS {vars} env lhs
+  = do defs <- get Ctxt
+       (lhstm, lhstyg) <- elabTerm InLHS env lhs Nothing
+
+       -- TODO magic
+
+       ret <-  getRHSEnv env lhstm !(getTerm lhstyg)
+       pure (lhs, ret)
+
+
 processClause : {auto c : Ref Ctxt Defs} ->
                 {auto u : Ref UST UState} ->
                 {auto s : Ref Stg Stage} ->
                 ImpClause -> Core Clause
-processClause (PatClause lhs rhs)
+processClause (PatClause lhs_in rhs)
     = do -- Check the LHS
-         (lhstm, lhsty) <- checkTerm [] lhs Nothing
-
-         -- Get the pattern variables from the LHS, and the expected type, 
-         -- and check the RHS in that context
-         (vars ** (env, lhsenv, rhsexp)) <-
-             getRHSEnv [] lhstm !(getTerm lhsty)
+         (lhs, (vars ** (env, lhsenv, rhsexp))) <- processLHS [] lhs_in
 
          (rhstm, rhsty) <- checkTerm env rhs (Just (gnf env rhsexp))
 
@@ -132,6 +282,15 @@ processClause (PatClause lhs rhs)
                                ++ show (map snd cs))
 
          pure (MkClause env lhsenv rhstm) --rhsnf)
+
+nameListEq : (xs : List Name) -> (ys : List Name) -> Maybe (xs = ys)
+nameListEq [] [] = Just Refl
+nameListEq (x :: xs) (y :: ys) with (nameEq x y)
+  nameListEq (x :: xs) (x :: ys) | (Just Refl) with (nameListEq xs ys)
+    nameListEq (x :: xs) (x :: xs) | (Just Refl) | Just Refl= Just Refl
+    nameListEq (x :: xs) (x :: ys) | (Just Refl) | Nothing = Nothing
+  nameListEq (x :: xs) (y :: ys) | Nothing = Nothing
+nameListEq _ _ = Nothing
 
 export
 processDef : {auto c : Ref Ctxt Defs} ->
@@ -152,7 +311,7 @@ processDef n clauses
          -- Update the definition with the compiled tree
          updateDef n (record { definition = PMDef args tree })
 
-         --coreLift $ putStrLn $ "Complete ----------------------"
-         --coreLift $ putStrLn $ "Args = " ++ show args
-         --coreLift $ putStrLn $ "Tree = " ++ show tree
+         coreLift $ putStrLn $ "Complete ----------------------"
+         coreLift $ putStrLn $ "Args = " ++ show args
+         coreLift $ putStrLn $ "Tree = " ++ show tree
          coreLift $ putStrLn $ "Processed " ++ show n

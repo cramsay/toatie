@@ -2,6 +2,7 @@ module Core.TT
 
 import Data.List
 import Data.Maybe
+import Data.SortedMap
 import Decidable.Equality
 import Debug.Trace
 
@@ -448,6 +449,68 @@ substName x new (Eval tm) = Eval $ substName x new tm
 substName x new (Escape tm) = Escape $ substName x new tm
 substName x new tm = tm
 
+export
+addMetas : SortedMap Name Bool -> Term vars -> SortedMap Name Bool
+addMetas ns (Local idx y) = ns
+addMetas ns (Ref nt name) = ns
+addMetas ns (Meta n xs) = addMetaArgs (insert n False ns) xs
+  where
+    addMetaArgs : SortedMap Name Bool -> List (Term vars) -> SortedMap Name Bool
+    addMetaArgs ns [] = ns
+    addMetaArgs ns (t :: ts) = addMetaArgs (addMetas ns t) ts
+addMetas ns (Bind x (Let _ val ty) scope)
+    = addMetas (addMetas (addMetas ns val) ty) scope
+addMetas ns (Bind x b scope)
+    = addMetas (addMetas ns (binderType b)) scope
+addMetas ns (App i fn arg)
+    = addMetas (addMetas ns fn) arg
+addMetas ns (TCode tm) = addMetas ns tm
+addMetas ns (Eval tm) = addMetas ns tm
+addMetas ns (Quote tm) = addMetas ns tm
+addMetas ns (Escape tm) = addMetas ns tm
+addMetas ns (Erased) = ns
+addMetas ns (TType) = ns
+
+-- Get the metavariable names in a term
+export
+getMetas : Term vars -> SortedMap Name Bool
+getMetas tm = addMetas empty tm
+
+export
+addRefs : (underAssert : Bool) -> (aTotal : Name) ->
+          SortedMap Name Bool -> Term vars -> SortedMap Name Bool
+addRefs ua at ns (Local idx y) = ns
+addRefs ua at ns (Ref x name) = insert name ua ns
+addRefs ua at ns (Meta n xs)
+    = addRefsArgs ns xs
+  where
+    addRefsArgs : SortedMap Name Bool -> List (Term vars) -> SortedMap Name Bool
+    addRefsArgs ns [] = ns
+    addRefsArgs ns (t :: ts) = addRefsArgs (addRefs ua at ns t) ts
+addRefs ua at ns (Bind x (Let _ val ty) scope)
+    = addRefs ua at (addRefs ua at (addRefs ua at ns val) ty) scope
+addRefs ua at ns (Bind x b scope)
+    = addRefs ua at (addRefs ua at ns (binderType b)) scope
+addRefs ua at ns (App _ (App _ (Ref _ name) x) y)
+    = if name == at
+         then addRefs True at (insert name True ns) y
+         else addRefs ua at (addRefs ua at (insert name ua ns) x) y
+addRefs ua at ns (App _ fn arg)
+    = addRefs ua at (addRefs ua at ns fn) arg
+addRefs ua at ns (TCode x) = addRefs ua at ns x
+addRefs ua at ns (Quote x) = addRefs ua at ns x
+addRefs ua at ns (Eval x) = addRefs ua at ns x
+addRefs ua at ns (Escape x) = addRefs ua at ns x
+addRefs ua at ns (Erased) = ns
+addRefs ua at ns (TType) = ns
+
+-- As above, but for references. Also flag whether a name is under an
+-- 'assert_total' because we may need to know that in coverage/totality
+-- checking
+export
+getRefs : (aTotal : Name) -> Term vars -> SortedMap Name Bool
+getRefs at tm = addRefs False at empty tm
+
 public export
 data CompatibleVars : List Name -> List Name -> Type where
      CompatPre : CompatibleVars xs xs
@@ -651,4 +714,3 @@ export
         go (App _ (Ref (DataCon _ _) (UN "Nil")) xty) = Just []
         go (App _ (App _ (App _ (Ref (DataCon _ _) (UN "Cons")) xty) xtm) xs) = map (xtm ::) $ go xs
         go _ = Nothing
-

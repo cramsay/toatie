@@ -28,7 +28,7 @@ import Text.Lexer
 import Data.List1
 import Data.List
 import Data.List.Views
-import Data.Strings
+import Data.String
 
 %default total
 
@@ -62,6 +62,20 @@ rawTokens delims ls =
        ++ map (\m => (line m, CodeLine (trim m))) ls
        ++ [(notCodeLine, Any)]
 
+-- `reduce` below was depending on the old behaviour of `lines` before #1585
+-- was merged. That old `lines` function is added here to preserve behaviour
+-- of `reduce`.
+lines' : List Char -> List1 (List Char)
+lines' [] = singleton []
+lines' s  = case break isNL s of
+              (l, s') => l ::: case s' of
+                                    [] => []
+                                    _ :: s'' => forget $ lines' (assert_smaller s s'')
+
+lines'' : String -> List1 String
+lines'' s = map pack (lines' (unpack s))
+
+
 ||| Merge the tokens into a single source file.
 reduce : List (TokenData Token) -> List String -> String
 reduce [] acc = fastAppend (reverse acc)
@@ -69,7 +83,7 @@ reduce (MkToken _ _ _ _ (Any x) :: rest) acc = reduce rest (blank_content::acc)
   where
     -- Preserve the original document's line count.
     blank_content : String
-    blank_content = fastAppend (replicate (length (forget $ lines x)) "\n")
+    blank_content = fastAppend (replicate (length (forget $ lines'' x)) "\n")
 
 reduce (MkToken _ _ _ _ (CodeLine m src) :: rest) acc =
     if m == trim src
@@ -79,7 +93,7 @@ reduce (MkToken _ _ _ _ (CodeLine m src) :: rest) acc =
                               src
                       )::acc)
 
-reduce (MkToken _ _ _ _ (CodeBlock l r src) :: rest) acc with (lines src) -- Strip the deliminators surrounding the block.
+reduce (MkToken _ _ _ _ (CodeBlock l r src) :: rest) acc with (lines'' src) -- Strip the deliminators surrounding the block.
   reduce (MkToken _ _ _ _ (CodeBlock l r src) :: rest) acc | (s ::: ys) with (snocList ys)
     reduce (MkToken _ _ _ _ (CodeBlock l r src) :: rest) acc | (s ::: []) | Empty = reduce rest acc -- 2
     reduce (MkToken _ _ _ _ (CodeBlock l r src) :: rest) acc | (s ::: (srcs ++ [f])) | (Snoc f srcs rec) =

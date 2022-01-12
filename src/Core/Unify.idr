@@ -292,6 +292,16 @@ mutual
                         then postpone env x y
                         else convertError env x y
 
+  unifyHole : {vars : _} ->
+              {auto c : Ref Ctxt Defs} ->
+              {auto u : Ref UST UState} ->
+              Env Term vars ->
+              (metaname : Name) -> List (AppInfo, Closure vars) ->
+                                   List (AppInfo, Closure vars) ->
+              (soln : NF vars) ->
+              Core UnifyResult
+  unifyHole env mname margs margs' tmnf = ?dunnoman
+
   unifyApp : {vars : _} ->
              {auto c : Ref Ctxt Defs} ->
              {auto u : Ref UST UState} ->
@@ -409,6 +419,68 @@ mutual
                                pure (union ct cs')
   unifyBothBinders env x bx scx y by scy = convertError env (NBind x bx scx) (NBind y by scy)
 
+  unifyBothApps : {auto c : Ref Ctxt Defs} ->
+                  {auto u : Ref UST UState} ->
+                  {vars : _} ->
+                  Env Term vars ->
+                  NHead vars -> List (AppInfo, Closure vars) ->
+                  NHead vars -> List (AppInfo, Closure vars) ->
+                  Core UnifyResult
+  unifyBothApps env (NLocal x xp) [] (NLocal y yp) []
+    = if x == y
+         then pure success
+         else convertError env (NApp (NLocal x xp) [])
+                               (NApp (NLocal y yp) [])
+  -- TODO Once we can distinguish between unification in LHS and terms... we should deal with both heads being locals applied arguments as a unification problem for InTerm.
+  unifyBothApps env (NLocal x xp) xs (NLocal y yp) ys
+  = unifyIfEq True env (NApp (NLocal x xp) xs) (NApp (NLocal y yp) ys)
+  -- TODO case for both heads are holes...
+  unifyBothApps env (NMeta xn xs) xs' yh ys
+    = unifyApp env (NMeta xn xs) xs' (NApp yh ys)
+  unifyBothApps env xh xs (NMeta yn ys) ys'
+    = unifyApp env (NMeta yn ys) ys' (NApp xh xs)
+  unifyBothApps env xh xs yh ys = unifyApp env xh xs (NApp yh ys)
+
+  export
+  unifyNoEta :
+               {auto c : Ref Ctxt Defs} ->
+               {auto u : Ref UST UState} ->
+               {vars :_} -> Env Term vars -> NF vars -> NF vars -> Core UnifyResult
+  unifyNoEta env (NDCon x tagx ax xs) (NDCon y tagy ay ys)
+    = do gam <- get Ctxt
+         if tagx == tagy
+           then unifyArgs env xs ys
+           else convertError env (NDCon x tagx ax xs) (NDCon y tagy ay ys)
+  unifyNoEta env (NTCon x ix tagx ax xs) (NTCon y iy tagy ay ys)
+   = do gam <- get Ctxt
+        if x == y
+          then unifyArgs env xs ys
+          else convertError env (NTCon x ix tagx ax xs) (NTCon y iy tagy ay ys)
+  unifyNoEta env (NCode   x) (NCode   y) = unify env x y
+  unifyNoEta env (NEscape x) (NEscape y) = unify env x y
+  unifyNoEta env (NQuote  x) (NQuote  y) = unify env x y
+  unifyNoEta env x@(NApp fx@(NMeta _ _) axs)
+                 y@(NApp fy@(NMeta _ _) ays)
+    = do defs <- get Ctxt
+         if !(convert defs env x y)
+           then pure success
+           else unifyBothApps env fx axs fy ays
+  unifyNoEta env (NApp fx axs) (NApp fy ays)
+    = unifyBothApps env fx axs fy ays
+  unifyNoEta env (NApp hd args) y
+    = unifyApp env hd args y
+  unifyNoEta env y (NApp hd args)
+    = unifyApp env hd args y
+  unifyNoEta env x y
+  = do defs <- get Ctxt
+       empty <- clearDefs defs
+       --log "unify.noeta" 10 $ "Nothing else worked, unifyIfEq"
+       unifyIfEq True env x y
+
+  isHoleApp : NF vars -> Bool
+  isHoleApp (NApp (NMeta _ _) _) = True
+  isHoleApp _ = False
+
   -- This gives the minimal rules for unification of constructor forms,
   -- solving metavariables in constructor arguments. There's more to do in
   -- general!
@@ -420,30 +492,33 @@ mutual
     -- Matching constructors, reduces the problem to unifying the arguments
     unify env tmx@(NBind x (Lam sx ix tx) scx) tmy
         = do defs <- get Ctxt
-             --TODO Handle case where tmy is a hole app
-             empty <- clearDefs defs
-             domty <- quote empty env tx
-             etay <- nf defs env
-                      $ Bind x (Lam sx Explicit domty)
-                      $ App AExplicit (weaken !(quote empty env tmy))
-                                      (Local 0 First)
-             unify env tmx etay
-    unify env nx@(NDCon n t a args) ny@(NDCon n' t' a' args')
-        = if t == t'
-             then unifyArgs env args args'
-             else convertError env nx ny
-    unify env nx@(NTCon n info t a args) ny@(NTCon n' info' t' a' args')
-        = if n == n' && info == info'
-             then unifyArgs env args args'
-             else convertError env nx ny
-    -- Unifying an application with something might succeed, if the
-    -- application is a metavariable in pattern form, or if both sides
-    -- are convertible
-    unify env (NApp h args) ny = unifyApp env h args ny
-    unify env nx (NApp h args) = unifyApp env h args nx
+             if isHoleApp tmy
+                then if not !(convert defs env tmx tmy)
+                        then unifyNoEta env tmx tmy
+                        else pure success
+                else do empty <- clearDefs defs
+                        domty <- quote empty env tx
+                        etay <- nf defs env
+                                 $ Bind x (Lam sx Explicit domty)
+                                 $ App AExplicit (weaken !(quote empty env tmy))
+                                                 (Local 0 First)
+                        unify env tmx etay
+    unify env tmy tmx@(NBind x (Lam sx ix tx) scx) 
+       = do defs <- get Ctxt
+            if isHoleApp tmy
+               then if not !(convert defs env tmx tmy)
+                       then unifyNoEta env tmx tmy
+                       else pure success
+               else do empty <- clearDefs defs
+                       domty <- quote empty env tx
+                       etay <- nf defs env
+                                $ Bind x (Lam sx Explicit domty)
+                                $ App AExplicit (weaken !(quote empty env tmy))
+                                                (Local 0 First)
+                       unify env tmx etay
     -- Otherwise, unification succeeds if both sides are convertible
     unify env x y
-        = unifyIfEq False env x y
+        = unifyNoEta env x y
 
   export
   Unify Term where

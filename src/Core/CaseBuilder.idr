@@ -10,9 +10,19 @@ import Core.Value
 
 import Data.LengthMatch
 import Data.List
-import Data.Strings
+import Data.String
+
+import Debug.Trace
 
 import Decidable.Equality
+
+public export
+data Phase = CompileTime | RunTime
+
+Eq Phase where
+  CompileTime == CompileTime = True
+  RunTime     == RunTime     = True
+  _           == _           = False
 
 data ArgType : List Name -> Type where
      Known : (ty : Term vars) -> ArgType vars -- arg has type 'ty'
@@ -196,18 +206,31 @@ data Partitions : List (PatClause vars todo) -> Type where
 
 data ClauseType = ConClause | VarClause
 
+namesIn : List Name -> Pat -> Bool
+namesIn pvars (PCon _ _ _ _ ps) = all (namesIn pvars) (map snd ps) -- TODO should we care about implicitness?
+namesIn pvars (PLoc _ n) = n `elem` pvars
+namesIn pvars _ = True
+
+namesFrom : Pat -> List Name
+namesFrom (PCon _ _ _ _ ps) = concatMap namesFrom (map snd ps) -- TODO should we care about implicitness
+namesFrom (PLoc _ n) = [n]
+namesFrom _ = []
+
 clauseType : PatClause vars (a :: as) -> ClauseType
 clauseType (MkPatClause pvars (MkInfo arg _ ty :: rest) rhs)
     = getClauseType arg
   where
     -- used to get the remaining clause types
     clauseType' : Pat -> ClauseType
-    clauseType' (PCon _ _ _ _ xs) = ConClause -- TODO Circuit runtime, want AExplicit. Compile time, want _
-                                                      -- TODO think about if we can use explicit -> implicit applications
+    clauseType' (PCon AExplicit _ _ _ xs) = ConClause -- TODO Circuit runtime, want AExplicit. Compile time, want _
+                                              -- TODO think about if we can use explicit -> implicit applications
     clauseType' _               = VarClause
 
     getClauseType : Pat -> ClauseType
-    getClauseType (PCon _ _ _ _ xs) = ConClause
+    getClauseType (PCon AImplicit _ _ _ xs)
+      = if all (namesIn (pvars ++ concatMap namesFrom (getPatInfo rest))) (map snd xs)
+            then VarClause
+            else ConClause
     getClauseType l = clauseType' l
 
 partition : {a, as, vars : _} ->

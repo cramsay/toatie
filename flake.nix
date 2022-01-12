@@ -2,8 +2,8 @@
   description = "A flake for building Hello World";
 
   inputs.flake-utils.url = github:numtide/flake-utils;
-  inputs.nixpkgs.url = github:NixOS/nixpkgs/nixos-20.03;
-  inputs.idris2-dev.url = github:idris-lang/Idris2;
+  inputs.nixpkgs.url = github:NixOS/nixpkgs;
+  inputs.idris2-dev.url = github:idris-lang/Idris2/v0.5.1;
 
   outputs = { self, flake-utils, nixpkgs, idris2-dev }:
     flake-utils.lib.eachSystem ["x86_64-linux" "x86_64-darwin"] (system:

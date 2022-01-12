@@ -7,11 +7,16 @@ import Core.Extraction
 import Core.Normalise
 import Core.TT
 import Core.Unify
+import Core.UnifyState
 import Core.Value
 
 import TTImp.TTImp
 
 import Data.Maybe
+import Data.SortedSet
+
+public export
+data ElabMode = InType | InLHS | InExpr | InTransform -- TODO InLHS might need some sort of erasure tag
 
 checkExp : {vars : _} ->
            {auto c : Ref Ctxt Defs} ->
@@ -274,3 +279,56 @@ checkTerm env (IEscape code) exp
 
 -- TODO Have a second pass at the staging rules and make sure we're not doing
 -- too much extra work (evaluating normal forms twice for glued, etc.)
+
+export
+normaliseHoleTypes : {auto c : Ref Ctxt Defs} ->
+                     {auto u : Ref UST UState} ->
+                     Core ()
+normaliseHoleTypes
+  = do ust <- get UST
+       let hs = Data.SortedSet.toList (holes ust)
+       defs <- get Ctxt
+       traverse_ (normaliseH defs) hs
+  where
+    updateType : Defs -> Name -> GlobalDef -> Core ()
+    updateType defs n def
+      = do ty' <- normalise defs [] (type def) -- TODO only need to normalise holes... we're doing the full thing
+           ignore $ addDef n (record { type = ty' } def)
+
+    normaliseH : Defs -> Name -> Core ()
+    normaliseH defs n
+      = do Just gdef <- lookupDef n defs
+             | Nothing => pure ()
+           case definition gdef of
+             Hole => updateType defs n gdef
+             _ => pure ()
+
+export
+elabTerm : {vars : _} ->
+           {auto c : Ref Ctxt Defs} ->
+           {auto s : Ref Stg Stage} ->
+           {auto u : Ref UST UState} ->
+           ElabMode ->
+           Env Term vars -> RawImp -> Maybe (Glued vars) ->
+           Core (Term vars, Glued vars)
+elabTerm {vars} mode env tm ty
+  = do -- Record existing hole state
+       oldhs <- saveHoles
+       ust <- get UST
+       let constart = nextConstraint ust
+       defs <- get Ctxt
+
+       -- check term as usual
+       (chktm, chkty) <- checkTerm env tm ty
+
+       -- Final retry of solving constraints
+       solveConstraints --TODO pass in InLHS as a mode
+
+
+       defs <- get Ctxt
+       chktm <- normalise defs env chktm
+
+       hs <- getHoles
+       restoreHoles (union hs oldhs)
+
+       pure (chktm, chkty)

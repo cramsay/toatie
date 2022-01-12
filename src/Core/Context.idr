@@ -65,7 +65,7 @@ clearDefs d = pure empty
 
 export
 mapDefs : Defs -> (GlobalDef -> GlobalDef) -> Core Defs
-mapDefs d f = pure . fromList $ map (\(k,v) => (k, f v)) (toList d)
+mapDefs d f = pure . fromList $ map (\(k,v) => (k, f v)) (Data.SortedMap.toList d)
 
 -- A phantom type for finding references to the context
 export
@@ -128,4 +128,4 @@ Show GlobalDef where
 
 export
 Show Defs where
-  show d = unlines . map show $ toList d
+  show d = unlines . map show $ Data.SortedMap.toList d

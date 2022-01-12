@@ -253,5 +253,5 @@ condC ((x, y) :: xs) def
     = if !x then y else condC xs def
 
 export
-log : String -> Core ()
-log = coreLift . putStrLn
+log : String -> Int -> String -> Core ()
+log src _ msg = coreLift . putStrLn $ src ++ " >>> " ++ msg
