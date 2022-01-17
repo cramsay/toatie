@@ -40,9 +40,9 @@ data ArgType : List Name -> Type where
 record PatInfo (pvar : Name) (vars : List Name) where
   constructor MkInfo
   {idx : Nat}
-  {name : Name}
+  {vname : Name}
   pat : Pat
-  0 loc : IsVar name idx vars
+  0 loc : IsVar vname idx vars
   argType : ArgType vars -- Type of the argument being inspected (i.e.
                          -- *not* refined by this particular pattern)
 

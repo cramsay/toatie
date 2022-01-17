@@ -34,6 +34,8 @@ data Error : Type where
      UndefinedName : Name -> Error
      CaseCompile : Name -> CaseError -> Error
      GenericMsg : String -> Error
+     InternalError : String -> Error
+     BadDotPattern : {vars : _} -> Env Term vars -> Term vars -> Term vars -> Error
      FileErr : String -> FileError -> Error
 
 export
@@ -42,6 +44,8 @@ Show Error where
       = "Type mismatch: " ++ show x ++ " and " ++ show y
   show (UndefinedName x) = "Undefined name " ++ show x
   show (GenericMsg str) = str
+  show (InternalError str) = str
+  show (BadDotPattern env x y) = "Bad dot pattern: " ++ show x ++ " and " ++ show y
   show (CaseCompile n DifferingArgNumbers)
       = "Patterns for " ++ show n ++ " have different numbers of arguments"
   show (CaseCompile n DifferingTypes)

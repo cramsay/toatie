@@ -12,14 +12,14 @@ import System.File
 %default total
 
 public export
-data ParseError tok
-  = ParseFail String (Maybe (Int, Int)) (List tok)
+data ParseError tk
+  = ParseFail String (Maybe (Int, Int)) (List tk)
   | LexFail   (Int, Int, String)
   | FileFail  FileError
   | LitFail   LiterateError
 
 export
-Show tok => Show (ParseError tok) where
+Show tk => Show (ParseError tk) where
   show (ParseFail err loc toks)
       = "Parse error: " ++ err ++ " (next tokens: "
             ++ show (take 10 toks) ++ ")"

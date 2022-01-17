@@ -16,6 +16,7 @@ data RawImp : Type where
         -- inferred, but in this initial version everything is explicit
      IApp : AppInfo -> RawImp -> RawImp -> RawImp
 
+     IMustUnify : RawImp -> RawImp
      Implicit : RawImp
      IType : RawImp
      IQuote  : RawImp -> RawImp
@@ -29,6 +30,7 @@ data ImpTy : Type where
 
 public export
 data ImpClause : Type where
+     ImpossibleClause : (lhs : RawImp) -> ImpClause
      PatClause : (lhs : RawImp) -> (rhs : RawImp) -> ImpClause
 
 public export

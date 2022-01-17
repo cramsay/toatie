@@ -16,6 +16,7 @@ import TTImp.TTImp
 import Data.Maybe
 import Data.List
 import Data.SortedMap
+import Data.SortedSet
 import Data.String
 
 mutual
@@ -252,34 +253,72 @@ processLHS :  {auto c : Ref Ctxt Defs} ->
                               ,Term vars')))
 processLHS {vars} env lhs
   = do defs <- get Ctxt
-       (lhstm, lhstyg) <- elabTerm InLHS env lhs Nothing
 
-       -- TODO magic
+       (lhstm, lhstyg) <- elabTerm InLHS env (wrapDot lhs) Nothing
 
-       ret <-  getRHSEnv env lhstm !(getTerm lhstyg)
+       lhstm <- normalise defs env lhstm
+       lhsty <- normalise defs env !(getTerm lhstyg)
+
+       -- TODO Maybe tag patterns with IMust unify, etc?
+
+       ret <-  getRHSEnv env lhstm lhsty
        pure (lhs, ret)
+  where
+  wrapDot : RawImp -> RawImp
+  wrapDot (ILet n margTy argVal scope) = ILet n margTy (wrapDot argVal) (wrapDot scope)
+  wrapDot (IPi Implicit mn argTy retTy) = IPi Implicit mn argTy retTy
+  wrapDot (IPi Explicit mn argTy retTy) = IPi Explicit mn argTy retTy
+  wrapDot (ILam Implicit mn argTy scope) = ILam Implicit mn argTy (wrapDot scope)--(IMustUnify $ wrapDot scope)
+  wrapDot (ILam Explicit mn argTy scope) = ILam Explicit mn argTy (wrapDot scope)
+  wrapDot (IPatvar n ty scope) = IPatvar n ty (wrapDot scope)
+  wrapDot (IApp AImplicit f a) = IApp AImplicit (wrapDot f) (IMustUnify a)
+  wrapDot (IApp AExplicit f a) = IApp AExplicit (wrapDot f) (wrapDot a)
+  wrapDot (IVar x) = IVar x
+  wrapDot (IMustUnify x) = IMustUnify x
+  wrapDot (IQuote x) = IQuote $ wrapDot x
+  wrapDot (ICode x) = ICode $ wrapDot x
+  wrapDot (IEval x) = IEval $ wrapDot x
+  wrapDot (IEscape x) = IEscape $ wrapDot x
+  wrapDot IType = IType
+  wrapDot Implicit = Implicit
+
 
 
 processClause : {auto c : Ref Ctxt Defs} ->
                 {auto u : Ref UST UState} ->
                 {auto s : Ref Stg Stage} ->
                 ImpClause -> Core Clause
+processClause (ImpossibleClause lhs_in)
+    = do ?processImpossibleClause -- TODO also parse the impossible clause
 processClause (PatClause lhs_in rhs)
     = do -- Check the LHS
          (lhs, (vars ** (env, lhsenv, rhsexp))) <- processLHS [] lhs_in
 
-         (rhstm, rhsty) <- checkTerm env rhs (Just (gnf env rhsexp))
+         ust <- get UST
+         coreLift $ putStrLn $ "dot constrs are " ++ show (dotConstraints ust)
+         defs <- get Ctxt
+         coreLift $ putStrLn $ "defs are " ++ show (defs)
+         checkDots
+         ust <- get UST
+         coreLift $ putStrLn $ "dot constrs are " ++ show (dotConstraints ust)
+         defs <- get Ctxt
+         coreLift $ putStrLn $ "defs are " ++ show (defs)
 
-         -- Check that implicit/explicit arg use is correct on the RHS
-         processImplicitUse env lhsenv rhstm rhsexp
+         ust <- get UST
+         coreLift $ putStrLn $ "guesses are " ++ show (guesses ust)
+         coreLift $ putStrLn $ "holes are " ++ show (holes ust)
+         let [] = SortedMap.toList $ constraints ust
+                | cs => throw (GenericMsg $ "Constraints present after processing clause: "
+                               ++ show (map snd cs))
+
+         (rhstm, rhsty) <- checkTerm env rhs (Just (gnf env rhsexp))
 
          defs <- get Ctxt
          rhsnf <- normalise defs env rhstm
 
-         ust <- get UST
-         let [] = SortedMap.toList $ constraints ust
-                | cs => throw (GenericMsg $ "Constraints present after processing clause: "
-                               ++ show (map snd cs))
+         -- Check that implicit/explicit arg use is correct on the RHS
+         processImplicitUse env lhsenv rhstm rhsexp
+
 
          pure (MkClause env lhsenv rhstm) --rhsnf)
 

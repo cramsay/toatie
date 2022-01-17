@@ -18,6 +18,13 @@ import Data.SortedSet
 public export
 data ElabMode = InType | InLHS | InExpr | InTransform -- TODO InLHS might need some sort of erasure tag
 
+Eq ElabMode where
+  InType      == InType = True
+  InLHS       == InLHS  = True
+  InExpr      == InExpr = True
+  InTransform == InTransform = True
+  _ == _ = False
+
 checkExp : {vars : _} ->
            {auto c : Ref Ctxt Defs} ->
            {auto u : Ref UST UState} ->
@@ -36,8 +43,7 @@ checkExp env term got (Just exp)
         let gotExt = extraction !(getTerm got)
         let expExt = extraction !(getTerm exp)
 
-        ures <- unify env !(nf defs env gotExt) !(nf defs env expExt)
-        --ures <- unify env !(getNF got) !(getNF exp)
+        ures <- unify InTerm env !(nf defs env gotExt) !(nf defs env expExt)
 
         -- If there are constraints, return a guarded definition. Otherwise,
         -- we've won.
@@ -45,7 +51,7 @@ checkExp env term got (Just exp)
              [] => do -- Success: if any holes were solved, rerun unification
                       -- for any existing constraints
                       when (holesSolved ures) $
-                           solveConstraints
+                           solveConstraints InTerm
                       pure (term, exp)
              cs => do cty <- getTerm exp
                       ctm <- newConstant env term cty cs
@@ -177,7 +183,7 @@ checkTerm env (ILam p mn argTy scope) (Just exp)
                     let True = p == p'
                           | _ => throw (GenericMsg "Lambda binding does not have same implicitness as its type")
                     checkLamFV n p scopetm
-                    
+
                     checkExp env (Bind n (Lam stage p argTytm) scopetm)
                                  (gnf env (Bind n (Pi stage p argTytm) !(getTerm gscopety)))
                                  (Just exp)
@@ -226,6 +232,32 @@ checkTerm env Implicit (Just exp)
          metaval <- newMeta env nm expty Hole
          pure (metaval, exp)
 checkTerm env IType exp = checkExp env TType gType exp
+checkTerm env (IMustUnify tm) Nothing
+    = do (t,_) <- checkTerm env tm Nothing
+         throw (GenericMsg $ "Can't check dotted pattern (no expected type) for " ++ show t)
+checkTerm {vars} env (IMustUnify tm) (Just expty)
+    = do
+
+         (mineTm, mineTy) <- checkTerm env tm (Just expty)
+
+         --case mineTm of
+         --  (Local idx p) => do coreLift $ putStrLn ("skipping dot pattern for var: " ++ show mineTm)
+         --                      checkExp env mineTm mineTy (Just expty)
+         --  _ => do
+         nm <- genName "_dot"
+         metaval <- newMeta env nm !(getTerm expty) Hole
+         --constr <- addConstraint (MkConstraint InLHS env mineTm metaval)
+         --_ <- newConstant env metaval !(getTerm mineTy) [constr]
+         addDot env nm mineTm metaval
+
+         coreLift $ putStrLn ("Checking dot pattern for " ++ show mineTm ++ " : " ++ show !(getTerm mineTy))
+         -- Look back at the constraints idris2 generates... not sure
+         -- I should we unifying _with_ the expected term but unifying
+         -- in order to get something that we then check...
+
+         -- TODO should split holes from dots in unifystate
+         pure (metaval, mineTy)
+
 checkTerm env (IQuote  sc) exp
   = do -- Increment stage so we can typecheck the scope
        stage <- get Stg
@@ -322,8 +354,8 @@ elabTerm {vars} mode env tm ty
        (chktm, chkty) <- checkTerm env tm ty
 
        -- Final retry of solving constraints
-       solveConstraints --TODO pass in InLHS as a mode
-
+       let umode = if mode == InLHS then InLHS else InTerm
+       solveConstraints umode
 
        defs <- get Ctxt
        chktm <- normalise defs env chktm

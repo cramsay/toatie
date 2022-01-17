@@ -1,0 +1,38 @@
+import Data.Nat
+--import Data.Vect
+--import Proofs
+
+data SNat : Nat -> Type where
+  Singleton : {n : Nat} -> SNat n
+
+sed : {n : Nat} -> SNat n -> SNat n
+pat n : Nat =>
+  sed {n} (Singleton {n}) = Singleton {n}
+
+sid : {n : Nat} -> SNat n -> SNat n
+
+-- -- Fully implicit
+-- sid {_} (Singleton {_}) = Singleton {_} -- TODO Can't unify two holes
+
+-- Happy
+sid {Z} (Singleton {Z}) = Singleton {Z}
+pat k : Nat =>
+  sid {S k} (Singleton {S k}) = Singleton {S k}
+
+-- -- Unhappy... different names for irrelevant arg and singleton's nat
+-- sid {Z} (Singleton {Z}) = Singleton {Z}
+-- pat l, k : Nat =>
+--   sid {S l} (Singleton {S k}) = Singleton {S k}
+
+-- -- Unhappy... Mismatched constructors but with same name
+-- sid {Z} (Singleton {Z}) = Singleton {Z}
+-- pat k : Nat =>
+--   sid {S (S k)} (Singleton {S k}) = Singleton {S k}
+
+-- FIXME Should fail... nothing to backup claim that the arg is Z or S k.
+-- We have the wanted term (lhs) and its type... we know that the wanted term unifies with our metavar
+-- But we also want to know if our wanted term could have the _same_ type but be built a different way?
+f : {n : Nat} -> Nat
+f {Z} = 69
+pat k : Nat =>
+  f {S k} = 420

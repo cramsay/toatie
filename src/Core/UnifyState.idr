@@ -3,6 +3,7 @@ module Core.UnifyState
 import Core.Context
 import Core.Core
 import Core.Env
+import Core.Normalise
 import Core.TT
 
 import Data.List
@@ -10,10 +11,22 @@ import Data.SortedMap
 import Data.SortedSet
 
 public export
+data UnifyMode = InLHS
+               | InMatch
+               | InTerm
+
+Eq UnifyMode where
+  InLHS == InLHS     = True
+  InMatch == InMatch = True
+  InTerm == InTerm   = True
+  _ == _             = False
+
+public export
 data Constraint : Type where
      -- An unsolved constraint, noting two terms which need to be convertible
      -- in a particular environment
      MkConstraint : {vars : _} ->
+                    UnifyMode ->
                     (env : Env Term vars) ->
                     (x : Term vars) -> (y : Term vars) ->
                     Constraint
@@ -34,12 +47,13 @@ record UState where
   holes : SortedSet Name
   guesses : SortedSet Name
   constraints : SortedMap Int Constraint -- map for finding constraints by ID
+  dotConstraints : List (Name, Constraint) -- dot pattern constraints
   nextName : Int
   nextConstraint : Int
 
 export
 initUState : UState
-initUState = MkUState empty empty empty 0 0
+initUState = MkUState empty empty empty [] 0 0
 
 export
 data UST : Type where
@@ -201,6 +215,52 @@ newConstant {vars} env tm ty constrs
 
 export
 Show Constraint where
-  show (MkConstraint env x y) = show x ++ " ~~~ " ++ show y
+  show (MkConstraint mode env x y) = show x ++ " ~~~ " ++ show y
   show (MkSeqConstraint env xs ys) = show $ map (\(x,y)=>show x ++ " ~~~ " ++ show y) (zip xs ys)
   show Resolved = "Resolved!"
+
+export
+tryErrorUnify : {auto c : Ref Ctxt Defs} ->
+                {auto u : Ref UST UState} ->
+                Core a -> Core (Either Error a)
+tryErrorUnify elab
+  = do ust <- get UST
+       defs <- get Ctxt
+       catch (do res <- elab
+                 pure (Right res))
+             (\err => do put Ctxt defs
+                         put UST ust
+                         pure (Left err))
+
+export
+tryUnify : {auto c : Ref Ctxt Defs} ->
+           {auto u : Ref UST UState} ->
+           Core a -> Core a -> Core a
+tryUnify elab1 elab2
+  = do Right ok <- tryErrorUnify elab1
+         | Left err => elab2
+       pure ok
+
+export
+handleUnify : {auto c : Ref Ctxt Defs} ->
+              {auto u : Ref UST UState} ->
+              Core a -> (Error -> Core a) -> Core a
+handleUnify elab1 elab2
+  = do Right ok <- tryErrorUnify elab1
+         | Left err => elab2 err
+       pure ok
+
+export
+addDot : {vars : _} ->
+         {auto c : Ref Ctxt Defs} ->
+         {auto u : Ref UST UState} ->
+         Env Term vars -> Name -> Term vars -> Term vars ->
+         Core ()
+addDot env dotarg x y
+  = do ust <- get UST
+       defs <- get Ctxt
+       xnf <- normalise defs env x
+       ynf <- normalise defs env y
+       put UST (record { dotConstraints $=
+                           ((dotarg, MkConstraint InMatch env xnf ynf) ::)
+                       } ust)

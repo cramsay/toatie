@@ -56,6 +56,10 @@ lookupDefPure : Name -> Defs -> Maybe GlobalDef
 lookupDefPure n defs = SortedMap.lookup n defs
 
 export
+lookupDefType : Name -> Defs -> Core (Maybe (Term []))
+lookupDefType n defs = pure (map type $ SortedMap.lookup n defs)
+
+export
 initDefs : Core Defs
 initDefs = pure empty
 
@@ -79,7 +83,7 @@ data Ctxt : Type where
 public export
 record Constructor where
   constructor MkCon
-  name : Name
+  cname : Name
   arity : Nat
   type : Term []
 
@@ -112,6 +116,19 @@ updateDef n upd
          Just gdef <- lookupDef n defs
               | Nothing => throw (UndefinedName n)
          addDef n (upd gdef)
+
+-- Call this before trying alternative elaborations, so that updates to the
+-- context are put in the staging area rather than writing over the mutable
+-- array of definitions.
+-- Returns the old context (the one we'll go back to if the branch fails)
+export
+branch : {auto c : Ref Ctxt Defs} ->
+         Core Defs
+branch
+  = do ctxt <- get Ctxt
+       let gam' = ctxt
+       put Ctxt gam'
+       pure ctxt
 
 export
 Show Def where
