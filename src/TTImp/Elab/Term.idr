@@ -116,7 +116,7 @@ checkTerm env (IVar n) exp
                      | Nothing => throw (UndefinedName n)
                 let nt = case definition gdef of
                               DCon t a => DataCon t a
-                              TCon i t a => TyCon i t a
+                              TCon i t a cons => TyCon i t a
                               _ => Func
                 checkExp env (Ref nt n) (gnf env (embed (type gdef))) exp
 -- Let binding with explicit type

@@ -36,6 +36,7 @@ data Error : Type where
      GenericMsg : String -> Error
      InternalError : String -> Error
      BadDotPattern : {vars : _} -> Env Term vars -> Term vars -> Term vars -> Error
+     ValidCase : {vars : _} -> Env Term vars -> Either (Term vars) Error -> Error
      FileErr : String -> FileError -> Error
 
 export
@@ -46,6 +47,9 @@ Show Error where
   show (GenericMsg str) = str
   show (InternalError str) = str
   show (BadDotPattern env x y) = "Bad dot pattern: " ++ show x ++ " and " ++ show y
+  show (ValidCase _ prob) = case prob of
+                              Left tm => show tm ++ " is not a valid impossible pattern because it typechecks"
+                              Right err => "Not a valid impossible pattern: " ++ show err
   show (CaseCompile n DifferingArgNumbers)
       = "Patterns for " ++ show n ++ " have different numbers of arguments"
   show (CaseCompile n DifferingTypes)

@@ -14,7 +14,7 @@ data Def : Type where
     PMDef : (args : List Name) -> (treeCT : CaseTree args) ->
             Def -- Ordinary function definition
     DCon :              (tag : Int) -> (arity : Nat) -> Def -- data constructor
-    TCon : TyConInfo -> (tag : Int) -> (arity : Nat) -> Def
+    TCon : TyConInfo -> (tag : Int) -> (arity : Nat) -> (cons : List Name) -> Def
     Hole : Def
     Guess : (guess : Term []) ->
             (constraints : List Int) -> Def -- unification constraints
@@ -135,7 +135,7 @@ Show Def where
   show None = "None"
   show (PMDef args treeCT) = "PMDef [" ++ show args ++ "] " ++ show treeCT
   show (DCon tag arity) = "DCon " ++ show tag ++ " " ++ show arity
-  show (TCon x tag arity) = "TCon " ++ show x ++ " " ++ show tag ++ " " ++ show arity
+  show (TCon x tag arity cons) = "TCon " ++ show x ++ " " ++ show tag ++ " " ++ show arity
   show Hole = "Hole"
   show (Guess guess constraints) = "Guess " ++ show guess ++ " " ++ show constraints
 

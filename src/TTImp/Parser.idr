@@ -360,6 +360,9 @@ parseRHS fname indents lhs
          rhs <- expr fname indents
          atEnd indents
          pure (!(getFn lhs), PatClause lhs rhs)
+  <|> do keyword "impossible"
+         atEnd indents
+         pure (!(getFn lhs), ImpossibleClause lhs)
   where
     getFn : RawImp -> SourceEmptyRule Name
     getFn (IVar n) = pure n

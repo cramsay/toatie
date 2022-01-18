@@ -34,6 +34,11 @@ mutual
        -- Catch-all case
        DefaultCase : CaseTree vars -> CaseAlt vars
 
+export
+isDefault : CaseAlt vars -> Bool
+isDefault (DefaultCase _) = True
+isDefault _ = False
+
 mutual
   insertCaseNames : {outer, inner : _} ->
                     (ns : List Name) -> CaseTree (outer ++ inner) ->

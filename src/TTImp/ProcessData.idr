@@ -41,7 +41,7 @@ processData (MkImpData n info tycon datacons)
          -- Exercise: We should also check whether it's already defined!
          defs <- get Ctxt
          arity <- getArity defs [] tychk
-         addDef n (newDef tychk (TCon (convTyConInfo info) 0 arity))
+         addDef n (newDef tychk (TCon (convTyConInfo info) 0 arity []))
          chkcons <- traverse processCon datacons
 
          defs <- get Ctxt
@@ -49,13 +49,20 @@ processData (MkImpData n info tycon datacons)
                        do carity <- getArity defs [] ty
                           addDef cn (newDef ty (DCon (cast i) carity)))
                    (zip [0..(length chkcons)] chkcons)
+
          -- Idris 2 has to do a bit more work here to relate the type constructor
          -- and data constructors (e.g. for totality checking, interactive
          -- editing) but this is enough for our purposes
+         updateDef n (addConNames (map fst chkcons))
+
          coreLift $ putStrLn $ "Processed " ++ show n
   where convTyConInfo : ImpTyConInfo -> TyConInfo
         convTyConInfo ITyCParam = TyConParam
         convTyConInfo ITyCObj   = TyConObj
         convTyConInfo ITyCSimp  = TyConSimp
+
+        addConNames : List Name -> GlobalDef -> GlobalDef
+        addConNames cons (MkGlobalDef type (TCon x tag arity _)) = MkGlobalDef type (TCon x tag arity cons)
+        addConNames cons gdef = gdef
 
 

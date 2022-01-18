@@ -51,8 +51,8 @@ extractionArity _ = 0
 mutual
   extractionDef : (ty : Term []) -> Def -> Def
   extractionDef _  None = None
-  extractionDef ty (DCon   tag arity) = DCon   tag (extractionArity ty)
-  extractionDef ty (TCon x tag arity) = TCon x tag (extractionArity ty)
+  extractionDef ty (DCon   tag arity     ) = DCon   tag (extractionArity ty)
+  extractionDef ty (TCon x tag arity cons) = TCon x tag (extractionArity ty) cons
   extractionDef _  Hole = Hole
   extractionDef _  (Guess guess constraints) = Guess (extraction guess) constraints -- TODO update constraints or forbid this
   extractionDef _  (PMDef args ct) = PMDef args (extractTree ct)

@@ -76,6 +76,12 @@ Show NameType where
   show (TyCon i t a) = "TyCon " ++ show i ++ show (t, a)
   show Bound = "Bound"
 
+export
+isCon : NameType -> Maybe (Int, Nat)
+isCon (DataCon t a) = Just (t, a)
+isCon (TyCon _ t a) = Just (t, a)
+isCon _ = Nothing
+
 public export
 data IsVar : Name -> Nat -> List Name -> Type where
      First : IsVar n Z (n :: ns)
@@ -230,6 +236,9 @@ getFnInfoArgs tm = getFA [] tm
   getFA args (App info f a) = getFA ((info, a) :: args) f
   getFA args tm = (tm, args)
 
+export
+getArgs : Term vars -> List (Term vars)
+getArgs = snd . getFnArgs
 
 export
 isVar : (n : Name) -> (ns : List Name) -> Maybe (Var ns)
@@ -239,6 +248,10 @@ isVar n (m :: ms)
            Nothing => do MkVar p <- isVar n ms
                          pure (MkVar (Later p))
            Just Refl => pure (MkVar First)
+
+export
+sameVar : Var xs -> Var xs -> Bool
+sameVar (MkVar {i=x} _) (MkVar {i=y} _) = x == y
 
 export
 varExtend : IsVar x idx xs -> IsVar x idx (xs ++ ys)
@@ -604,6 +617,12 @@ mutual
   shrinkTerm (Eval tm)   prf = Just (Eval   !(shrinkTerm tm prf))
   shrinkTerm (Escape tm) prf = Just (Escape !(shrinkTerm tm prf))
 
+public export
+data Covering
+  = IsCovering
+  | MissingCases (List (Term []))
+  | NonCoveringCall (List Name)
+
 --- Show instances
 
 export
@@ -714,3 +733,12 @@ export
         go (App _ (Ref (DataCon _ _) (UN "Nil")) xty) = Just []
         go (App _ (App _ (App _ (Ref (DataCon _ _) (UN "Cons")) xty) xtm) xs) = map (xtm ::) $ go xs
         go _ = Nothing
+
+export
+Show Covering where
+  show IsCovering = "covering"
+  show (MissingCases c) = "not covering all cases"
+  show (NonCoveringCall [f])
+    = "not covering due to call to function " ++ show f
+  show (NonCoveringCall cs)
+    = "not covering due to calls to functions " ++ showSep ", " (map show cs)
