@@ -80,4 +80,28 @@ toTTImp (TCode  tm) = Just $ ICode   !(toTTImp tm)
 toTTImp (Eval   tm) = Just $ IEval   !(toTTImp tm)
 toTTImp (Escape tm) = Just $ IEscape !(toTTImp tm)
 toTTImp TType  = Just IType
-toTTImp Erased = Nothing
+toTTImp Erased = Just Implicit -- Nothing
+
+export
+Show RawImp where
+  show (IVar n) = show n
+  show (ILet n margTy argVal scope) = "let " ++ show n ++ maybe "" (\ty=>" : " ++ show ty) margTy
+                                      ++ " = " ++ show argVal ++ " in " ++ show scope
+  show (IPi Implicit mn argTy retTy) = "{" ++ maybe "" (\n=>show n ++ " : ") mn
+                                       ++ show argTy ++ "} -> " ++ show retTy
+  show (IPi Explicit mn argTy retTy) = "(" ++ maybe "" (\n=>show n ++ " : ") mn
+                                       ++ show argTy ++ ") -> " ++ show retTy
+  show (ILam Implicit mn argTy scope) = "\\{" ++ maybe "_" (\n=>show n) mn ++ " : "
+                                          ++ show argTy ++ "} => " ++ show scope
+  show (ILam Explicit mn argTy scope) = "\\" ++ maybe "_" (\n=>show n) mn ++ " : "
+                                          ++ show argTy ++ " => " ++ show scope
+  show (IPatvar n ty scope) = "pat " ++ show n ++ " : " ++ show ty ++ " => " ++ show scope
+  show (IApp AImplicit f a) = show f ++ " {" ++ show a ++ "}"
+  show (IApp AExplicit f a) = show f ++ " (" ++ show a ++ ")"
+  show (IMustUnify tm) = ".(" ++ show tm ++ ")"
+  show Implicit = "_"
+  show IType = "Type"
+  show (IQuote  tm) = "[|" ++ show tm ++ "|]"
+  show (ICode   tm) = "<" ++ show tm ++ ">"
+  show (IEval   tm) = "!(" ++ show tm ++ ")"
+  show (IEscape tm) = "~(" ++ show tm ++ ")"

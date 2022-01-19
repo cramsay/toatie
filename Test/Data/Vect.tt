@@ -6,6 +6,8 @@ data Vect : Nat -> Type -> Type where
              a -> Vect k a -> Vect (S k) a
 
 head : {a : Type} -> {n : Nat} -> Vect (S n) a -> a
+pat a : Type =>
+  head {a} {Z} [] impossible
 pat a : Type, n : Nat, x : a, xs : Vect n a =>
   head {a} {n} (VCons {a} {n} x xs) = x
 

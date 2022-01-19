@@ -421,7 +421,6 @@ mutual
       = do defs <- get Ctxt
            ust <- get UST
            empty <- clearDefs defs
-           coreLift $ putStrLn $ "solving hole for " ++ show mname ++ " with " ++ show stm
            if solutionHeadSame solnf -- TODO consider inNoSolve?
               then pure $ Just success
               else do Just gdef <- lookupDef mname defs
@@ -448,9 +447,9 @@ mutual
            case !(patternEnv env (map snd args)) of
                 Nothing =>
                     -- not in pattern form so postpone
-                    do coreLift $ putStrLn $ "Hole not in pat form"
+                    do --coreLift $ putStrLn $ "Hole not in pat form"
                        -- TODO if it's an invertible hole, unifyHoleApp
-                       coreLift $ putStrLn $ "GOTCHA " ++ show mname
+                       --coreLift $ putStrLn $ "GOTCHA " ++ show mname
                        unifyHoleApp mode env mname margs margs' tmnf
                        --unifyIfEq True mode env (NApp (NMeta mname $ map snd margs) margs') tmnf
                 Just (newvars ** (locs, submv)) =>

@@ -262,4 +262,4 @@ condC ((x, y) :: xs) def
 
 export
 log : String -> Int -> String -> Core ()
-log src _ msg = coreLift . putStrLn $ src ++ " >>> " ++ msg
+log src _ msg = pure () -- coreLift . putStrLn $ src ++ " >>> " ++ msg

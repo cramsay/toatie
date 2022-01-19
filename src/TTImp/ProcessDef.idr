@@ -262,6 +262,16 @@ processLHS {vars} env lhs
        lhstm <- normalise defs env lhstm
        lhsty <- normalise defs env !(getTerm lhstyg)
 
+       checkDots
+
+       ust <- get UST
+       let [] = SortedMap.toList $ constraints ust
+               | cs => throw (GenericMsg $ "Constraints present after processing clause: "
+                                            ++ show (map snd cs))
+       defs <- get Ctxt
+       lhstm <- normalise defs env lhstm
+       lhsty <- normalise defs env !(getTerm lhstyg)
+
        ret <-  getRHSEnv env lhstm lhsty
        pure (lhs, ret)
   where
@@ -322,13 +332,6 @@ processClause (PatClause lhs_in rhs)
     = do -- Check the LHS
          (lhs, (vars ** (env, lhsenv, rhsexp))) <- processLHS [] lhs_in
 
-         checkDots
-
-         ust <- get UST
-         let [] = SortedMap.toList $ constraints ust
-                | cs => throw (GenericMsg $ "Constraints present after processing clause: "
-                               ++ show (map snd cs))
-
          (rhstm, rhsty) <- checkTerm env rhs (Just (gnf env rhsexp))
 
          -- Check that implicit/explicit arg use is correct on the RHS
@@ -372,9 +375,12 @@ processDef n clauses
          IsCovering <- checkCoverage n (type gdef) chkcs
            | cov => throw $ GenericMsg (show cov)
 
-         coreLift $ putStrLn $ "Complete ----------------------"
-         coreLift $ putStrLn $ "Args = " ++ show cargs
-         coreLift $ putStrLn $ "Tree = " ++ show tree_ct
+         -- TODO need to try solving holes, check for any unresolved ones
+         -- maybe throw error
+
+         --coreLift $ putStrLn $ "Complete ----------------------"
+         --coreLift $ putStrLn $ "Args = " ++ show cargs
+         --coreLift $ putStrLn $ "Tree = " ++ show tree_ct
          coreLift $ putStrLn $ "Processed " ++ show n
   where
 
@@ -396,12 +402,18 @@ processDef n clauses
   checkImpossible : Name -> Term [] ->
                     Core (Maybe (Term []))
   checkImpossible n tm
-    = do let Just itm = toTTImp tm
+    = do let fvs = freeVars [] tm
+         let tmImps = foldl (\tm => \n => substName n Erased tm) tm fvs
+         let Just itm = toTTImp tmImps
                | Nothing => throw (GenericMsg $ "Failed to unelab clause :" ++ show tm)
+
          handleUnify
            (do ctxt <- get Ctxt
                log "checkimpossible" 10 ("About to unelab term: " ++ show tm)
-               --(lhstm, _) <- elabTerm InLHS [] itm Nothing
+               --FIXME we're checking closed terms that, thanks to Core.Coverage sometimes contain free variables
+               --      We need to resolve this before checking
+               --      Also we don't respect implicitness of arguments
+               (lhstm, _) <- elabTerm InLHS [] itm Nothing
                let lhstm = tm
                defs <- get Ctxt
                lhs <- normalise defs [] lhstm
@@ -414,7 +426,8 @@ processDef n clauses
                          put Ctxt ctxt
                          pure (Just rtm)
            )
-           (\err => do defs <- get Ctxt
+           (\err => do log "checkimpossible catch" 10 (show err)
+                       defs <- get Ctxt
                        if not !(recoverableErr defs err)
                           then pure Nothing
                           else pure (Just tm)
@@ -422,19 +435,22 @@ processDef n clauses
 
   getClause : Either RawImp Clause -> Core (Maybe Clause)
   getClause (Left rawlhs)
-    = catch (do lhsp <- getImpossibleTerm rawlhs
-                pure $ Just $ MkClause [] lhsp Erased)
-            (\e => pure Nothing)
+    = catch (do --lhsp <- getImpossibleTerm rawlhs --We've comment this out since we can rule out impossible cases without looking at the impossible cases explicitly supplied by the user
+                --pure $ Just $ MkClause [] lhsp Erased)
+                pure Nothing)
+            (\e => do log "getclause left" 10 $ "Caught error: " ++ show e
+                      pure Nothing)
   getClause (Right c) = pure (Just c)
 
   checkCoverage : Name -> Term [] -> List (Either RawImp Clause) -> Core Covering
   checkCoverage n ty cs
     = do covcs' <- traverse getClause cs
          let covcs = mapMaybe id covcs'
-         (_ ** ctree) <- getPMDef n ty covcs
+         (cargs ** ctree) <- getPMDef n ty covcs
          missCase <- if any catchAll covcs
                         then pure []
                         else getMissing n ctree
+         log "checkcoverage" 10 ("Initial tree: " ++ show ctree)
          log "checkcoverage" 10 ("Initial missing: " ++ show missCase)
          -- Filter out out impossible clauses
          missImp <- traverse (checkImpossible n) missCase

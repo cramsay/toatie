@@ -61,7 +61,7 @@ mutual
          let head = case definition gdef of
                       DCon t a => DataCon t a
                       TCon i t a _ => TyCon i t a
-                      _          => Func
+                      _            => Func
          processArgs (Ref head n) tynf args
 
   mkTerm : {auto c : Ref Ctxt Defs} -> {auto q : Ref QVar Int} ->
@@ -72,9 +72,15 @@ mutual
   mkTerm (IApp _ fn arg) mty args = mkTerm fn mty (arg :: args)
   mkTerm tm _ _                   = nextVar
 
+  -- Given an LHS that is declared 'impossible', build a term to match from,
+  -- so that when we build the case tree for checking coverage, we take into
+  -- account the impossible clauses
   export
   getImpossibleTerm : {auto c : Ref Ctxt Defs} ->
                       RawImp -> Core (Term [])
   getImpossibleTerm tm = do q <- newRef QVar (the Int 0)
-                            mkTerm tm Nothing []
+                            mkTerm (stripPVars tm) Nothing []
+    where stripPVars : RawImp -> RawImp
+          stripPVars (IPatvar n ty scope) = IApp AExplicit (IPatvar n ty $ stripPVars scope) Implicit
+          stripPVars tm = tm
 

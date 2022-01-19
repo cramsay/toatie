@@ -222,15 +222,15 @@ clauseType (MkPatClause pvars (MkInfo arg _ ty :: rest) rhs)
   where
     -- used to get the remaining clause types
     clauseType' : Pat -> ClauseType
-    clauseType' (PCon AExplicit _ _ _ xs) = ConClause -- TODO Circuit runtime, want AExplicit. Compile time, want _
+    clauseType' (PCon _ _ _ _ xs) = ConClause -- TODO Circuit runtime, want AExplicit. Compile time, want _
                                               -- TODO think about if we can use explicit -> implicit applications
     clauseType' _               = VarClause
 
     getClauseType : Pat -> ClauseType
-    getClauseType (PCon AImplicit _ _ _ xs)
-      = if all (namesIn (pvars ++ concatMap namesFrom (getPatInfo rest))) (map snd xs)
-            then VarClause
-            else ConClause
+    --getClauseType (PCon AImplicit _ _ _ xs)
+    --  = if all (namesIn (pvars ++ concatMap namesFrom (getPatInfo rest))) (map snd xs)
+    --        then VarClause
+    --        else ConClause
     getClauseType l = clauseType' l
 
 partition : {a, as, vars : _} ->
@@ -810,7 +810,7 @@ toPatClause n (lhs, rhs)
                     if n == fn
                        then pure (map argToPat args, rhs)
                        else throw (GenericMsg ("Wrong function name in pattern LHS " ++ show (n, fn)))
-           (f, args) => throw (GenericMsg "Not a function name in pattern LHS")
+           (f, args) => throw (GenericMsg $ "Not a function name in pattern LHS: " ++ show f)
 
 -- Assumption (given 'Term []) is that the pattern variables are
 -- explicitly named. We'll assign de Bruijn indices when we're done, and

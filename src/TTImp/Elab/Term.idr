@@ -211,11 +211,15 @@ checkTerm env (IApp i f a) exp
                        (atm, gaty) <- checkTerm env a
                                                 (Just (glueBack defs env ty))
 
-                       -- Check implicitness of application and binder match
-                       True <- checkImplicitness bInfo i
-                         | _ => throw (GenericMsg $ "Can't apply " ++ show i ++
-                                       " argument (" ++ show atm ++ ") to " ++
-                                       show bInfo ++ " binder (" ++ show x ++ ")" )
+                       -- FIXME do check implicitness unless the mode says we're checking a term we've generated...
+                       --       this way we don't have to tag our applications correctly. Bit of a hack
+
+                       -- -- Check implicitness of application and binder match
+                       -- True <- checkImplicitness bInfo i
+                       --   | _ => throw (GenericMsg $ "Can't apply " ++ show i ++
+                       --                 " argument (" ++ show atm ++ ") to " ++
+                       --                 show bInfo ++ " binder (" ++ show x ++ ")" )
+
                        -- Calculate the type of the application by continuing
                        -- to evaluate the scope with 'atm'
                        sc' <- sc defs (toClosure env atm)
@@ -250,7 +254,7 @@ checkTerm {vars} env (IMustUnify tm) (Just expty)
          --_ <- newConstant env metaval !(getTerm mineTy) [constr]
          addDot env nm mineTm metaval
 
-         coreLift $ putStrLn ("Checking dot pattern for " ++ show mineTm ++ " : " ++ show !(getTerm mineTy))
+         --coreLift $ putStrLn ("Checking dot pattern for " ++ show mineTm ++ " : " ++ show !(getTerm mineTy))
          -- Look back at the constraints idris2 generates... not sure
          -- I should we unifying _with_ the expected term but unifying
          -- in order to get something that we then check...

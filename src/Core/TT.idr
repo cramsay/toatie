@@ -737,7 +737,7 @@ export
 export
 Show Covering where
   show IsCovering = "covering"
-  show (MissingCases c) = "not covering all cases"
+  show (MissingCases cs) = "Missing cases " ++ show cs
   show (NonCoveringCall [f])
     = "not covering due to call to function " ++ show f
   show (NonCoveringCall cs)

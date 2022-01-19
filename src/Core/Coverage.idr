@@ -115,6 +115,24 @@ freeEnv : (vs : List Name) -> Env Term vs
 freeEnv [] = []
 freeEnv (n :: ns) = PVar 0 Erased :: freeEnv ns
 
+-- Find unbound names in a term
+export
+freeVars : {vars : _} ->
+           {auto c : Ref Ctxt Defs} ->
+           Env Term vars -> Term vars -> List Name
+freeVars env (Ref Bound n) = [n]
+freeVars env (Ref nt n) = []
+freeVars env (Local idx p) = []
+freeVars env (Meta x xs) = []
+freeVars env (Bind n b scope) = freeVars (b :: env) scope
+freeVars env (App i f a) = freeVars env f ++ freeVars env a
+freeVars env TType = []
+freeVars env Erased = []
+freeVars env (Quote x) = freeVars env x
+freeVars env (TCode x) = freeVars env x
+freeVars env (Eval x) = freeVars env x
+freeVars env (Escape x) = freeVars env x
+
 -- Return whether the given type is definitely empty (due to there being
 -- no constructors which can possibly match it.)
 export
@@ -163,7 +181,7 @@ emptyRHS sc = sc
 mkAlt : {vars : _} ->
         CaseTree vars -> (Name, Int, Nat) -> CaseAlt vars
 mkAlt sc (cn, t, ar)
-  = let varnames = (map (MN "m") (take ar [0..]))
+  = let varnames = (map (MN "_proj") (take ar [0..]))
     in ConCase cn t varnames
          (weakenNs varnames (emptyRHS sc))
 
@@ -298,7 +316,7 @@ buildArgs defs known not ps cs@(Case {name = var} idx el ty altsIn)
     buildArgAlt not' (ConCase n t args sc)
         = do let con = Ref (DataCon t (length args)) n
              let ps' = map (substName var
-                             (apply con (map (\a => (AExplicit, Ref Bound a)) args))) ps
+                             (apply con (map (\a => (AImplicit, Ref Bound a)) args))) ps
              buildArgs defs (weakenNs args ((MkVar el, t) :: known))
                                (weakenNs args not') ps' sc
     buildArgAlt not' (DefaultCase sc)
@@ -333,7 +351,7 @@ getMissing n ctree
   = do defs <- get Ctxt
        let psIn = map (Ref Bound) vars
        patss <- buildArgs defs [] [] psIn ctree
-       let patss = map (map (\a=>(AExplicit, a))) patss --TODO Should I be propagating the appinfo all the way properly?
+       let patss = map (map (\a=>(AImplicit, a))) patss --TODO Should I be propagating the appinfo all the way properly?
        pure (map (apply (Ref Func n)) patss)
 
 

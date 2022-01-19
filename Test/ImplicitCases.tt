@@ -2,6 +2,12 @@ import Data.Nat
 --import Data.Vect
 --import Proofs
 
+incomp : Nat -> Nat
+--incomp (S n) = Z
+incomp Z = Z
+pat n : Nat =>
+  incomp (S n) = S (incomp n)
+
 data SNat : Nat -> Type where
   Singleton : {n : Nat} -> SNat n
 
@@ -12,12 +18,12 @@ pat n : Nat =>
 sid : {n : Nat} -> SNat n -> SNat n
 
 -- -- Fully implicit
--- sid {_} (Singleton {_}) = Singleton {_} -- TODO Can't unify two holes
+sid {_} (Singleton {_}) = Singleton {_} -- TODO Can't unify two holes
 
--- Happy
-sid {Z} (Singleton {Z}) = Singleton {Z}
-pat k : Nat =>
-  sid {S k} (Singleton {S k}) = Singleton {S k}
+---- Happy
+--sid {Z} (Singleton {Z}) = Singleton {Z}
+--pat k : Nat =>
+--  sid {S k} (Singleton {S k}) = Singleton {S k}
 
 -- -- Unhappy... different names for irrelevant arg and singleton's nat
 -- sid {Z} (Singleton {Z}) = Singleton {Z}
