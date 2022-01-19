@@ -8,6 +8,12 @@ incomp Z = Z
 pat n : Nat =>
   incomp (S n) = S (incomp n)
 
+discrim : Nat -> Nat
+discrim Z = 0
+discrim (S Z) = 1
+pat n : Nat =>
+  discrim (S n) = n
+
 data SNat : Nat -> Type where
   Singleton : {n : Nat} -> SNat n
 

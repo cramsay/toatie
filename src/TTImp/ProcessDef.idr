@@ -350,6 +350,42 @@ nameListEq (x :: xs) (y :: ys) with (nameEq x y)
   nameListEq (x :: xs) (y :: ys) | Nothing = Nothing
 nameListEq _ _ = Nothing
 
+
+-- Return names of arguments in implicit positions (nonrecursively)
+-- given a list of arg names and a function's type
+filterImplicitArgs : List Name -> (ty : Term vars) -> List Name
+filterImplicitArgs (arg::args) (Bind _ (Pi s Implicit _) scope) = arg :: filterImplicitArgs args scope
+filterImplicitArgs (arg::args) (Bind _ (Pi s Explicit _) scope) =        filterImplicitArgs args scope
+filterImplicitArgs args ty = []
+
+mutual
+  -- A case alternative respects implicitness if it's nested case tree does
+  -- (just need bookkeeping for any implicit arguments introduced by constructor matching)
+  checkImplicitConAlt : {vars : _} ->
+                        {auto c : Ref Ctxt Defs} ->
+                        List Name -> CaseAlt vars ->
+                        Core ()
+  checkImplicitConAlt implicits (ConCase n tag args ct)
+    = do defs <- get Ctxt
+         Just cty <- lookupDefType n defs
+           | Nothing => throw (InternalError $ "Undefined constructor name " ++ show n)
+         checkImplicitConCase (implicits ++ filterImplicitArgs args cty) ct
+  checkImplicitConAlt implicits (DefaultCase ct) = checkImplicitConCase implicits ct
+
+  -- A case tree respects implicitness if when we match on an implicit argument, there are
+  -- only zero or one alternatives... anything more than one would cause ambiguity at run-time
+  -- when the implicits are erased. This rule allows single constructor types such as Refl.
+  checkImplicitConCase : {vars : _} ->
+                         {auto c : Ref Ctxt Defs} ->
+                         List Name -> CaseTree vars ->
+                         Core ()
+  checkImplicitConCase implicits (Case idx p scTy alts)
+    = do if elem (nameAt idx p) implicits
+            then when (length alts > 1)
+                      (throw (GenericMsg $ "Case tree requires ambiguous pattern match on implicit arg " ++ show (nameAt idx p)))
+            else traverse_ (checkImplicitConAlt implicits) alts
+  checkImplicitConCase _ _ = pure ()
+
 export
 processDef : {auto c : Ref Ctxt Defs} ->
              {auto u : Ref UST UState} ->
@@ -374,6 +410,14 @@ processDef n clauses
          -- check coverage
          IsCovering <- checkCoverage n (type gdef) chkcs
            | cov => throw $ GenericMsg (show cov)
+
+         -- check final case tree for ambiguous matching on implicit args
+         defs <- get Ctxt
+         topFnArity <- getArity defs [] (type gdef)
+         let topImplicitArgs = filterImplicitArgs (map (\n => MN "arg" n)
+                                                       [0 .. cast topFnArity])
+                                                  (type gdef)
+         checkImplicitConCase topImplicitArgs tree_ct
 
          -- TODO need to try solving holes, check for any unresolved ones
          -- maybe throw error
@@ -402,7 +446,11 @@ processDef n clauses
   checkImpossible : Name -> Term [] ->
                     Core (Maybe (Term []))
   checkImpossible n tm
-    = do let fvs = freeVars [] tm
+    = do -- We're checking closed terms that, thanks to Core.Coverage, will
+         -- sometimes contain free variables.
+         -- We need to resolve this before checking
+         -- FIXME Also we don't respect implicitness of arguments...
+         let fvs = freeVars [] tm
          let tmImps = foldl (\tm => \n => substName n Erased tm) tm fvs
          let Just itm = toTTImp tmImps
                | Nothing => throw (GenericMsg $ "Failed to unelab clause :" ++ show tm)
@@ -410,9 +458,6 @@ processDef n clauses
          handleUnify
            (do ctxt <- get Ctxt
                log "checkimpossible" 10 ("About to unelab term: " ++ show tm)
-               --FIXME we're checking closed terms that, thanks to Core.Coverage sometimes contain free variables
-               --      We need to resolve this before checking
-               --      Also we don't respect implicitness of arguments
                (lhstm, _) <- elabTerm InLHS [] itm Nothing
                let lhstm = tm
                defs <- get Ctxt
