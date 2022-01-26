@@ -1,0 +1,254 @@
+-- Playing with binary representations a la Brady's "Constructing Correct
+-- Circuits: Verification of Functional Aspects of Hardware Specifications with
+-- Dependent Types"
+
+import Data.Nat
+import Proofs
+
+data Bit : Nat -> Type where
+  O : Bit 0
+  I : Bit 1
+
+data BitPair : Nat -> Nat -> Nat -> Type where
+  MkBitPair : {a,b,c,x,y : Nat} ->
+              {prf : Equal Nat
+                           (plus b (double a))
+                           (plus c (plus x y))
+              } ->
+              Bit a -> Bit b -> BitPair c x y
+
+-- AND gates
+
+and : Nat -> Nat -> Nat
+pat x, y : Nat =>
+  and (S x) (S y) = 1
+pat y : Nat =>
+  and Z y = 0
+pat x : Nat =>
+  and x Z = 0
+
+-- Need a nudge to show that `and x 0` is always zero? Can maybe improve case
+-- tree behaviour for compile time vs run time? Think the nesting of cases is
+-- the culprit here... need to match on x before looking at y.
+--
+-- The need for these here could probably be deferred just by case splitting on
+-- all four possible input combinations, but it's bound to come up at some point!
+
+prfAndZeroRight : (x : Nat) -> Equal Nat 0 (and x 0)
+prfAndZeroRight Z = Refl {Nat} {0}
+pat x : Nat =>
+  prfAndZeroRight (S x) = Refl {Nat} {0}
+
+andGate : {x,y : Nat} -> Bit x -> Bit y -> Bit (and x y)
+andGate {_} {_} I I = I
+pat y : Nat, b : Bit y =>
+  andGate {_} {y} O b = O
+pat x : Nat, a : Bit x =>
+  andGate {x} {_} a O
+    = let ans = O in
+      eqInd2 {_} {_} {_} {prfAndZeroRight x} {_} ans
+
+-- OR gates
+
+or : Nat -> Nat -> Nat
+or Z Z = 0
+pat x, y : Nat =>
+  or (S x) y = 1
+pat x, y : Nat =>
+  or x (S y) = 1
+
+prfOrOneRight : (x : Nat) -> Equal Nat 1 (or x 1)
+prfOrOneRight Z = Refl {Nat} {1}
+pat x : Nat =>
+  prfOrOneRight (S x) = Refl {Nat} {1}
+
+orGate : {x,y : Nat} -> Bit x -> Bit y -> Bit (or x y)
+orGate {Z} {Z} O O = O
+pat y : Nat, b : Bit y =>
+  orGate {_} {y} I b = I
+pat x : Nat, a : Bit x =>
+  orGate {x} {_} a I =
+    let ans = I in
+    eqInd2 {_} {_} {_} {prfOrOneRight x} {_} ans
+
+
+-- XOR gates
+
+xor : Nat -> Nat -> Nat
+xor Z     Z     = 0
+pat x : Nat =>
+  xor (S x) Z     = 1
+pat y : Nat =>
+  xor Z     (S y) = 1
+pat x, y : Nat =>
+  xor (S x) (S y) = 0
+
+xorGate : {x,y : Nat} -> Bit x -> Bit y -> Bit (xor x y)
+xorGate {_} {_} O O = O
+xorGate {_} {_} O I = I
+xorGate {_} {_} I O = I
+xorGate {_} {_} I I = O
+
+addBit : {c,x,y : Nat} -> Bit c -> Bit x -> Bit y -> BitPair c x y
+addBit {_} {_} {_} O O O = MkBitPair {0} {0} {0} {0} {0} {Refl {Nat} {0}} O O
+addBit {_} {_} {_} O O I = MkBitPair {0} {1} {0} {0} {1} {Refl {Nat} {1}} O I
+addBit {_} {_} {_} O I O = MkBitPair {0} {1} {0} {1} {0} {Refl {Nat} {1}} O I
+addBit {_} {_} {_} O I I = MkBitPair {1} {0} {0} {1} {1} {Refl {Nat} {2}} I O
+addBit {_} {_} {_} I O O = MkBitPair {0} {1} {1} {0} {0} {Refl {Nat} {1}} O I
+addBit {_} {_} {_} I O I = MkBitPair {1} {0} {1} {0} {1} {Refl {Nat} {2}} I O
+addBit {_} {_} {_} I I O = MkBitPair {1} {0} {1} {1} {0} {Refl {Nat} {2}} I O
+addBit {_} {_} {_} I I I = MkBitPair {1} {1} {1} {1} {1} {Refl {Nat} {3}} I I
+
+-- Unsigned binary types
+
+data Unsigned : Nat -> Nat -> Type where
+  UNil  : Unsigned 0 0
+  UCons : {width,val,b : Nat} ->
+          Unsigned width val -> Bit b ->
+          Unsigned (S width) (plus b (double val))
+
+u1_1 : Unsigned 1 1
+u1_1 = UCons {_} {_} {_} UNil I
+
+u1_0 : Unsigned 1 0
+u1_0 = UCons {_} {_} {_} UNil O
+
+u2_3 : Unsigned 2 3
+u2_3 = UCons {_} {_} {_} u1_1 I
+
+u2_1 : Unsigned 2 1
+u2_1 = UCons {_} {_} {_} u1_0 I
+
+prfUAdd : (c, xb, yb, a, b, xsb, ysb : Nat) ->
+          (prf : Equal Nat (plus b (double a)) (plus c (plus xb yb)) ) ->
+          (Equal Nat
+           (plus b (double (plus a (plus xsb ysb))))
+           (plus c (plus (plus xb (double xsb)) (plus yb (double ysb))))
+          )
+pat c, xb, yb, a, b, xsb, ysb : Nat,
+    prf : (Equal Nat (plus b (double a))
+                     (plus c (plus xb yb))) =>
+  prfUAdd c xb yb a b xsb ysb prf
+    = let h0 = Refl {_} {plus b (double (plus a (plus xsb ysb)))}
+          h1 = eqInd2 {_} {_} {_}
+                      {doubleAssociative a (plus xsb ysb)}
+                      {\n : Nat => Equal Nat (plus b (double (plus a (plus xsb ysb))))
+                                             (plus b n)
+                      } h0
+          h2 = eqInd2 {_} {_} {_}
+                      {plusAssociative b (double a) (double (plus xsb ysb))}
+                      {\n : Nat => Equal Nat (plus b (double (plus a (plus xsb ysb))))
+                                             (n)
+                      } h1
+          h3 = eqInd2 {_} {_} {_}
+                      {prf}
+                      {\n : Nat => Equal Nat (plus b (double (plus a (plus xsb ysb))))
+                                             (plus n (double (plus xsb ysb)))
+                      } h2
+          h4 = eqInd2 {_} {_} {_}
+                      {doubleAssociative xsb ysb}
+                      {\n : Nat => Equal Nat (plus b (double (plus a (plus xsb ysb))))
+                                             (plus (plus c (plus xb yb)) n)
+                      } h3
+          h5 = eqInd2 {_} {_} {_}
+                      {eqSym {_} {_} {_} (plusAssociative c (plus xb yb) (plus (double xsb) (double ysb)))}
+                      {\n : Nat => Equal Nat (plus b (double (plus a (plus xsb ysb))))
+                                             (n)
+                      } h4
+          h6 = eqInd2 {_} {_} {_}
+                      {plusPlusAssociative xb yb (double xsb) (double ysb)}
+                      {\n : Nat => Equal Nat (plus b (double (plus a (plus xsb ysb))))
+                                             (plus c n)
+                      } h5
+      in h6
+
+-- Unsigned binary addition (without staging)
+uAdd : {w,x,y,c : Nat} ->
+       Unsigned w x -> Unsigned w y -> Bit c ->
+       Unsigned (S w) (plus c (plus x y))
+
+-- Mutually recursive helper (needed to project our BitPair fields)
+uAdd' : {w,xsn,ysn,c,xn,yn : Nat} ->
+        BitPair c xn yn ->
+        Unsigned w xsn ->
+        Unsigned w ysn ->
+        Unsigned (S (S w)) (plus c (plus (plus xn (double xsn))
+                                         (plus yn (double ysn))))
+pat w, xsn, ysn, c, xn, yn, a, b : Nat,
+    cin' : Bit a, lsb : Bit b,
+    xs : Unsigned w xsn, ys : Unsigned w ysn,
+    prf : Equal Nat (plus b (double a))
+                    (plus c (plus xn yn)) =>
+ uAdd' {w} {xsn} {ysn} {c} {xn} {yn} (MkBitPair {a} {b} {c} {xn} {yn} {prf} cin' lsb) xs ys
+   = let rec = uAdd {_} {_} {_} {_} xs ys cin'
+         ans = UCons {_} {_} {_} rec lsb
+     in eqInd2 {_} {_} {_}
+               {prfUAdd c xn yn a b xsn ysn prf}
+               {_} ans
+
+-- Implementation for unsigned binary addition
+pat c : Nat, cin : Bit c =>
+  uAdd {0} {0} {0} {c} UNil UNil cin
+    = UCons {_} {0} {c} UNil cin
+
+pat w, xn, xsn, yn, ysn, c : Nat,
+    cin : Bit c, xb : Bit xn, yb : Bit yn,
+    xbs : Unsigned w xsn, ybs : Unsigned w ysn =>
+  uAdd {S w} {_} {_} {c} (UCons {w} {xsn} {xn} xbs xb) (UCons {w} {ysn} {yn} ybs yb) cin
+    = uAdd' {_} {_} {_} {_} {_} {_}
+            (addBit {_} {_} {_} cin xb yb)
+            xbs ybs
+
+-- -- Unsigned binary addition (with staging)
+-- -- Think we need to improve pattern matching on staging constructs or allow nested case statements
+--
+-- uAddS : (w : Nat) -> {x,y,c : Nat} ->
+--         < Unsigned w x > -> < Unsigned w y > -> < Bit c > ->
+--         < Unsigned (S w) (plus c (plus x y)) >
+-- 
+-- -- Mutually recursive helper (needed to project our BitPair fields)
+-- uAddS' : (w : Nat) -> {xsn,ysn,c,xn,yn : Nat} ->
+--          < BitPair c xn yn > ->
+--          < Unsigned w xsn > ->
+--          < Unsigned w ysn > ->
+--          < Unsigned (S (S w)) (plus c (plus (plus xn (double xsn))
+--                                             (plus yn (double ysn))))
+--          >
+-- pat w, xsn, ysn, c, xn, yn, a, b : Nat,
+--     cin' : Bit a, lsb : Bit b,
+--     xs : Unsigned w xsn, ys : Unsigned w ysn,
+--     prf : Equal Nat (plus b (double a))
+--                     (plus c (plus xn yn)) =>
+--  uAddS' w {xsn} {ysn} {c} {xn} {yn} [| (MkBitPair {a} {b} {c} {xn} {yn} {prf} cin' lsb) |] [| xs |] [| ys |]
+--    = [| let rec = ~(uAddS w {xsn} {ysn} {a} [|xs|] [|ys|] [|cin'|])
+--             ans = UCons {S w} {_} {_} rec lsb
+--         in eqInd2 {_} {_} {_}
+--                   {prfUAdd c xn yn a b xsn ysn prf}
+--                   {_} ans
+--      |]
+-- 
+-- -- Implementation for unsigned binary addition
+-- pat c : Nat, cin : Bit c =>
+--   uAddS 0 {0} {0} {c} [| UNil |] [| UNil |] [| cin |]
+--     = [| UCons {0} {0} {c} UNil cin |]
+-- 
+-- pat w, xn, xsn, yn, ysn, c : Nat,
+--     cin : Bit c, xb : Bit xn, yb : Bit yn,
+--     xbs : Unsigned w xsn, ybs : Unsigned w ysn =>
+--   uAddS (S w) {_} {_} {c} [| UCons {w} {xsn} {xn} xbs xb |] [| UCons {w} {ysn} {yn} ybs yb |] [| cin |]
+--     = uAddS' {_} {_} {_} {_} {_} {_}
+--              [| addBit {_} {_} {_} cin xb yb |]
+--              [| xbs |]  [| ybs |]
+-- 
+-- uAddCirc : (w : Nat) -> {x,y,c : Nat} ->
+--            < Unsigned w x -> Unsigned w y -> Bit c ->
+--              Unsigned (S w) (plus c (plus x y)) >
+-- pat w, x, y, c : Nat, xs : Unsigned w x, ys : Unsigned w y, cin : Bit c =>
+--   uAddCirc w {x} {y} {c}
+--     = [| \xs : Unsigned w x =>
+--          \ys : Unsigned w y =>
+--          \cin : Bit c =>
+--          ~(uAddS w {x} {y} {c} [| xs |] [| ys |] [|cin|])
+--       |]
+
+-- \ba => \bb => \bc => \bd => \a : Bit ba => \b : Bit bb => \c : Bit bc => \d : Bit bd => uAddS _ {_} {_} {_} [| UCons {_} {_} {_} (UCons {_} {_} {_} UNil a) b |] [| UCons {_} {_} {_} (UCons {_} {_} {_} UNil c) d |] [| O |]

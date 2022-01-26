@@ -102,3 +102,60 @@ pat left, right : Nat =>
   plusSuccRightSucc (S left) right
     = let h = plusSuccRightSucc left right
       in eqCong {Nat} {Nat} {S} {S (plus left right)} {plus left (S right)} h
+
+plusAssociative : (left, centre, right : Nat) ->
+                  Equal Nat (plus left (plus centre right))
+                            (plus (plus left centre) right)
+pat centre, right : Nat =>
+  plusAssociative Z centre right = Refl {_} {_}
+pat left, centre, right : Nat =>
+  plusAssociative (S left) centre right =
+    let h = plusAssociative left centre right
+    in eqCong {_} {_} {S} {_} {_} h
+
+plusCommutative : (left, right : Nat) -> Equal Nat (plus left right)
+                                                   (plus right left)
+pat right : Nat =>
+  plusCommutative Z right
+    = eqSym {_} {_} {_} (plusZeroRightNeutral right)
+pat left, right : Nat =>
+  plusCommutative (S left) right
+    = let
+          h1 = plusCommutative left right
+          h2 = eqCong {Nat} {Nat} {S} {plus left right} {plus right left} h1
+          h3 = eqInd2 {_} {_} {_} {plusSuccRightSucc right left}
+                      {\x : Nat => Equal Nat (S (plus left right)) x} h2
+      in h3
+
+
+doubleAssociative : (a,b : Nat) -> Equal Nat (double (plus a b))
+                                             (plus (double a) (double b))
+pat a, b : Nat =>
+  doubleAssociative a b
+    = let h1 = Refl {Nat} {double (plus a b)}
+          h2 = eqInd2 {_} {_} {_} {eqSym {_} {_} {_} (plusAssociative a b (plus a b))}
+                                  {\n => Equal Nat (double (plus a b)) n } h1
+          h3 = eqInd2 {_} {_} {_} {plusCommutative b (plus a b)}
+                                  {\n => Equal Nat (double (plus a b)) (plus a n)} h2
+          h4 = eqInd2 {_} {_} {_} { eqSym {_} {_} {_} (plusAssociative a b b) }
+                                  {\n => Equal Nat (double (plus a b)) (plus a n)} h3
+          h5 = eqInd2 {_} {_} {_} { plusAssociative a a (plus b b) }
+                                  {\n => Equal Nat (double (plus a b)) n} h4
+      in h5
+
+plusPlusAssociative : (a,b,c,d : Nat) -> Equal Nat (plus (plus a b) (plus c d))
+                                                   (plus (plus a c) (plus b d))
+pat a,b,c,d : Nat =>
+  plusPlusAssociative a b c d
+    = let h1 = Refl {Nat} {plus (plus a b) (plus c d)}
+          h2 = eqInd2 {_} {_} {_} {eqSym {_} {_} {_} (plusAssociative a b (plus c d))}
+                                  {\n => Equal Nat (plus (plus a b) (plus c d)) n} h1
+          h3 = eqInd2 {_} {_} {_} {plusCommutative b (plus c d)}
+                                  {\n => Equal Nat (plus (plus a b) (plus c d)) (plus a n)} h2
+          h4 = eqInd2 {_} {_} {_} {eqSym {_} {_} {_} (plusAssociative c d b)}
+                                  {\n => Equal Nat (plus (plus a b) (plus c d)) (plus a n)} h3
+          h5 = eqInd2 {_} {_} {_} {plusCommutative d b}
+                                  {\n => Equal Nat (plus (plus a b) (plus c d)) (plus a (plus c n))} h4
+          h6 = eqInd2 {_} {_} {_} {plusAssociative a c (plus b d)}
+                                  {\n => Equal Nat (plus (plus a b) (plus c d)) n} h5
+      in h6

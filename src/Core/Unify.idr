@@ -610,15 +610,38 @@ mutual
                        (NApp (NLocal y yp) ys)
   unifyBothApps mode env (NLocal x xp) xs (NLocal y yp) ys
     = unifyIfEq True mode env (NApp (NLocal x xp) xs) (NApp (NLocal y yp) ys)
-  -- TODO case for both heads are holes...
+  unifyBothApps mode env (NMeta xn xs) xs' (NMeta yn ys) ys'
+    = if xn == yn -- TODO we also need x to be invertible!
+         then unifyArgs mode env (map (\a=>(AExplicit,a)) xs ++ xs')
+                                 (map (\a=>(AExplicit,a)) ys ++ ys')
+         else do xlocs <- localsIn xs
+                 ylocs <- localsIn ys
+                 -- Solve the one with the bigger context, and if they're
+                 -- equal, the one that's applied to fewest things (because
+                 -- then they arguments get substituted in)
+                 let xbigger = xlocs > ylocs
+                                 || (xlocs == ylocs && length xs' <= length ys')
+                 if (xbigger) -- TODO x shouldn't be a pattern var
+                    then unifyApp mode env (NMeta xn xs) xs'
+                                           (NApp (NMeta yn ys) ys')
+                    else unifyApp mode env (NMeta yn ys) ys'
+                                           (NApp (NMeta xn xs) xs')
+    where
+      localsIn : List (Closure vars) -> Core Nat
+      localsIn [] = pure 0
+      localsIn (c :: cs)
+          = do defs <- get Ctxt
+               case !(evalClosure defs c) of
+                 NApp (NLocal _ _) _ => pure $ S !(localsIn cs)
+                 _ => localsIn cs
   unifyBothApps mode env (NMeta xn xs) xs' yh ys
     = unifyApp mode env (NMeta xn xs) xs' (NApp yh ys)
   unifyBothApps mode env xh xs (NMeta yn ys) ys'
     = unifyApp mode env (NMeta yn ys) ys' (NApp xh xs)
-  unifyBothApps InMatch env fx@(NRef xt hdx) xargs fy@(NRef yt hdy) yargs
+  unifyBothApps mode env fx@(NRef xt hdx) xargs fy@(NRef yt hdy) yargs
     = if hdx == hdy
-         then unifyArgs InMatch env xargs yargs
-         else unifyApp  InMatch env fx xargs (NApp fy yargs)
+         then unifyArgs mode env xargs yargs
+         else unifyApp  mode env fx xargs (NApp fy yargs)
   unifyBothApps mode env xh xs yh ys = unifyApp mode env xh xs (NApp yh ys)
 
   export
@@ -791,6 +814,7 @@ checkDots : {auto u : Ref UST UState} ->
 checkDots
   = do ust <- get UST
        traverse_ checkConstraint (reverse (dotConstraints ust))
+       ust <- get UST
        put UST (record { dotConstraints = [] } ust)
   where
     getHoleName : Term [] -> Core (Maybe Name)
@@ -816,6 +840,7 @@ checkDots
 
              (do
                  oldholen <- getHoleName (Meta n [])
+
                  -- Check that what was given (x) matches what was
                  -- solved by unification (y).
                  -- In 'InMatch' mode, only metavariables in 'x' can
@@ -833,7 +858,8 @@ checkDots
                          )
                          oldholen
                  -- TODO check "namesSolved" in cs?
-                 when (not (isNil (constraints cs) || dotSolved))
+
+                 when (not (isNil (constraints cs)) || dotSolved)
                       (throw (InternalError "Dot pattern match fail"))
              )
              (\err => case err of

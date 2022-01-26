@@ -8,6 +8,10 @@ pat y : Nat =>
 pat k : Nat, y : Nat =>
    plus (S k) y = S (plus k y)
 
+double : Nat -> Nat
+pat n : Nat =>
+  double n = plus n n
+
 mul : Nat -> Nat -> Nat
 pat y : Nat =>
    mul Z y = Z

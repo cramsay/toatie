@@ -22,6 +22,8 @@ import Data.SortedMap
 import Data.SortedSet
 import Data.String
 
+import Control.Monad.State
+
 mutual
   mismatchNF : {auto c : Ref Ctxt Defs} ->
                {vars : _} ->
@@ -245,6 +247,35 @@ processImplicitUse env lhstm rhstm exprhsty
                                <- checkTerm env rhswrap (Just (gnf env exprhsty'))
                             pure ()
 
+-- Insert dots for any pattern variables after they have appeared once in the LHS
+-- State is tuple of set of bound pattern names and set of pattern names found in lhs already
+addDots : RawImp -> State (SortedSet Name, SortedSet Name) RawImp
+addDots IType    = pure IType
+addDots Implicit = pure Implicit
+addDots (IPi Implicit mn argTy retTy)  = pure $ IPi Implicit mn argTy retTy
+addDots (IPi Explicit mn argTy retTy)  = pure $ IPi Explicit mn argTy retTy
+addDots (ILet n margTy argVal scope)   = pure $ ILet n margTy argVal scope -- Can't have ILet on LHS...
+addDots (IMustUnify x) = pure $ IMustUnify x
+addDots (IQuote x)     = pure $ IQuote  !(addDots x)
+addDots (ICode x)      = pure $ ICode   !(addDots x)
+addDots (IEval x)      = pure $ IEval   !(addDots x)
+addDots (IEscape x)    = pure $ IEscape !(addDots x)
+addDots (IPatvar n ty scope) = do (pats, founds) <- get
+                                  put (insert n pats, founds)
+                                  pure $ IPatvar n ty !(addDots scope)
+addDots (ILam Implicit mn argTy scope) = pure $ ILam Implicit mn argTy !(addDots scope)--(IMustUnify $ addDots scope)
+addDots (ILam Explicit mn argTy scope) = pure $ ILam Explicit mn argTy !(addDots scope)
+addDots (IApp AImplicit f a) = pure $ IApp AImplicit !(addDots f) !(addDots a)
+addDots (IApp AExplicit f a) = pure $ IApp AExplicit !(addDots f) !(addDots a)
+addDots (IVar x) = do (pats, founds) <- get
+                      case contains x pats of
+                        True =>
+                          case contains x founds of
+                            True => pure $ IMustUnify $ IVar x
+                            False => do put (pats, insert x founds)
+                                        pure $ IVar x
+                        False => pure $ IVar x
+
 processLHS :  {auto c : Ref Ctxt Defs} ->
               {auto u : Ref UST UState} ->
               {auto s : Ref Stg Stage} ->
@@ -257,42 +288,20 @@ processLHS :  {auto c : Ref Ctxt Defs} ->
 processLHS {vars} env lhs
   = do defs <- get Ctxt
 
-       (lhstm, lhstyg) <- elabTerm InLHS env (wrapDot lhs) Nothing
+       let lhs = evalState (empty,empty) (addDots lhs)
+       (lhstm, lhstyg) <- elabTerm InLHS env lhs Nothing
 
        lhstm <- normalise defs env lhstm
        lhsty <- normalise defs env !(getTerm lhstyg)
 
        checkDots
 
-       ust <- get UST
-       let [] = SortedMap.toList $ constraints ust
-               | cs => throw (GenericMsg $ "Constraints present after processing clause: "
-                                            ++ show (map snd cs))
        defs <- get Ctxt
        lhstm <- normalise defs env lhstm
        lhsty <- normalise defs env !(getTerm lhstyg)
 
        ret <-  getRHSEnv env lhstm lhsty
        pure (lhs, ret)
-  where
-  wrapDot : RawImp -> RawImp
-  wrapDot (ILet n margTy argVal scope) = ILet n margTy (wrapDot argVal) (wrapDot scope)
-  wrapDot (IPi Implicit mn argTy retTy) = IPi Implicit mn argTy retTy
-  wrapDot (IPi Explicit mn argTy retTy) = IPi Explicit mn argTy retTy
-  wrapDot (ILam Implicit mn argTy scope) = ILam Implicit mn argTy (wrapDot scope)--(IMustUnify $ wrapDot scope)
-  wrapDot (ILam Explicit mn argTy scope) = ILam Explicit mn argTy (wrapDot scope)
-  wrapDot (IPatvar n ty scope) = IPatvar n ty (wrapDot scope)
-  wrapDot (IApp AImplicit f a) = IApp AImplicit (wrapDot f) (IMustUnify a)
-  wrapDot (IApp AExplicit f a) = IApp AExplicit (wrapDot f) (wrapDot a)
-  wrapDot (IVar x) = IVar x
-  wrapDot (IMustUnify x) = IMustUnify x
-  wrapDot (IQuote x) = IQuote $ wrapDot x
-  wrapDot (ICode x) = ICode $ wrapDot x
-  wrapDot (IEval x) = IEval $ wrapDot x
-  wrapDot (IEscape x) = IEscape $ wrapDot x
-  wrapDot IType = IType
-  wrapDot Implicit = Implicit
-
 
 -- Return whether any of the pattern variables are in a trivially empty
 -- type, where trivally empty means one of:
@@ -339,7 +348,21 @@ processClause (PatClause lhs_in rhs)
          defs <- get Ctxt
          rhsnf <- normalise defs env rhstm
 
+         -- TODO want to 1) show term with holes, 2) show environment and types, 3) error on MN holes
+         solveConstraints InLHS
+         ust <- get UST
+         let [] = SortedSet.toList $ holes ust
+                | (h::hs) => do holeStrings <- traverse (dumpHole defs) (h :: hs)
+                                throw $ GenericMsg $ "Unresolved holes in clause " ++ show lhsenv ++ " = " ++ show rhstm ++ "\n"
+                                  ++ "\nHoles:\n" ++ unlines holeStrings
+                                  ++ "\nConstraints:\n" ++ unlines (nub $ map (show. snd) $ toList $ constraints ust)
+
          pure (Right $ MkClause env lhsenv rhsnf)
+  where
+  dumpHole : Defs -> Name -> Core String
+  dumpHole defs n = do Just htype <- lookupDefType n defs
+                         | Nothing => throw $ GenericMsg "Unresolved hole has no type"
+                       pure $ (show n) ++ " : " ++ show htype
 
 nameListEq : (xs : List Name) -> (ys : List Name) -> Maybe (xs = ys)
 nameListEq [] [] = Just Refl
@@ -419,12 +442,20 @@ processDef n clauses
                                                   (type gdef)
          checkImplicitConCase topImplicitArgs tree_ct
 
-         -- TODO need to try solving holes, check for any unresolved ones
-         -- maybe throw error
+         -- check that we've solved all RHS holes too
+         solveConstraints InTerm
+         ust <- get UST
+         let [] = SortedMap.toList $ constraints ust
+                | cs => throw (GenericMsg $ "Constraints present after processing def: "
+                                            ++ show n ++ " " ++ show (map snd cs))
+         -- TODO want to 1) show term with holes, 2) show environment and types, 3) error on MN holes
+         let [] = SortedSet.toList $ holes ust
+                | hs => throw $ GenericMsg $ "Unresolved holes in " ++ show n ++ " "
+                                ++ show hs ++ "\nTerm is " ++ show tree_ct
 
-         --coreLift $ putStrLn $ "Complete ----------------------"
-         --coreLift $ putStrLn $ "Args = " ++ show cargs
-         --coreLift $ putStrLn $ "Tree = " ++ show tree_ct
+         coreLift $ putStrLn $ "Complete ----------------------"
+         coreLift $ putStrLn $ "Args = " ++ show cargs
+         coreLift $ putStrLn $ "Tree = " ++ show tree_ct
          coreLift $ putStrLn $ "Processed " ++ show n
   where
 

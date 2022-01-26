@@ -675,7 +675,7 @@ export
          = show (nameAt idx p) ++ "[" ++ show idx ++ "]"
       showApp (Ref _ n) [] = show n
       showApp (Meta n args) []
-          = "?" ++ show n ++ "_" ++ show args
+          = "?" ++ show n -- ++ "_" ++ show args
       showApp (Bind x (Lam s Explicit ty) sc) []
           = "\\" ++ show x ++ " :_" ++ show s ++ " " ++ show ty ++
             " => " ++ show sc

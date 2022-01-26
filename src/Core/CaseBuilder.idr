@@ -223,14 +223,15 @@ clauseType (MkPatClause pvars (MkInfo arg _ ty :: rest) rhs)
     -- used to get the remaining clause types
     clauseType' : Pat -> ClauseType
     clauseType' (PCon _ _ _ _ xs) = ConClause -- TODO Circuit runtime, want AExplicit. Compile time, want _
-                                              -- TODO think about if we can use explicit -> implicit applications
     clauseType' _               = VarClause
 
     getClauseType : Pat -> ClauseType
+    -- Removed. We now just let the case builder loose on our patterns (including implicits) and check
+    -- if ambiguous splits on implicit terms were needed after the fact.
     --getClauseType (PCon AImplicit _ _ _ xs)
     --  = if all (namesIn (pvars ++ concatMap namesFrom (getPatInfo rest))) (map snd xs)
     --        then VarClause
-    --        else ConClause
+    --        else ConClause )
     getClauseType l = clauseType' l
 
 partition : {a, as, vars : _} ->
@@ -688,7 +689,14 @@ mutual
            ty <- case fty of
                       Known t => pure t
                       _ => throw (CaseCompile fn UnknownType)
-           caseGroups fn pprf ty groups err
+
+           -- Don't add a fallthough case for con groups of implicit patterns
+           let err' = case pat of
+                        (PCon AImplicit _ _ _ _) => Nothing
+                        (PLoc AImplicit _) => Nothing
+                        _ => err
+
+           caseGroups fn pprf ty groups err'
 
   varRule : {a, vars, todo : _} ->
             {auto i : Ref PName Int} ->
