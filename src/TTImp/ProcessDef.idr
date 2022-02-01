@@ -11,7 +11,7 @@ import Core.UnifyState
 import Core.Value
 import Core.Unify
 
-import TTImp.Elab.Term
+import TTImp.Elab.Check
 import TTImp.TTImp
 import TTImp.Impossible
 
@@ -244,7 +244,7 @@ processImplicitUse env lhstm rhstm exprhsty
        case toTTImp rhstm' of
          Nothing      => throw $ GenericMsg "Can't convert back to TTImp"
          Just rhswrap => do (rhstm', rhsty')
-                               <- checkTerm env rhswrap (Just (gnf env exprhsty'))
+                               <- check env rhswrap (Just (gnf env exprhsty'))
                             pure ()
 
 -- Insert dots for any pattern variables after they have appeared once in the LHS
@@ -275,6 +275,8 @@ addDots (IVar x) = do (pats, founds) <- get
                             False => do put (pats, insert x founds)
                                         pure $ IVar x
                         False => pure $ IVar x
+addDots (ICase scr scrty alts) = pure $ ICase !(addDots scr) !(addDots scrty) alts
+addDots (ICaseLocal uname iname args sc) = pure $ ICaseLocal uname iname args !(addDots sc)
 
 processLHS :  {auto c : Ref Ctxt Defs} ->
               {auto u : Ref UST UState} ->
@@ -341,7 +343,7 @@ processClause (PatClause lhs_in rhs)
     = do -- Check the LHS
          (lhs, (vars ** (env, lhsenv, rhsexp))) <- processLHS [] lhs_in
 
-         (rhstm, rhsty) <- checkTerm env rhs (Just (gnf env rhsexp))
+         (rhstm, rhsty) <- check env rhs (Just (gnf env rhsexp))
 
          -- Check that implicit/explicit arg use is correct on the RHS
          processImplicitUse env lhsenv rhstm rhsexp

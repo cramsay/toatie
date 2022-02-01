@@ -2,36 +2,39 @@ module TTImp.TTImp
 
 import Core.TT
 
-public export
-data RawImp : Type where
-     IVar : Name -> RawImp
-     ILet : Name -> (margTy : Maybe RawImp) -> (argVal : RawImp) -> (scope : RawImp) ->
-            RawImp
-     IPi : PiInfo -> Maybe Name ->
-           (argTy : RawImp) -> (retTy : RawImp) -> RawImp
-     ILam : PiInfo -> Maybe Name ->
-            (argTy : RawImp) -> (scope : RawImp) -> RawImp
-     IPatvar : Name -> (ty : RawImp) -> (scope : RawImp) -> RawImp
-        -- ^ Idris doesn't need this since the pattern variable names are
-        -- inferred, but in this initial version everything is explicit
-     IApp : AppInfo -> RawImp -> RawImp -> RawImp
+mutual
+  public export
+  data RawImp : Type where
+       IVar : Name -> RawImp
+       ILet : Name -> (margTy : Maybe RawImp) -> (argVal : RawImp) -> (scope : RawImp) ->
+              RawImp
+       IPi : PiInfo -> Maybe Name ->
+             (argTy : RawImp) -> (retTy : RawImp) -> RawImp
+       ILam : PiInfo -> Maybe Name ->
+              (argTy : RawImp) -> (scope : RawImp) -> RawImp
+       IPatvar : Name -> (ty : RawImp) -> (scope : RawImp) -> RawImp
+          -- ^ Idris doesn't need this since the pattern variable names are
+          -- inferred, but in this initial version everything is explicit
+       IApp : AppInfo -> RawImp -> RawImp -> RawImp
+       ICase : (scr : RawImp) -> (scrty : RawImp) -> List ImpClause -> RawImp
+       ICaseLocal : (uname : Name) -> (internalName : Name) -> (args : List Name) -> RawImp -> RawImp
 
-     IMustUnify : RawImp -> RawImp
-     Implicit : RawImp
-     IType : RawImp
-     IQuote  : RawImp -> RawImp
-     ICode   : RawImp -> RawImp
-     IEval   : RawImp -> RawImp
-     IEscape : RawImp -> RawImp
+       IMustUnify : RawImp -> RawImp
+       Implicit : RawImp
+       IType : RawImp
+       IQuote  : RawImp -> RawImp
+       ICode   : RawImp -> RawImp
+       IEval   : RawImp -> RawImp
+       IEscape : RawImp -> RawImp
+
+  public export
+  data ImpClause : Type where
+       ImpossibleClause : (lhs : RawImp) -> ImpClause
+       PatClause : (lhs : RawImp) -> (rhs : RawImp) -> ImpClause
 
 public export
 data ImpTy : Type where
      MkImpTy : (n : Name) -> (ty : RawImp) -> ImpTy
-
-public export
-data ImpClause : Type where
-     ImpossibleClause : (lhs : RawImp) -> ImpClause
-     PatClause : (lhs : RawImp) -> (rhs : RawImp) -> ImpClause
 
 public export
 data ImpTyConInfo : Type where
@@ -53,6 +56,28 @@ data ImpDecl : Type where
      IData : ImpData -> ImpDecl
      IDef : Name -> List ImpClause -> ImpDecl
      IImport : String -> ImpDecl
+
+-- Information about names in nested blocks
+public export
+record NestedNames (vars : List Name) where
+  constructor MkNested
+  -- A map from names to the decorated version of the name, and the new name
+  -- applied to its enclosing environment
+  -- Takes the name type, because we don't know them until we
+  -- elaborate the name at the point of use
+  names : List (Name, (Maybe Name,  -- new name if there is one
+                       List (Var vars), -- names used from the environment
+                       NameType -> Term vars))
+
+export
+Weaken NestedNames where
+  weaken (MkNested ns) = MkNested (map wknName ns)
+    where
+    wknName : (Name, (Maybe Name, List (Var vars), NameType -> Term vars)) ->
+              (Name, (Maybe Name, List (Var (n :: vars)), NameType -> Term (n :: vars)))
+    wknName (n, (mn, vars, rep))
+      = (n, (mn, map weaken vars, \nt => weaken (rep nt)))
+
 
 export
 apply : RawImp -> List (AppInfo, RawImp) -> RawImp
@@ -82,26 +107,38 @@ toTTImp (Escape tm) = Just $ IEscape !(toTTImp tm)
 toTTImp TType  = Just IType
 toTTImp Erased = Just Implicit -- Nothing
 
-export
-Show RawImp where
-  show (IVar n) = show n
-  show (ILet n margTy argVal scope) = "let " ++ show n ++ maybe "" (\ty=>" : " ++ show ty) margTy
-                                      ++ " = " ++ show argVal ++ " in " ++ show scope
-  show (IPi Implicit mn argTy retTy) = "{" ++ maybe "" (\n=>show n ++ " : ") mn
-                                       ++ show argTy ++ "} -> " ++ show retTy
-  show (IPi Explicit mn argTy retTy) = "(" ++ maybe "" (\n=>show n ++ " : ") mn
-                                       ++ show argTy ++ ") -> " ++ show retTy
-  show (ILam Implicit mn argTy scope) = "\\{" ++ maybe "_" (\n=>show n) mn ++ " : "
-                                          ++ show argTy ++ "} => " ++ show scope
-  show (ILam Explicit mn argTy scope) = "\\" ++ maybe "_" (\n=>show n) mn ++ " : "
-                                          ++ show argTy ++ " => " ++ show scope
-  show (IPatvar n ty scope) = "pat " ++ show n ++ " : " ++ show ty ++ " => " ++ show scope
-  show (IApp AImplicit f a) = show f ++ " {" ++ show a ++ "}"
-  show (IApp AExplicit f a) = show f ++ " (" ++ show a ++ ")"
-  show (IMustUnify tm) = ".(" ++ show tm ++ ")"
-  show Implicit = "_"
-  show IType = "Type"
-  show (IQuote  tm) = "[|" ++ show tm ++ "|]"
-  show (ICode   tm) = "<" ++ show tm ++ ">"
-  show (IEval   tm) = "!(" ++ show tm ++ ")"
-  show (IEscape tm) = "~(" ++ show tm ++ ")"
+mutual
+  export
+  Show ImpClause where
+    show (ImpossibleClause lhs) = show lhs ++ " impossible"
+    show (PatClause lhs rhs) = show lhs ++ " => " ++ show rhs
+
+  export
+  Show (NestedNames vars) where
+    show (MkNested names) = "MkNested " ++ show (length names)
+
+  export
+  Show RawImp where
+    show (IVar n) = show n
+    show (ILet n margTy argVal scope) = "let " ++ show n ++ maybe "" (\ty=>" : " ++ show ty) margTy
+                                        ++ " = " ++ show argVal ++ " in " ++ show scope
+    show (IPi Implicit mn argTy retTy) = "{" ++ maybe "" (\n=>show n ++ " : ") mn
+                                         ++ show argTy ++ "} -> " ++ show retTy
+    show (IPi Explicit mn argTy retTy) = "(" ++ maybe "" (\n=>show n ++ " : ") mn
+                                         ++ show argTy ++ ") -> " ++ show retTy
+    show (ILam Implicit mn argTy scope) = "\\{" ++ maybe "_" (\n=>show n) mn ++ " : "
+                                            ++ show argTy ++ "} => " ++ show scope
+    show (ILam Explicit mn argTy scope) = "\\" ++ maybe "_" (\n=>show n) mn ++ " : "
+                                            ++ show argTy ++ " => " ++ show scope
+    show (IPatvar n ty scope) = "pat " ++ show n ++ " : " ++ show ty ++ " => " ++ show scope
+    show (IApp AImplicit f a) = show f ++ " {" ++ show a ++ "}"
+    show (IApp AExplicit f a) = show f ++ " (" ++ show a ++ ")"
+    show (ICase scr scrty alts) = "case " ++ show scr ++ " : " ++ show scrty ++ " of " ++ show alts
+    show (ICaseLocal uname iname args sc) = "caselocal (" ++ show uname ++ " " ++ show iname ++ " " ++ show args ++ ") " ++ show sc
+    show (IMustUnify tm) = ".(" ++ show tm ++ ")"
+    show Implicit = "_"
+    show IType = "Type"
+    show (IQuote  tm) = "[|" ++ show tm ++ "|]"
+    show (ICode   tm) = "<" ++ show tm ++ ">"
+    show (IEval   tm) = "!(" ++ show tm ++ ")"
+    show (IEscape tm) = "~(" ++ show tm ++ ")"

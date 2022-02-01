@@ -11,19 +11,11 @@ import Core.UnifyState
 import Core.Value
 
 import TTImp.TTImp
+import TTImp.Elab.Case
+import TTImp.Elab.Check
 
 import Data.Maybe
 import Data.SortedSet
-
-public export
-data ElabMode = InType | InLHS | InExpr | InTransform -- TODO InLHS might need some sort of erasure tag
-
-Eq ElabMode where
-  InType      == InType = True
-  InLHS       == InLHS  = True
-  InExpr      == InExpr = True
-  InTransform == InTransform = True
-  _ == _ = False
 
 checkExp : {vars : _} ->
            {auto c : Ref Ctxt Defs} ->
@@ -316,6 +308,12 @@ checkTerm env (IEscape code) exp
 -- TODO Have a second pass at the staging rules and make sure we're not doing
 -- too much extra work (evaluating normal forms twice for glued, etc.)
 
+checkTerm {vars} env (ICaseLocal uname iname args sc) exp
+  = do defs <- get Ctxt
+       checkTerm env sc exp
+       --TODO This!! Above is placeholder
+checkTerm env (ICase scr scrty alts) exp = checkCase InExpr (MkNested []) env scr scrty alts exp
+
 export
 normaliseHoleTypes : {auto c : Ref Ctxt Defs} ->
                      {auto u : Ref UST UState} ->
@@ -339,7 +337,7 @@ normaliseHoleTypes
              Hole => updateType defs n gdef
              _ => pure ()
 
-export
+{-export
 elabTerm : {vars : _} ->
            {auto c : Ref Ctxt Defs} ->
            {auto s : Ref Stg Stage} ->
@@ -347,7 +345,8 @@ elabTerm : {vars : _} ->
            ElabMode ->
            Env Term vars -> RawImp -> Maybe (Glued vars) ->
            Core (Term vars, Glued vars)
-elabTerm {vars} mode env tm ty
+           -}
+TTImp.Elab.Check.elabTerm {vars} mode env tm ty
   = do -- Record existing hole state
        oldhs <- saveHoles
        ust <- get UST
@@ -368,3 +367,5 @@ elabTerm {vars} mode env tm ty
        restoreHoles (union hs oldhs)
 
        pure (chktm, chkty)
+
+TTImp.Elab.Check.check = checkTerm

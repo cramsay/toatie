@@ -5,6 +5,7 @@ import Data.Maybe
 import Data.SortedMap
 import Decidable.Equality
 import Debug.Trace
+import Data.String
 
 -- In Idris2, this is defined in Core.Name
 public export
@@ -153,6 +154,11 @@ binderStage (Pi  s _ _) = s
 binderStage (Let s _ _) = s
 binderStage (PVar s _) = s
 binderStage (PVTy s _) = s
+
+export
+isLet : Binder tm -> Bool
+isLet (Let _ _ _) = True
+isLet _           = False
 
 export
 Functor Binder where
@@ -737,7 +743,7 @@ export
 export
 Show Covering where
   show IsCovering = "covering"
-  show (MissingCases cs) = "Missing cases " ++ show cs
+  show (MissingCases cs) = "Missing cases:\n" ++ unlines (map show cs)
   show (NonCoveringCall [f])
     = "not covering due to call to function " ++ show f
   show (NonCoveringCall cs)

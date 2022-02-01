@@ -104,7 +104,8 @@ mutual
 
   appExpr : FileName -> IndentInfo -> Rule RawImp
   appExpr fname indents
-      = do f <- simpleExpr fname indents
+      = case_ fname indents
+    <|> do f <- simpleExpr fname indents
            args <- many (argExpr fname indents)
            pure (apply f args)
 
@@ -343,6 +344,32 @@ mutual
     <|> explicitLam fname indents
     <|> pat fname indents
     <|> let_ fname indents
+
+  caseRHS : FileName -> IndentInfo -> RawImp ->
+            Rule ImpClause
+  caseRHS fname indents lhs
+      = do symbol "~>"
+           commit
+           rhs <- expr fname indents
+           atEnd indents
+           pure (PatClause lhs rhs)
+    <|> do keyword "impossible"
+           atEnd indents
+           pure (ImpossibleClause lhs)
+
+  caseClause : FileName -> IndentInfo -> Rule ImpClause
+  caseClause fname indents
+    = do lhs <- expr fname indents
+         caseRHS fname indents lhs
+
+  case_ : FileName -> IndentInfo -> Rule RawImp
+  case_ fname indents
+    = do keyword "case"
+         scr <- expr fname indents
+         keyword "of"
+         alts <- block (caseClause fname)
+         atEnd indents
+         pure (ICase scr Implicit alts)
 
 tyDecl : FileName -> IndentInfo -> Rule ImpTy
 tyDecl fname indents

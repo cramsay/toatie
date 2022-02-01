@@ -1,0 +1,10 @@
+import Data.Nat
+
+nonzero : Nat -> Nat -> Nat -> Nat
+pat n, m, o : Nat =>
+  nonzero n m o
+    = case n of
+        Z ~> m
+        pat x : Nat =>
+          (S x) ~> o
+                

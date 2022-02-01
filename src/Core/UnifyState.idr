@@ -181,6 +181,13 @@ newMeta {vars} env n ty def
     envArgs = let args = reverse (mkConstantAppArgs {done = []} env []) in
                   rewrite sym (appendNilRightNeutral vars) in args
 
+export
+applyTo : {vars : _} -> Term vars -> Env Term vars -> Term vars
+applyTo tm env
+  = let args = reverse (mkConstantAppArgs {done = []} env [])
+    in apply tm $ map (\x=>(AExplicit,x)) (rewrite sym (appendNilRightNeutral vars) in args)
+
+
 mkConstant : {vars : _} ->
              Env Term vars -> Term vars -> Term []
 mkConstant [] tm = tm
