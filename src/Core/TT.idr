@@ -136,15 +136,15 @@ data Binder : Type -> Type where
      Pi  : Stage -> PiInfo     -> ty -> Binder ty
      Let : Stage -> (val : ty) -> ty -> Binder ty
 
-     PVar : Stage -> ty -> Binder ty -- pattern bound variables ...
-     PVTy : Stage -> ty -> Binder ty -- ... and their type
+     PVar : Stage -> PiInfo -> ty -> Binder ty -- pattern bound variables ...
+     PVTy : Stage ->           ty -> Binder ty -- ... and their type
 
 export
 binderType : Binder tm -> tm
 binderType (Lam _ x ty) = ty
 binderType (Pi  _ x ty) = ty
 binderType (Let _ _ ty) = ty
-binderType (PVar _ ty) = ty
+binderType (PVar _ _ ty) = ty
 binderType (PVTy _ ty) = ty
 
 export
@@ -152,7 +152,7 @@ binderStage : Binder tm -> Stage
 binderStage (Lam s _ _) = s
 binderStage (Pi  s _ _) = s
 binderStage (Let s _ _) = s
-binderStage (PVar s _) = s
+binderStage (PVar s _ _) = s
 binderStage (PVTy s _) = s
 
 export
@@ -161,11 +161,19 @@ isLet (Let _ _ _) = True
 isLet _           = False
 
 export
+binderInfo : Binder tm -> Maybe PiInfo
+binderInfo (Lam s i ty) = Just i
+binderInfo (Pi s i ty) = Just i
+binderInfo (PVar s i ty) = Just i
+binderInfo (Let s val ty) = Nothing
+binderInfo (PVTy s ty) = Nothing
+
+export
 Functor Binder where
   map func (Lam s x ty) = Lam s x (func ty)
   map func (Pi s x ty) = Pi s x (func ty)
   map func (Let s val ty) = Let s (func val) (func ty)
-  map func (PVar s ty) = PVar s (func ty)
+  map func (PVar s i ty) = PVar s i (func ty)
   map func (PVTy s ty) = PVTy s (func ty)
 
 public export
@@ -593,8 +601,8 @@ mutual
       = Just (Pi s p !(shrinkTerm ty prf))
   shrinkBinder (Let s val ty) prf
       = Just (Let s !(shrinkTerm val prf) !(shrinkTerm ty prf))
-  shrinkBinder (PVar s ty) prf
-      = Just (PVar s !(shrinkTerm ty prf))
+  shrinkBinder (PVar s i ty) prf
+      = Just (PVar s i !(shrinkTerm ty prf))
   shrinkBinder (PVTy s ty) prf
       = Just (PVTy s !(shrinkTerm ty prf))
 
@@ -698,8 +706,11 @@ export
           = "let " ++ show x ++ " :_" ++ show s ++ " " ++ show ty ++
             " = "  ++ show val ++
             " in " ++ show sc
-      showApp (Bind x (PVar s ty) sc) []
-          = "pat " ++ show x ++ " :_" ++ show s ++ " " ++ show ty ++
+      showApp (Bind x (PVar s Explicit ty) sc) []
+          = "pat (" ++ show x ++ ") :_" ++ show s ++ " " ++ show ty ++
+            " => " ++ show sc
+      showApp (Bind x (PVar s Implicit ty) sc) []
+          = "pat {" ++ show x ++ "} :_" ++ show s ++ " " ++ show ty ++
             " => " ++ show sc
       showApp (Bind x (PVTy s ty) sc) []
           = "pty " ++ show x ++ " :_" ++ show s ++ " " ++ show ty ++
@@ -739,6 +750,25 @@ export
         go (App _ (Ref (DataCon _ _) (UN "Nil")) xty) = Just []
         go (App _ (App _ (App _ (Ref (DataCon _ _) (UN "Cons")) xty) xtm) xs) = map (xtm ::) $ go xs
         go _ = Nothing
+
+export
+Show tm => Show (Binder tm) where
+  show (Lam s Explicit ty)
+    = "explam " ++ show s ++ " " ++ show ty
+  show (Lam s Implicit ty)
+    = "implam " ++ show s ++ " " ++ show ty
+  show (Pi s Explicit ty)
+    = "exppi " ++ show s ++ " " ++ show ty
+  show (Pi s Implicit ty)
+    = "imppi " ++ show s ++ " " ++ show ty
+  show (Let s val ty)
+    = "let " ++ show val ++ " :_" ++ show s ++ " " ++ show ty
+  show (PVar s Explicit ty)
+    = "exppat " ++ show s ++ " " ++ show ty
+  show (PVar s Implicit ty)
+    = "imppat " ++ show s ++ " " ++ show ty
+  show (PVTy s ty)
+    = "pty " ++ show s ++ " " ++ show ty
 
 export
 Show Covering where

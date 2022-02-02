@@ -69,7 +69,7 @@ export
   show (NBind x (Pi s info ty) _)
     = show s ++ show x ++ " : " ++ show ty ++
       " -> [closure]"
-  show (NBind x (PVar s ty) _)
+  show (NBind x (PVar s i ty) _)
     = "pat " ++ show s ++ show x ++ " : " ++ show ty ++
       " => [closure]"
   show (NBind x (PVTy s ty) _)

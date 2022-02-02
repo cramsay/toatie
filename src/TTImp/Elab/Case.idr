@@ -21,6 +21,7 @@ import Data.List
 import Data.SortedMap
 import Data.SortedSet
 import Data.String
+import Debug.Trace
 
 lowerFirst : String -> Bool
 lowerFirst "" = False
@@ -139,20 +140,27 @@ bindCaseLocals ((n, mn, envns) :: rest) argns rhs
       Nothing => n
       Just n' => n'
 
+lamsToPisEnv : Env Term vars -> Env Term vars
+lamsToPisEnv [] = []
+lamsToPisEnv ((Lam s i ty) :: bs) = Pi s i ty :: lamsToPisEnv bs
+lamsToPisEnv (b :: bs) = b :: lamsToPisEnv bs
+
+-- FIXME how do we order arguments / pattern vectors such that they form a telescope?
+--       don't want to have Vect n a before pattern for n or a!
+
 export
 caseBlock : {vars : _} ->
             {auto c : Ref Ctxt Defs} ->
             {auto s : Ref Stg Stage} ->
             {auto u : Ref UST UState} ->
             ElabMode ->
-            NestedNames vars ->
             Env Term vars ->
             RawImp -> -- original scrutinee
             Term vars -> -- checked scrutinee
             Term vars -> -- its type
             List ImpClause -> Maybe (Glued vars) ->
             Core (Term vars, Glued vars)
-caseBlock {vars} mode nest env scr scrtm scrty alts expected
+caseBlock {vars} mode env scr scrtm scrty alts expected
   = do scrn <- genName "scr"
        casen <- genName "case" -- TODO would be good to base this on the parent function name
 
@@ -181,18 +189,17 @@ caseBlock {vars} mode nest env scr scrtm scrty alts expected
                          (const applyEnv)
                          splitOn
 
-       let alts' = map (updateClause casen splitOn nest env) alts
+       let alts' = map (updateClause casen splitOn env) alts
 
+       coreLift $ putStrLn $ "CASE: calling env = " ++ show env
        coreLift $ putStrLn $ "CASE: caseretty = " ++ show caseretty
        coreLift $ putStrLn $ "CASE: casefnty = " ++ show casefnty
        coreLift $ putStrLn $ "CASE: appTm = " ++ show appTm
-       coreLift $ putStrLn $ "CASE: appTm = " ++ show appTm
-       coreLift $ putStrLn $ "CASE: nest = " ++ show nest
        coreLift $ putStrLn $ "CASE: alts = " ++ show alts
        coreLift $ putStrLn $ "CASE: alts' = " ++ show alts'
 
-       --let nest' = MkNested []
        processDef casen alts'
+       coreLift $ putStrLn $ "Processed case!"
 
        pure (appTm, gnf env caseretty)
   where
@@ -216,8 +223,21 @@ caseBlock {vars} mode nest env scr scrtm scrty alts expected
     = let n = getBindName idx v used
           (ns, rest) = addEnv (idx + 1) bs (snd n :: used)
           ns' = n :: ns in
-      (ns', IPatvar (snd n) Implicit Implicit :: rest)
-        -- TODO really not sure on this Patvar instead of IAs
+      (ns', --IVar (snd n) :: rest)
+            IPatvar (snd n) Implicit Implicit :: rest)
+        -- TODO Adding these as patvars seems to make the actual args be left as implicits
+        --      Maybe we need to use this function to get (names, patvars) ?
+  addEnv' : {vs : _} ->
+           Int -> Env Term vs -> List Name -> (List RawImp, List (Name, RawImp))
+  addEnv' idx [] used = ([], [])
+  addEnv' idx {vs = v :: vs} (b :: bs) used
+    = let n = getBindName idx v used
+          mty = toTTImp $ binderType b
+          ty = fromMaybe (trace "Failed to unelab pattern type in case statement" Implicit)
+                          mty
+          (ns, rest) = addEnv' (idx + 1) bs (snd n :: used)
+      in (IVar (snd n) :: ns,
+          (snd n, ty) :: rest)
 
   -- Replace a variable in the argument list; if the reference is to
   -- a variable kept in the outer environment (therefore not an argument
@@ -225,7 +245,7 @@ caseBlock {vars} mode nest env scr scrtm scrty alts expected
   replace : (idx : Nat) -> RawImp -> List RawImp -> List RawImp
   replace Z lhs (old :: xs)
     = let lhs' = case old of
-                   IPatvar n ty scope => IPatvar n ty lhs
+                   --IPatvar n ty scope => IPatvar n ty lhs
                    -- TODO Again, not sure on Patvar vs IAs
                    _ => lhs
       in lhs' :: xs
@@ -255,24 +275,37 @@ caseBlock {vars} mode nest env scr scrtm scrty alts expected
     = (n, apply (IVar (fromMaybe n mn))
                 (map (const (AExplicit, Implicit)) ns))
 
-  applyNested : NestedNames vars -> RawImp -> RawImp
-  applyNested nest lhs
-    = substNames [] (map nestLHS (names nest)) lhs
+  removePatBinds : List RawImp -> List RawImp
+  removePatBinds [] = []
+  removePatBinds ((IPatvar _ _ sc) :: xs) = removePatBinds $ sc :: xs
+  removePatBinds (x :: xs) = x :: removePatBinds xs
+
+  wrapPatBinds : List (Name, RawImp) -> RawImp -> RawImp
+  wrapPatBinds [] lhs = lhs
+  wrapPatBinds ((pname, pty) :: ps) lhs = IPatvar pname pty (wrapPatBinds ps lhs)
+
+  findPatBinds : List RawImp -> List (Name, RawImp)
+  findPatBinds [] = []
+  findPatBinds ((IPatvar n ty sc) :: xs) = (n, ty) :: findPatBinds (sc :: xs)
+  findPatBinds (x :: xs) = findPatBinds xs
 
   updateClause : Name -> Maybe (Var vars) ->
-                 NestedNames vars ->
                  Env Term vars -> ImpClause -> ImpClause
-  updateClause casen splitOn nest env (ImpossibleClause lhs)
-    = let (_, args) = addEnv 0 env (usedIn lhs)
+  updateClause casen splitOn env (ImpossibleClause lhs)
+    = let (args, pats) = addEnv' 0 env (usedIn lhs)
           args' = mkSplit splitOn lhs args
-          lhs'  = apply (IVar casen) (map (\a=>(AExplicit,a)) args') in
-      ImpossibleClause (applyNested nest lhs')
+          argsNoPatBind = removePatBinds args'
+          lhs'  = wrapPatBinds (reverse pats ++ findPatBinds args')
+                               (apply (IVar casen) (map (\a=>(AExplicit,a)) argsNoPatBind)) in
+      ImpossibleClause lhs'
 
-  updateClause casen splitOn nest env (PatClause lhs rhs)
-    = let (ns, args) = addEnv 0 env (usedIn lhs)
+  updateClause casen splitOn env (PatClause lhs rhs)
+    = let (args, pats) = addEnv' 0 env (usedIn lhs)
           args' = mkSplit splitOn lhs args
-          lhs' = apply (IVar casen) (map (\a=>(AExplicit,a)) args') in
-      PatClause (applyNested nest lhs') (bindCaseLocals (map getNestData (names nest)) ns rhs)
+          argsNoPatBind = removePatBinds args'
+          lhs' = wrapPatBinds (reverse pats ++ findPatBinds args')
+                              (apply (IVar casen) (map (\a=>(AExplicit,a)) argsNoPatBind)) in
+      PatClause lhs' rhs
 
 
 export
@@ -281,19 +314,24 @@ checkCase : {vars : _} ->
             {auto s : Ref Stg Stage} ->
             {auto u : Ref UST UState} ->
             ElabMode ->
-            NestedNames vars -> Env Term vars ->
+            Env Term vars ->
             (scr : RawImp) -> (scrty : RawImp) -> List ImpClause ->
             Maybe (Glued vars) ->
             Core (Term vars, Glued vars)
-checkCase mode nest env scr scrty_in alts exp
+checkCase mode env scr scrty_in alts exp
   = do
+
+       -- We might have lambda bound names in our env but we're about
+       -- to lift these our to a new top
+       let env = lamsToPisEnv env
+
        -- Try to recover scrty if it's implicit
        scrty_exp <- case scrty_in of
                       Implicit => guessScrType alts
                       _ => pure scrty_in
 
        -- Check scrutinee type is a type
-       (scrtyv, scrtyt) <- check env scrty_exp (Just gType) -- TODO Do I need to pass nest around checkTerms? (and mode)
+       (scrtyv, scrtyt) <- check env scrty_exp (Just gType)
        -- Check scrutinee has expected type
        (scrtm_in, gscrty) <- check env scr (Just (gnf env scrtyv))
 
@@ -302,7 +340,7 @@ checkCase mode nest env scr scrty_in alts exp
        defs <- get Ctxt
        checkConcrete !(nf defs env scrty)
 
-       caseBlock mode nest env scr scrtm_in scrty alts exp
+       caseBlock mode env scr scrtm_in scrty alts exp
 
   where
   checkConcrete : NF vs -> Core ()

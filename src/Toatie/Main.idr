@@ -52,6 +52,9 @@ runMain fname decls
          m <- newRef Mods []
          let dirs = defaultModulePaths fname
          traverse_ (processDecl dirs) decls
+
+         --defs <- get Ctxt
+         --coreLift $ putStrLn $ show defs
          repl
 
 banner : String

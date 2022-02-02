@@ -9,6 +9,7 @@ import Core.TT
 import Data.List
 import Data.SortedMap
 import Data.SortedSet
+import Data.Maybe
 
 public export
 data UnifyMode = InLHS
@@ -144,7 +145,7 @@ abstractEnvType (Let s val ty :: env) tm
 abstractEnvType (Pi s e ty :: env) tm
     = abstractEnvType env (Bind _ (Pi s e ty) tm)
 abstractEnvType (b :: env) tm
-    = abstractEnvType env (Bind _ (Pi (binderStage b) Explicit (binderType b)) tm)
+    = abstractEnvType env (Bind _ (Pi (binderStage b) (fromMaybe Explicit $ binderInfo b) (binderType b)) tm)
 
 mkConstantAppArgs : {vars : _} ->
                     Env Term vars ->
@@ -181,11 +182,32 @@ newMeta {vars} env n ty def
     envArgs = let args = reverse (mkConstantAppArgs {done = []} env []) in
                   rewrite sym (appendNilRightNeutral vars) in args
 
+-- Apply an environment to a term, respecting application implicitness
 export
 applyTo : {vars : _} -> Term vars -> Env Term vars -> Term vars
 applyTo tm env
-  = let args = reverse (mkConstantAppArgs {done = []} env [])
-    in apply tm $ map (\x=>(AExplicit,x)) (rewrite sym (appendNilRightNeutral vars) in args)
+  = let args = reverse (mkConstantAppArgs' {done = []} env [])
+    in apply tm (rewrite sym (appendNilRightNeutral vars) in args)
+
+  where
+  mkConstantAppArgs' : {vars : _} ->
+                      Env Term vars ->
+                      (wkns : List Name) ->
+                      List (AppInfo, Term (wkns ++ (vars ++ done)))
+  mkConstantAppArgs' [] wkns = []
+  mkConstantAppArgs' {done} {vars = x :: xs} (b :: env) wkns
+    = let rec = mkConstantAppArgs' {done} env (wkns ++ [x])
+          i = case binderInfo b of
+                (Just Implicit) => AImplicit
+                _               => AExplicit
+      in (i, Local (length wkns) (mkVar {name=x} {vars=xs} wkns)) ::
+            rewrite (appendAssociative wkns [x] (xs ++ done)) in rec
+
+    where
+    mkVar : {name:_} -> {vars:_} -> (wkns : List Name) ->
+            IsVar name (length wkns) (wkns ++ name :: vars ++ done)
+    mkVar [] = First
+    mkVar (w :: ws) = Later (mkVar ws)
 
 
 mkConstant : {vars : _} ->

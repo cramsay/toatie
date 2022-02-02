@@ -202,7 +202,7 @@ namespace Binder
   traverse f (Lam s p ty) = pure $ Lam s p !(f ty)
   traverse f (Pi s p ty) = pure $ Pi s p !(f ty)
   traverse f (Let s var ty) = pure $ Let s !(f var) !(f ty)
-  traverse f (PVar s ty) = pure $ PVar s !(f ty)
+  traverse f (PVar s i ty) = pure $ PVar s i !(f ty)
   traverse f (PVTy s ty) = pure $ PVTy s !(f ty)
 
 export

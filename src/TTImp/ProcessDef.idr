@@ -154,11 +154,11 @@ getRHSEnv : {vars : _} ->
             Core (vars' ** (Env Term vars', Term vars', Term vars'))
 -- The names have to match here, and if type checking is implemented correctly
 -- they will, but we don't have a way to express that! So we need to check.
-getRHSEnv env (Bind n (PVar stage ty) sc) (Bind n' (PVTy _ _) scty) with (nameEq n n')
-  getRHSEnv env (Bind n (PVar stage ty) sc) (Bind n' (PVTy _ _) scty) | Nothing
+getRHSEnv env (Bind n (PVar stage i ty) sc) (Bind n' (PVTy _ _) scty) with (nameEq n n')
+  getRHSEnv env (Bind n (PVar stage i ty) sc) (Bind n' (PVTy _ _) scty) | Nothing
       = throw (GenericMsg "Can't happen: names don't match in getRHSEnv")
-  getRHSEnv env (Bind n (PVar stage ty) sc) (Bind n (PVTy _ _) scty) | (Just Refl)
-      = getRHSEnv (PVar stage ty :: env) sc scty
+  getRHSEnv env (Bind n (PVar stage i ty) sc) (Bind n (PVTy _ _) scty) | (Just Refl)
+      = getRHSEnv (PVar stage i ty :: env) sc scty
 getRHSEnv env lhs ty = pure (vars ** (env, lhs, ty))
 
 -- TODO I don't bother with the find/set/combineLinear functions...
@@ -206,6 +206,7 @@ findExp bound tm
       findExpArg _ [] = pure []
 
 -- Easy interface into findExp
+export
 findExpTop : {vars : _} ->
              {auto c : Ref Ctxt Defs} ->
              Term vars ->
@@ -343,6 +344,9 @@ processClause (PatClause lhs_in rhs)
     = do -- Check the LHS
          (lhs, (vars ** (env, lhsenv, rhsexp))) <- processLHS [] lhs_in
 
+         -- TODO I want to check this with the correct implicitness in env
+         -- from the get go! --- or at least have a way of working out which
+         -- patvar binders are implicit or explicit!
          (rhstm, rhsty) <- check env rhs (Just (gnf env rhsexp))
 
          -- Check that implicit/explicit arg use is correct on the RHS
@@ -354,7 +358,9 @@ processClause (PatClause lhs_in rhs)
          solveConstraints InLHS
          ust <- get UST
          let [] = SortedSet.toList $ holes ust
-                | (h::hs) => do holeStrings <- traverse (dumpHole defs) (h :: hs)
+                | (h::hs) => do defs <- get Ctxt
+                                coreLift $ putStrLn $ show defs
+                                holeStrings <- traverse (dumpHole defs) (h :: hs)
                                 throw $ GenericMsg $ "Unresolved holes in clause " ++ show lhsenv ++ " = " ++ show rhstm ++ "\n"
                                   ++ "\nHoles:\n" ++ unlines holeStrings
                                   ++ "\nConstraints:\n" ++ unlines (nub $ map (show. snd) $ toList $ constraints ust)

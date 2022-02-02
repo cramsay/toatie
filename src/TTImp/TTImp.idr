@@ -57,28 +57,6 @@ data ImpDecl : Type where
      IDef : Name -> List ImpClause -> ImpDecl
      IImport : String -> ImpDecl
 
--- Information about names in nested blocks
-public export
-record NestedNames (vars : List Name) where
-  constructor MkNested
-  -- A map from names to the decorated version of the name, and the new name
-  -- applied to its enclosing environment
-  -- Takes the name type, because we don't know them until we
-  -- elaborate the name at the point of use
-  names : List (Name, (Maybe Name,  -- new name if there is one
-                       List (Var vars), -- names used from the environment
-                       NameType -> Term vars))
-
-export
-Weaken NestedNames where
-  weaken (MkNested ns) = MkNested (map wknName ns)
-    where
-    wknName : (Name, (Maybe Name, List (Var vars), NameType -> Term vars)) ->
-              (Name, (Maybe Name, List (Var (n :: vars)), NameType -> Term (n :: vars)))
-    wknName (n, (mn, vars, rep))
-      = (n, (mn, map weaken vars, \nt => weaken (rep nt)))
-
-
 export
 apply : RawImp -> List (AppInfo, RawImp) -> RawImp
 apply f [] = f
@@ -97,7 +75,7 @@ toTTImp (Meta n   args) = Just Implicit
 toTTImp (Bind n (Lam s i ty) scope) = Just $ ILam i (Just n) !(toTTImp ty) !(toTTImp scope)
 toTTImp (Bind n (Pi  s i ty) scope) = Just $ IPi  i (Just n) !(toTTImp ty) !(toTTImp scope)
 toTTImp (Bind n (Let s val ty) scope) = Just $ ILet n (toTTImp ty) !(toTTImp val) !(toTTImp scope)
-toTTImp (Bind n (PVar s ty) scope) = Just $ IPatvar n !(toTTImp ty) !(toTTImp scope)
+toTTImp (Bind n (PVar s i ty) scope) = Just $ IPatvar n !(toTTImp ty) !(toTTImp scope)
 toTTImp (Bind n (PVTy s ty) scope) = Nothing
 toTTImp (App i f a) = Just $ IApp i !(toTTImp f) !(toTTImp a)
 toTTImp (Quote  tm) = Just $ IQuote  !(toTTImp tm)
@@ -112,10 +90,6 @@ mutual
   Show ImpClause where
     show (ImpossibleClause lhs) = show lhs ++ " impossible"
     show (PatClause lhs rhs) = show lhs ++ " => " ++ show rhs
-
-  export
-  Show (NestedNames vars) where
-    show (MkNested names) = "MkNested " ++ show (length names)
 
   export
   Show RawImp where

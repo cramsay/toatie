@@ -352,9 +352,9 @@ mutual
       = do val' <- quoteGenNF q defs bounds env val
            ty'  <- quoteGenNF q defs bounds env ty
            pure (Let s val' ty')
-  quoteBinder q defs bounds env (PVar s ty)
+  quoteBinder q defs bounds env (PVar s i ty)
       = do ty' <- quoteGenNF q defs bounds env ty
-           pure (PVar s ty')
+           pure (PVar s i ty')
   quoteBinder q defs bounds env (PVTy s ty)
       = do ty' <- quoteGenNF q defs bounds env ty
            pure (PVTy s ty')

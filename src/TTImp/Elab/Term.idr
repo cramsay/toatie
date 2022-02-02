@@ -13,6 +13,7 @@ import Core.Value
 import TTImp.TTImp
 import TTImp.Elab.Case
 import TTImp.Elab.Check
+import TTImp.ProcessDef
 
 import Data.Maybe
 import Data.SortedSet
@@ -184,11 +185,20 @@ checkTerm env (IPatvar n ty scope) exp
     = do (ty, gTyty) <- checkTerm env ty (Just gType)
          stage <- get Stg
          let env' : Env Term (n :: vars)
-                  = PVar stage ty :: env
+                  = PVar stage Implicit ty :: env -- Try with an implicit PVar for now... we'll fix this up afterwards
          (scopetm, gscopety) <- checkTerm env' scope Nothing
-         checkExp env (Bind n (PVar stage ty) scopetm)
+
+         expPatNs <- findExpTop scopetm
+         let i = if n `elem` expPatNs
+                    then Explicit
+                    else Implicit
+
+         checkExp env (Bind n (PVar stage i ty) scopetm)
                       (gnf env (Bind n (PVTy stage ty) !(getTerm gscopety)))
                       exp
+  -- TODO here we should infer the implicitness of the pattern var
+  --  Does it appear in an explicit position in the scope? maybe best to do this with the rawImp scope?
+
 checkTerm env (IApp i f a) exp
     = do -- Get the function type (we don't have an expected type)
          (ftm, gfty) <- checkTerm env f Nothing
@@ -254,7 +264,7 @@ checkTerm {vars} env (IMustUnify tm) (Just expty)
          -- TODO should split holes from dots in unifystate
          pure (metaval, mineTy)
 
-checkTerm env (IQuote  sc) exp
+checkTerm env (IQuote  sc) Nothing
   = do -- Increment stage so we can typecheck the scope
        stage <- get Stg
        put Stg (stage+1)
@@ -264,7 +274,24 @@ checkTerm env (IQuote  sc) exp
        -- Decrement stage again to check whole term
        put Stg stage
        -- Does our expected type match the Code equiv of our scope's type?
-       checkExp env (Quote sctm) (gnf env $ TCode sctytm) exp
+       checkExp env (Quote sctm) (gnf env $ TCode sctytm) Nothing
+
+checkTerm env (IQuote  sc) (Just exp)
+  = do (TCode iexp) <- getTerm exp
+          | _ => throw $ GenericMsg $ "Expected type of quote in not code type"
+       let innerExp = Just $ gnf env iexp
+
+       -- Increment stage so we can typecheck the scope
+       stage <- get Stg
+       put Stg (stage+1)
+       -- Check type of our scope
+       (sctm, gscty) <- checkTerm env sc innerExp
+       sctytm <- getTerm gscty
+       -- Decrement stage again to check whole term
+       put Stg stage
+       -- Does our expected type match the Code equiv of our scope's type?
+       checkExp env (Quote sctm) (gnf env $ TCode sctytm) (Just exp)
+
 checkTerm env (ICode scty) exp
   = do -- Is scty of type Type?
        stage <- get Stg
@@ -312,7 +339,7 @@ checkTerm {vars} env (ICaseLocal uname iname args sc) exp
   = do defs <- get Ctxt
        checkTerm env sc exp
        --TODO This!! Above is placeholder
-checkTerm env (ICase scr scrty alts) exp = checkCase InExpr (MkNested []) env scr scrty alts exp
+checkTerm env (ICase scr scrty alts) exp = checkCase InExpr env scr scrty alts exp
 
 export
 normaliseHoleTypes : {auto c : Ref Ctxt Defs} ->

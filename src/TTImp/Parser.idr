@@ -348,7 +348,7 @@ mutual
   caseRHS : FileName -> IndentInfo -> RawImp ->
             Rule ImpClause
   caseRHS fname indents lhs
-      = do symbol "~>"
+      = do symbol "==>"
            commit
            rhs <- expr fname indents
            atEnd indents

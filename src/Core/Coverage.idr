@@ -113,7 +113,7 @@ conflict defs env nfty n
 -- Need this to get a NF from a Term; the names are free in any case
 freeEnv : (vs : List Name) -> Env Term vs
 freeEnv [] = []
-freeEnv (n :: ns) = PVar 0 Erased :: freeEnv ns
+freeEnv (n :: ns) = PVar 0 Explicit Erased :: freeEnv ns
 
 -- Find unbound names in a term
 export
