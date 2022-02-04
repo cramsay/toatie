@@ -31,4 +31,25 @@ pat a : Type, n : Nat =>
              --VNil {a} impossible
       |]
 
+mymap : {n : Nat} -> {a : Type} -> {b : Type} ->
+        (f : a -> b) ->
+        Vect n a -> Vect n b
+pat n : Nat, a : Type, b : Type, f : (a->b), xs : Vect n a =>
+  mymap {n} {a} {b} f xs
+    = case xs of
+        (VNil {a})                                                ==> VNil {b}
+        pat m : Nat, y : a, ys : Vect m a => (VCons {a} {m} y ys) ==> VCons {b} {m} (f y) (mymap {m} {a} {b} f ys)
+
+tailTail : {n : Nat} -> {a : Type} -> Vect (S (S n)) a -> Vect n a
+pat a : Type, n : Nat, xs : Vect (S (S n)) a =>
+  tailTail {n} {a} xs
+    = case (tail {a} {S n} xs) of
+        pat xhead : a, xs' : Vect n a =>
+          (VCons {a} {n} xhead xs') ==> xs'
+
+stagedVecPat : (n : Nat) -> <Vect n Nat> -> <Vect n Nat>
+stagedVecPat Z     [| VNil {Nat} |] = [| VNil {Nat} |]
+pat n : Nat, x : Nat, xs : Vect n Nat =>
+  stagedVecPat (S n) [| VCons {Nat} {n} x xs |] = [| VCons {Nat} {n} x ~(stagedVecPat n [| xs |]) |]
+
 -- \a:Nat => \b:Nat => \c:Nat => !(stagedtail {Nat} {2}) (VCons {Nat} {2} a (VCons {Nat} {1} b (VCons {Nat} {0} c (VNil {Nat}))))

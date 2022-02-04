@@ -189,7 +189,7 @@ caseBlock {vars} mode env scr scrtm scrty alts expected
                          (const applyEnv)
                          splitOn
 
-       let alts' = map (updateClause casen splitOn env) alts
+       let alts' = map (updateClause casen casefnty splitOn env) alts
 
        coreLift $ putStrLn $ "CASE: calling env = " ++ show env
        coreLift $ putStrLn $ "CASE: caseretty = " ++ show caseretty
@@ -228,15 +228,18 @@ caseBlock {vars} mode env scr scrtm scrty alts expected
         -- TODO Adding these as patvars seems to make the actual args be left as implicits
         --      Maybe we need to use this function to get (names, patvars) ?
   addEnv' : {vs : _} ->
-           Int -> Env Term vs -> List Name -> (List RawImp, List (Name, RawImp))
+           Int -> Env Term vs -> List Name -> (List (AppInfo, RawImp), List (Name, RawImp))
   addEnv' idx [] used = ([], [])
   addEnv' idx {vs = v :: vs} (b :: bs) used
     = let n = getBindName idx v used
           mty = toTTImp $ binderType b
+          appinfo = case binderInfo b of
+                      Just Implicit => AImplicit
+                      _             => AExplicit
           ty = fromMaybe (trace "Failed to unelab pattern type in case statement" Implicit)
                           mty
           (ns, rest) = addEnv' (idx + 1) bs (snd n :: used)
-      in (IVar (snd n) :: ns,
+      in ((appinfo, IVar (snd n)) :: ns,
           (snd n, ty) :: rest)
 
   -- Replace a variable in the argument list; if the reference is to
@@ -275,9 +278,9 @@ caseBlock {vars} mode env scr scrtm scrty alts expected
     = (n, apply (IVar (fromMaybe n mn))
                 (map (const (AExplicit, Implicit)) ns))
 
-  removePatBinds : List RawImp -> List RawImp
+  removePatBinds : List (AppInfo, RawImp) -> List (AppInfo, RawImp)
   removePatBinds [] = []
-  removePatBinds ((IPatvar _ _ sc) :: xs) = removePatBinds $ sc :: xs
+  removePatBinds ((i, IPatvar _ _ sc) :: xs) = removePatBinds $ (i, sc) :: xs
   removePatBinds (x :: xs) = x :: removePatBinds xs
 
   wrapPatBinds : List (Name, RawImp) -> RawImp -> RawImp
@@ -289,23 +292,37 @@ caseBlock {vars} mode env scr scrtm scrty alts expected
   findPatBinds ((IPatvar n ty sc) :: xs) = (n, ty) :: findPatBinds (sc :: xs)
   findPatBinds (x :: xs) = findPatBinds xs
 
-  updateClause : Name -> Maybe (Var vars) ->
+  impsToImplicit : {vars : _} -> (fnTy : Term vars) -> List (AppInfo, RawImp) -> List (AppInfo, RawImp)
+  impsToImplicit _ [] = []
+  impsToImplicit (Bind _ (Pi _ Implicit _) sc) (arg :: args) = (AImplicit, Implicit) :: impsToImplicit sc args
+  impsToImplicit (Bind _ (Pi _ Explicit _) sc) (arg :: args) = arg                   :: impsToImplicit sc args
+  impsToImplicit _ _ = [(AImplicit, Implicit)] -- Should never be anything but a pi binder or empty
+
+  mapSnd : (List a-> List b) -> List (AppInfo,a) -> List (AppInfo,b)
+  mapSnd f xs = zip (reverse (map fst xs) ++ [AExplicit]) (f $ map snd xs) -- TODO I think i should be not reversing, but just passing the tuple into every fn that needs it (so it can be reversed there!)
+
+  updateClause : Name -> Term [] -> Maybe (Var vars) ->
                  Env Term vars -> ImpClause -> ImpClause
-  updateClause casen splitOn env (ImpossibleClause lhs)
+  updateClause casen fnty splitOn env (ImpossibleClause lhs)
     = let (args, pats) = addEnv' 0 env (usedIn lhs)
-          args' = mkSplit splitOn lhs args
+          args' = mapSnd (mkSplit splitOn lhs) args
           argsNoPatBind = removePatBinds args'
-          lhs'  = wrapPatBinds (reverse pats ++ findPatBinds args')
-                               (apply (IVar casen) (map (\a=>(AExplicit,a)) argsNoPatBind)) in
+          lhs'  = wrapPatBinds (reverse pats ++ findPatBinds [lhs])
+                               (apply (IVar casen) argsNoPatBind) in
       ImpossibleClause lhs'
 
-  updateClause casen splitOn env (PatClause lhs rhs)
+  updateClause casen fnty splitOn env (PatClause lhs rhs)
     = let (args, pats) = addEnv' 0 env (usedIn lhs)
-          args' = mkSplit splitOn lhs args
-          argsNoPatBind = removePatBinds args'
-          lhs' = wrapPatBinds (reverse pats ++ findPatBinds args')
-                              (apply (IVar casen) (map (\a=>(AExplicit,a)) argsNoPatBind)) in
-      PatClause lhs' rhs
+          args' = mapSnd (mkSplit splitOn lhs) args
+          argsNoPatBind = impsToImplicit fnty (removePatBinds args')
+          lhs' = wrapPatBinds (reverse pats ++ findPatBinds [lhs]) -- findPatBinds (map snd args'))
+                              (apply (IVar casen) argsNoPatBind) in
+      trace (unlines ["args: " ++ show args,
+                      "args': " ++ show args',
+                      "splitOn: " ++ show (isJust splitOn),
+                      "lhs: " ++ show lhs
+            ])
+        $ PatClause lhs' rhs
 
 
 export

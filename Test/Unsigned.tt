@@ -167,26 +167,6 @@ uAdd : {w,x,y,c : Nat} ->
        Unsigned w x -> Unsigned w y -> Bit c ->
        Unsigned (S w) (plus c (plus x y))
 
--- Mutually recursive helper (needed to project our BitPair fields)
-uAdd' : {w,xsn,ysn,c,xn,yn : Nat} ->
-        BitPair c xn yn ->
-        Unsigned w xsn ->
-        Unsigned w ysn ->
-        Unsigned (S (S w)) (plus c (plus (plus xn (double xsn))
-                                         (plus yn (double ysn))))
-pat w, xsn, ysn, c, xn, yn, a, b : Nat,
-    cin' : Bit a, lsb : Bit b,
-    xs : Unsigned w xsn, ys : Unsigned w ysn,
-    prf : Equal Nat (plus b (double a))
-                    (plus c (plus xn yn)) =>
- uAdd' {w} {xsn} {ysn} {c} {xn} {yn} (MkBitPair {a} {b} {c} {xn} {yn} {prf} cin' lsb) xs ys
-   = let rec = uAdd {_} {_} {_} {_} xs ys cin'
-         ans = UCons {_} {_} {_} rec lsb
-     in eqInd2 {_} {_} {_}
-               {prfUAdd c xn yn a b xsn ysn prf}
-               {_} ans
-
--- Implementation for unsigned binary addition
 pat c : Nat, cin : Bit c =>
   uAdd {0} {0} {0} {c} UNil UNil cin
     = UCons {_} {0} {c} UNil cin
@@ -195,60 +175,42 @@ pat w, xn, xsn, yn, ysn, c : Nat,
     cin : Bit c, xb : Bit xn, yb : Bit yn,
     xbs : Unsigned w xsn, ybs : Unsigned w ysn =>
   uAdd {S w} {_} {_} {c} (UCons {w} {xsn} {xn} xbs xb) (UCons {w} {ysn} {yn} ybs yb) cin
-    = uAdd' {_} {_} {_} {_} {_} {_}
-            (addBit {_} {_} {_} cin xb yb)
-            xbs ybs
+    = case (addBit {_} {_} {_} cin xb yb) of
+        pat a, b : Nat, cin' : Bit a, lsb : Bit b,
+            prf : Equal Nat (plus b (double a)) (plus c (plus xn yn))
+        => (MkBitPair {a} {b} {c} {xn} {yn} {prf} cin' lsb) ==>
+             let rec = uAdd {_} {_} {_} {_} xbs ybs cin'
+                 ans = UCons {_} {_} {_} rec lsb
+             in eqInd2 {_} {_} {_}
+                       {prfUAdd c xn yn a b xsn ysn prf}
+                       {_} ans
 
--- -- Unsigned binary addition (with staging)
--- -- Think we need to improve pattern matching on staging constructs or allow nested case statements
---
--- uAddS : (w : Nat) -> {x,y,c : Nat} ->
---         < Unsigned w x > -> < Unsigned w y > -> < Bit c > ->
---         < Unsigned (S w) (plus c (plus x y)) >
--- 
--- -- Mutually recursive helper (needed to project our BitPair fields)
--- uAddS' : (w : Nat) -> {xsn,ysn,c,xn,yn : Nat} ->
---          < BitPair c xn yn > ->
---          < Unsigned w xsn > ->
---          < Unsigned w ysn > ->
---          < Unsigned (S (S w)) (plus c (plus (plus xn (double xsn))
---                                             (plus yn (double ysn))))
---          >
--- pat w, xsn, ysn, c, xn, yn, a, b : Nat,
---     cin' : Bit a, lsb : Bit b,
---     xs : Unsigned w xsn, ys : Unsigned w ysn,
---     prf : Equal Nat (plus b (double a))
---                     (plus c (plus xn yn)) =>
---  uAddS' w {xsn} {ysn} {c} {xn} {yn} [| (MkBitPair {a} {b} {c} {xn} {yn} {prf} cin' lsb) |] [| xs |] [| ys |]
---    = [| let rec = ~(uAddS w {xsn} {ysn} {a} [|xs|] [|ys|] [|cin'|])
---             ans = UCons {S w} {_} {_} rec lsb
---         in eqInd2 {_} {_} {_}
---                   {prfUAdd c xn yn a b xsn ysn prf}
---                   {_} ans
---      |]
--- 
--- -- Implementation for unsigned binary addition
--- pat c : Nat, cin : Bit c =>
---   uAddS 0 {0} {0} {c} [| UNil |] [| UNil |] [| cin |]
---     = [| UCons {0} {0} {c} UNil cin |]
--- 
--- pat w, xn, xsn, yn, ysn, c : Nat,
---     cin : Bit c, xb : Bit xn, yb : Bit yn,
---     xbs : Unsigned w xsn, ybs : Unsigned w ysn =>
---   uAddS (S w) {_} {_} {c} [| UCons {w} {xsn} {xn} xbs xb |] [| UCons {w} {ysn} {yn} ybs yb |] [| cin |]
---     = uAddS' {_} {_} {_} {_} {_} {_}
---              [| addBit {_} {_} {_} cin xb yb |]
---              [| xbs |]  [| ybs |]
--- 
--- uAddCirc : (w : Nat) -> {x,y,c : Nat} ->
---            < Unsigned w x -> Unsigned w y -> Bit c ->
---              Unsigned (S w) (plus c (plus x y)) >
--- pat w, x, y, c : Nat, xs : Unsigned w x, ys : Unsigned w y, cin : Bit c =>
---   uAddCirc w {x} {y} {c}
---     = [| \xs : Unsigned w x =>
---          \ys : Unsigned w y =>
---          \cin : Bit c =>
---          ~(uAddS w {x} {y} {c} [| xs |] [| ys |] [|cin|])
---       |]
+ -- -- -- Unsigned binary addition (with staging)
+ -- uAddCirc : {w,x,y,c : Nat} ->
+ --            < Unsigned w x > -> < Unsigned w y > -> < Bit c > ->
+ --            < Unsigned (S w) (plus c (plus x y)) >
+ -- 
+ -- pat c : Nat, cin : <Bit c>, xs : <Unsigned 0 0>, ys : <Unsigned 0 0> =>
+ --   uAddCirc {0} {0} {0} {c} xs ys cin
+ --     = [| UCons {0} {0} {c} UNil ~cin |]
+ -- 
+ -- pat w, xval, yval, c : Nat,
+ --     cin : <Bit c>, xbin : <Unsigned (S w) xval>, ybin : <Unsigned (S w) yval> =>
+ --   uAddCirc {S w} {xval} {yval} {c} xbin ybin cin
+ --     = [|
+ --          case ~(xbin) of
+ --            pat xns : Nat, xn : Nat, xb : Bit xn, xbs : Unsigned w xns =>
+ --              (UCons {w} {xns} {xn} xbs xb) ==> _
+ --       |]
+
+ --   = case (addBit {_} {_} {_} cin xb yb) of
+ --       pat a, b : Nat, cin' : Bit a, lsb : Bit b,
+ --           prf : Equal Nat (plus b (double a)) (plus c (plus xn yn))
+ --       => (MkBitPair {a} {b} {c} {xn} {yn} {prf} cin' lsb) ==>
+ --            let rec = uAdd {_} {_} {_} {_} xbs ybs cin'
+ --                ans = UCons {_} {_} {_} rec lsb
+ --            in eqInd2 {_} {_} {_}
+ --                      {prfUAdd c xn yn a b xsn ysn prf}
+ --                      {_} ans
 
 -- \ba => \bb => \bc => \bd => \a : Bit ba => \b : Bit bb => \c : Bit bc => \d : Bit bd => uAddS _ {_} {_} {_} [| UCons {_} {_} {_} (UCons {_} {_} {_} UNil a) b |] [| UCons {_} {_} {_} (UCons {_} {_} {_} UNil c) d |] [| O |]

@@ -48,9 +48,6 @@ checkExp env term got (Just exp)
                       pure (term, exp)
              cs => do cty <- getTerm exp
                       ctm <- newConstant env term cty cs
-                      -- For now, throw error if we generate extra constraints
-                      -- This might impact more involved proofs later on!!
-                      --throw (CantConvert env !(getTerm got) !(getTerm exp))
                       pure (ctm, got)
 
 weakenExp : {x, vars : _} ->
@@ -118,7 +115,7 @@ checkTerm env (ILet n (Just argTy) argVal scope) exp
          (argValtm, _) <- checkTerm env argVal (Just $ gnf env argTytm)
          stage <- get Stg
          let env' : Env Term (n :: vars)
-                  = Lam stage Implicit argTytm :: env
+                  = Lam stage Explicit argTytm :: env
          expScopeTy <- weakenExp env' exp
          (scopetm, gscopetmTy) <- checkTerm env' scope expScopeTy
          scopeTyTerm <- getTerm gscopetmTy
@@ -130,7 +127,7 @@ checkTerm env (ILet n Nothing argVal scope) exp
          argTytm <- getTerm gargValty
          stage <- get Stg
          let env' : Env Term (n :: vars)
-                  = Lam stage Implicit argTytm :: env
+                  = Lam stage Explicit argTytm :: env
          expScopeTy <- weakenExp env' exp
          (scopetm, gscopetmTy) <- checkTerm env' scope expScopeTy
          scopeTyTerm <- getTerm gscopetmTy
@@ -317,7 +314,7 @@ checkTerm env (IEval code) exp
          NBind _ _ _ => throw (GenericMsg "Maybe trying to eval something with free variables?")
                         -- Then we're good to go by returning the inner term with it's inner type
          _           => checkExp env (Eval codetm) (gnf env aty) exp
-checkTerm env (IEscape code) exp
+checkTerm env (IEscape code) Nothing
   = do -- Are we in a non-zero stage?
        S n <- get Stg
          | _ => throw (GenericMsg "Cannot escape in stage zero")
@@ -330,7 +327,22 @@ checkTerm env (IEscape code) exp
          | _ => throw (GenericMsg "Cannot escape non-code type")
        put Stg (S n)
        -- We're good to go with the code's inner term and it's original type
-       checkExp env (Escape codetm) (gnf env aty) exp
+       checkExp env (Escape codetm) (gnf env aty) Nothing
+checkTerm env (IEscape code) (Just exp)
+  = do -- Are we in a non-zero stage?
+       S n <- get Stg
+         | _ => throw (GenericMsg "Cannot escape in stage zero")
+       -- Check if `code` has type Code A in stage n-1
+       let innerExp = gnf env (TCode $ !(getTerm exp))
+       put Stg n
+       (codetm, gcodety) <- checkTerm env code (Just innerExp)
+       codetyNF <- getNF gcodety
+       defs <- get Ctxt
+       TCode aty <- quote defs env codetyNF
+         | _ => throw (GenericMsg "Cannot escape non-code type")
+       put Stg (S n)
+       -- We're good to go with the code's inner term and it's original type
+       checkExp env (Escape codetm) (gnf env aty) (Just exp)
 
 -- TODO Have a second pass at the staging rules and make sure we're not doing
 -- too much extra work (evaluating normal forms twice for glued, etc.)

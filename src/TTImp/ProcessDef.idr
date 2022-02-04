@@ -181,6 +181,7 @@ findExp bound tm
                     Just (MkGlobalDef nty _) <- lookupDef n (defs)
                          | Nothing => pure []
                     findExpArg !(nf defs [] nty) args
+           --(Quote tm, []) => findExp bound tm
            _ => pure []
     where
       findExpArg : {vars : _} ->
@@ -359,7 +360,7 @@ processClause (PatClause lhs_in rhs)
          ust <- get UST
          let [] = SortedSet.toList $ holes ust
                 | (h::hs) => do defs <- get Ctxt
-                                coreLift $ putStrLn $ show defs
+                                --coreLift $ putStrLn $ show defs
                                 holeStrings <- traverse (dumpHole defs) (h :: hs)
                                 throw $ GenericMsg $ "Unresolved holes in clause " ++ show lhsenv ++ " = " ++ show rhstm ++ "\n"
                                   ++ "\nHoles:\n" ++ unlines holeStrings
@@ -448,6 +449,7 @@ processDef n clauses
          let topImplicitArgs = filterImplicitArgs (map (\n => MN "arg" n)
                                                        [0 .. cast topFnArity])
                                                   (type gdef)
+         coreLift $ putStrLn $ show tree_ct
          checkImplicitConCase topImplicitArgs tree_ct
 
          -- check that we've solved all RHS holes too
