@@ -261,7 +261,7 @@ checkTerm {vars} env (IMustUnify tm) (Just expty)
          -- TODO should split holes from dots in unifystate
          pure (metaval, mineTy)
 
-checkTerm env (IQuote  sc) Nothing
+checkTerm env (IQuote sc) Nothing
   = do -- Increment stage so we can typecheck the scope
        stage <- get Stg
        put Stg (stage+1)
@@ -271,7 +271,7 @@ checkTerm env (IQuote  sc) Nothing
        -- Decrement stage again to check whole term
        put Stg stage
        -- Does our expected type match the Code equiv of our scope's type?
-       checkExp env (Quote sctm) (gnf env $ TCode sctytm) Nothing
+       checkExp env (Quote sctytm sctm) (gnf env $ TCode sctytm) Nothing
 
 checkTerm env (IQuote  sc) (Just exp)
   = do (TCode iexp) <- getTerm exp
@@ -287,7 +287,7 @@ checkTerm env (IQuote  sc) (Just exp)
        -- Decrement stage again to check whole term
        put Stg stage
        -- Does our expected type match the Code equiv of our scope's type?
-       checkExp env (Quote sctm) (gnf env $ TCode sctytm) (Just exp)
+       checkExp env (Quote sctytm sctm) (gnf env $ TCode sctytm) (Just exp)
 
 checkTerm env (ICode scty) exp
   = do -- Is scty of type Type?

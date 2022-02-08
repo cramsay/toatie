@@ -259,7 +259,7 @@ instantiate {newvars} env mname mdef locs tm
         = Just (App info !(updateIVars ivs f) !(updateIVars ivs a))
     updateIVars ivs Erased = Just Erased
     updateIVars ivs TType = Just TType
-    updateIVars ivs (Quote  a)  = Just (Quote  !(updateIVars ivs a))
+    updateIVars ivs (Quote ty a)  = Just (Quote !(updateIVars ivs ty) !(updateIVars ivs a))
     updateIVars ivs (TCode  a)  = Just (TCode  !(updateIVars ivs a))
     updateIVars ivs (Eval   a)  = Just (Eval   !(updateIVars ivs a))
     updateIVars ivs (Escape a)  = Just (Escape !(updateIVars ivs a))
@@ -663,7 +663,8 @@ mutual
           else convertError env (NTCon x ix tagx ax xs) (NTCon y iy tagy ay ys)
   unifyNoEta mode env (NCode   x) (NCode   y) = unify mode env x y
   unifyNoEta mode env (NEscape x) (NEscape y) = unify mode env x y
-  unifyNoEta mode env (NQuote  x) (NQuote  y) = unify mode env x y
+  unifyNoEta mode env (NQuote ty x) (NQuote ty' y) = unifyArgs mode env [(AExplicit, ty) ,(AExplicit, x)]
+                                                                        [(AExplicit, ty'),(AExplicit, y)]
   unifyNoEta mode env x@(NApp fx@(NMeta _ _) axs)
                       y@(NApp fy@(NMeta _ _) ays)
     = do defs <- get Ctxt

@@ -37,7 +37,7 @@ mutual
            then pure True
            else anyM (mismatch defs) (zipWith (curry $ mapHom snd) xargs yargs)
   mismatchNF defs (NCode  x) (NCode  y) = mismatchNF defs x y
-  mismatchNF defs (NQuote x) (NQuote y) = mismatchNF defs !(evalClosure defs x) !(evalClosure defs y)
+  mismatchNF defs (NQuote _ x) (NQuote _ y) = mismatchNF defs !(evalClosure defs x) !(evalClosure defs y)
   mismatchNF defs (NEscape x) (NEscape y) = mismatchNF defs x y
   mismatchNF _ _ _ = pure False
 
@@ -181,7 +181,7 @@ findExp bound tm
                     Just (MkGlobalDef nty _) <- lookupDef n (defs)
                          | Nothing => pure []
                     findExpArg !(nf defs [] nty) args
-           (Quote tm, []) => findExp bound tm
+           (Quote ty tm, []) => findExp bound tm
            _ => pure []
     where
       findExpArg : {vars : _} ->
@@ -259,7 +259,7 @@ addDots (IPi Explicit mn argTy retTy)  = pure $ IPi Explicit mn argTy retTy
 addDots (ILet n margTy argVal scope)   = pure $ ILet n margTy argVal scope -- Can't have ILet on LHS...
 addDots (IMustUnify x) = pure $ IMustUnify x
 addDots (IQuote x)     = pure $ --IQuote (IMustUnify x)
-                                IQuote  !(addDots x)
+                                IQuote !(addDots x)
 addDots (ICode x)      = pure $ ICode   !(addDots x)
 addDots (IEval x)      = pure $ IEval   !(addDots x)
 addDots (IEscape x)    = pure $ IEscape !(addDots x)
@@ -394,31 +394,54 @@ filterImplicitArgs args ty = []
 mutual
   -- A case alternative respects implicitness if it's nested case tree does
   -- (just need bookkeeping for any implicit arguments introduced by constructor matching)
-  checkImplicitConAlt : {vars : _} ->
+  checkImplicitUsageAlt : {vars : _} ->
                         {auto c : Ref Ctxt Defs} ->
                         List Name -> CaseAlt vars ->
                         Core ()
-  checkImplicitConAlt implicits (ConCase n tag args ct)
+  checkImplicitUsageAlt implicits (ConCase n tag args ct)
     = do defs <- get Ctxt
          Just cty <- lookupDefType n defs
            | Nothing => throw (InternalError $ "Undefined constructor name " ++ show n)
-         checkImplicitConCase (implicits ++ filterImplicitArgs args cty) ct
-  checkImplicitConAlt implicits (QuoteCase a sc) = checkImplicitConCase implicits sc
-  checkImplicitConAlt implicits (DefaultCase ct) = checkImplicitConCase implicits ct
+         checkImplicitUsageCase (implicits ++ filterImplicitArgs args cty) ct
+  checkImplicitUsageAlt implicits (QuoteCase t a ct) = checkImplicitUsageCase implicits ct
+  checkImplicitUsageAlt implicits (DefaultCase ct) = checkImplicitUsageCase implicits ct
 
   -- A case tree respects implicitness if when we match on an implicit argument, there are
   -- only zero or one alternatives... anything more than one would cause ambiguity at run-time
   -- when the implicits are erased. This rule allows single constructor types such as Refl.
-  checkImplicitConCase : {vars : _} ->
+  checkImplicitUsageCase : {vars : _} ->
                          {auto c : Ref Ctxt Defs} ->
                          List Name -> CaseTree vars ->
                          Core ()
-  checkImplicitConCase implicits (Case idx p scTy alts)
+  checkImplicitUsageCase implicits (Case idx p scTy alts)
     = do if elem (nameAt idx p) implicits
             then when (length alts > 1)
                       (throw (GenericMsg $ "Case tree requires ambiguous pattern match on implicit arg " ++ show (nameAt idx p)))
-            else traverse_ (checkImplicitConAlt implicits) alts
-  checkImplicitConCase _ _ = pure ()
+            else traverse_ (checkImplicitUsageAlt implicits) alts
+  checkImplicitUsageCase _ _ = pure ()
+
+  checkQuoteUsageAlt : {vars : _} ->
+                       List (Name, Name) ->
+                       CaseAlt vars ->
+                       Core ()
+  checkQuoteUsageAlt quotes (ConCase x tag args ct) = checkQuoteUsageCase quotes ct
+  checkQuoteUsageAlt quotes (QuoteCase ty arg ct) = checkQuoteUsageCase quotes ct
+  checkQuoteUsageAlt quotes (DefaultCase ct) = checkQuoteUsageCase quotes ct
+
+  checkQuoteUsageCase : {vars : _} ->
+                        List (Name, Name) -> -- (quoted name, name or arg)
+                        CaseTree vars ->
+                        Core ()
+  checkQuoteUsageCase quotes (Case idx p scTy ((QuoteCase ty arg sc) :: []))
+    = do let quotes' = (arg, nameAt idx p) :: quotes
+         checkQuoteUsageAlt quotes' (QuoteCase ty arg sc)
+  checkQuoteUsageCase quotes (Case idx p scTy alts)
+    = case lookup (nameAt idx p) quotes of
+        Just quotedName => do when (length alts > 1)
+                                        (throw (GenericMsg $ "Case tree requires ambiguous pattern match on quoted arg, " ++ show quotedName))
+                              traverse_ (checkQuoteUsageAlt quotes) alts
+        Nothing => traverse_ (checkQuoteUsageAlt quotes) alts
+  checkQuoteUsageCase quotes _ = pure ()
 
 export
 processDef : {auto c : Ref Ctxt Defs} ->
@@ -451,9 +474,8 @@ processDef n clauses
          let topImplicitArgs = filterImplicitArgs (map (\n => MN "arg" n)
                                                        [0 .. cast topFnArity])
                                                   (type gdef)
-         coreLift $ putStrLn $ show tree_ct
-         checkImplicitConCase topImplicitArgs tree_ct
-         --checkQuoteConCase tree_ct
+         checkImplicitUsageCase topImplicitArgs tree_ct
+         checkQuoteUsageCase [] tree_ct
 
          -- check that we've solved all RHS holes too
          solveConstraints InTerm

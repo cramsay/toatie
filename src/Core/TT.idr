@@ -207,7 +207,7 @@ data Term : List Name -> Type where
      App : AppInfo -> Term vars -> Term vars -> Term vars -- function application
      TType : Term vars
      Erased : Term vars
-     Quote  : Term vars -> Term vars
+     Quote  : (ty : Term vars) -> (tm : Term vars) -> Term vars
      TCode  : Term vars -> Term vars
      Eval   : Term vars -> Term vars -- TODO Worth enforcing eval is only on closed terms?
      Escape : Term vars -> Term vars
@@ -299,7 +299,7 @@ insertNames ns (App info fn arg)
     = App info (insertNames ns fn) (insertNames ns arg)
 insertNames ns Erased = Erased
 insertNames ns TType = TType
-insertNames ns (Quote tm) = Quote $ insertNames ns tm
+insertNames ns (Quote ty tm) = Quote (insertNames ns ty) (insertNames ns tm)
 insertNames ns (TCode tm) = TCode $ insertNames ns tm
 insertNames ns (Eval tm) = Eval $ insertNames ns tm
 insertNames ns (Escape tm) = Escape $ insertNames ns tm
@@ -362,7 +362,7 @@ mkLocals bs (App info fn arg)
     = App info (mkLocals bs fn) (mkLocals bs arg)
 mkLocals bs Erased = Erased
 mkLocals bs TType = TType
-mkLocals bs (Quote tm)  = Quote  $ mkLocals bs tm
+mkLocals bs (Quote ty tm)  = Quote (mkLocals bs ty) (mkLocals bs tm)
 mkLocals bs (TCode tm)  = TCode  $ mkLocals bs tm
 mkLocals bs (Eval tm)   = Eval   $ mkLocals bs tm
 mkLocals bs (Escape tm) = Escape $ mkLocals bs tm
@@ -391,8 +391,8 @@ resolveNames vars (Bind x b scope)
     = Bind x (map (resolveNames vars) b) (resolveNames (x :: vars) scope)
 resolveNames vars (App info fn arg)
     = App info (resolveNames vars fn) (resolveNames vars arg)
-resolveNames vars (Quote tm)
-    = Quote $ resolveNames vars tm
+resolveNames vars (Quote ty tm)
+    = Quote (resolveNames vars ty) (resolveNames vars tm)
 resolveNames vars (Escape tm)
   = Escape $ resolveNames vars tm
 resolveNames vars (Eval tm)
@@ -441,7 +441,7 @@ namespace SubstEnv
       = App info (substEnv env fn) (substEnv env arg)
   substEnv env Erased = Erased
   substEnv env TType = TType
-  substEnv env (Quote tm)  = Quote  $ substEnv env tm
+  substEnv env (Quote ty tm)  = Quote (substEnv env ty) (substEnv env tm)
   substEnv env (TCode tm)  = TCode  $ substEnv env tm
   substEnv env (Eval tm)   = Eval   $ substEnv env tm
   substEnv env (Escape tm) = Escape $ substEnv env tm
@@ -470,7 +470,7 @@ substName x new (Bind y b scope)
     = Bind y (map (substName x new) b) (substName x (weaken new) scope)
 substName x new (App info fn arg)
     = App info (substName x new fn) (substName x new arg)
-substName x new (Quote tm) = Quote $ substName x new tm
+substName x new (Quote ty tm) = Quote (substName x new ty) (substName x new tm)
 substName x new (TCode tm) = TCode $ substName x new tm
 substName x new (Eval tm) = Eval $ substName x new tm
 substName x new (Escape tm) = Escape $ substName x new tm
@@ -493,7 +493,7 @@ addMetas ns (App i fn arg)
     = addMetas (addMetas ns fn) arg
 addMetas ns (TCode tm) = addMetas ns tm
 addMetas ns (Eval tm) = addMetas ns tm
-addMetas ns (Quote tm) = addMetas ns tm
+addMetas ns (Quote ty tm) = addMetas (addMetas ns ty) tm
 addMetas ns (Escape tm) = addMetas ns tm
 addMetas ns (Erased) = ns
 addMetas ns (TType) = ns
@@ -525,7 +525,7 @@ addRefs ua at ns (App _ (App _ (Ref _ name) x) y)
 addRefs ua at ns (App _ fn arg)
     = addRefs ua at (addRefs ua at ns fn) arg
 addRefs ua at ns (TCode x) = addRefs ua at ns x
-addRefs ua at ns (Quote x) = addRefs ua at ns x
+addRefs ua at ns (Quote ty x) = addRefs ua at (addRefs ua at ns ty) x
 addRefs ua at ns (Eval x) = addRefs ua at ns x
 addRefs ua at ns (Escape x) = addRefs ua at ns x
 addRefs ua at ns (Erased) = ns
@@ -626,7 +626,7 @@ mutual
      = Just (App info !(shrinkTerm fn prf) !(shrinkTerm arg prf))
   shrinkTerm Erased prf = Just Erased
   shrinkTerm TType prf = Just TType
-  shrinkTerm (Quote tm)  prf = Just (Quote  !(shrinkTerm tm prf))
+  shrinkTerm (Quote ty tm) prf = Just (Quote !(shrinkTerm ty prf) !(shrinkTerm tm prf))
   shrinkTerm (TCode tm)  prf = Just (TCode  !(shrinkTerm tm prf))
   shrinkTerm (Eval tm)   prf = Just (Eval   !(shrinkTerm tm prf))
   shrinkTerm (Escape tm) prf = Just (Escape !(shrinkTerm tm prf))
@@ -718,7 +718,7 @@ export
       showApp (App _ _ _) [] = "[can't happen]"
       showApp TType [] = "Type"
       showApp Erased [] = "[_]"
-      showApp (Quote sc) [] = "[|" ++ show sc ++ "|]"
+      showApp (Quote ty sc) [] = "[|" ++ show sc ++ "|]"
       showApp (TCode sc) [] = "<" ++ show sc ++ ">"
       showApp (Eval  sc) [] = "!(" ++ show sc ++ ")"
       showApp (Escape sc) [] = "~(" ++ show sc ++ ")"

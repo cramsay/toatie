@@ -76,13 +76,13 @@ parameters (defs : Defs)
         = eval env locs fn ((info, MkClosure locs env arg) :: stk)
     eval env locs TType stk = pure NType
     eval env locs Erased stk = pure NErased
-    eval env locs (Quote  tm) stk -- Quote defers evaluation
-        = pure $ NQuote $ MkClosure locs env tm
+    eval env locs (Quote ty tm) stk -- Quote defers evaluation
+        = pure $ NQuote (MkClosure locs env ty) (MkClosure locs env tm)
     eval env locs (TCode  tm) stk
         = do tm' <- eval env locs tm stk
              pure $ NCode tm'
     eval env locs (Eval   tm) stk -- Keep Eval simple since we only want this for closed terms
-        = do (NQuote tm') <- eval env locs tm stk
+        = do (NQuote _ tm') <- eval env locs tm stk
                | _ => throw (GenericMsg "Eval on unquoted term")
              evalLocClosure env stk tm'
     eval env locs (Escape tm) stk
@@ -93,7 +93,7 @@ parameters (defs : Defs)
              --tm' <- eval env locs (weakenNs vars tmNorm) stk
              case tm' of
                -- Resolve Escaped NQuote to new local var
-               (NQuote arg) => eval env (arg :: locs) (Local {name = UN "fvar"} _ First) stk
+               (NQuote _ arg) => eval env (arg :: locs) (Local {name = UN "fvar"} _ First) stk
                -- Keep NEscape tag for any other (probably stuck) terms
                otherwise    => pure $ NEscape tm'
 
@@ -178,8 +178,8 @@ parameters (defs : Defs)
               then evalConAlt env loc stk args args' sc
               else pure NoMatch
     -- Quote matching
-    tryAlt {more} env loc stk (NQuote arg) (QuoteCase argn sc)
-        = evalTree env (arg :: loc) stk sc
+    tryAlt {more} env loc stk (NQuote ty arg) (QuoteCase tyn argn sc)
+        = evalTree env (ty :: arg :: loc) stk sc
     -- Default case matches against any *concrete* value
     tryAlt env loc stk val (DefaultCase sc)
          = if concrete val
@@ -380,16 +380,18 @@ mutual
            pure $ apply (Ref (TyCon info t ar) n) args'
   quoteGenNF q defs bound env NErased = pure Erased
   quoteGenNF q defs bound env NType = pure TType
-  quoteGenNF q defs bound env (NQuote tm)
+  quoteGenNF q defs bound env (NQuote ty tm)
       = do tmNf <- evalClosure defs tm
            tm' <- quoteGenNF q defs bound env tmNf
-           pure $ Quote tm'
+           tyNf <- evalClosure defs ty
+           ty' <- quoteGenNF q defs bound env tyNf
+           pure $ Quote ty' tm'
   quoteGenNF q defs bound env (NCode  tm)
       = pure $ TCode !(quoteGenNF q defs bound env tm)
   quoteGenNF q defs bound env (NEscape tm)
       = do case tm of
-             NQuote arg => do argNf <- evalClosure defs arg
-                              quoteGenNF q defs bound env argNf
+             NQuote ty arg => do argNf <- evalClosure defs arg
+                                 quoteGenNF q defs bound env argNf
              otherwise => pure $ Escape !(quoteGenNF q defs bound env tm)
 
 export
@@ -494,7 +496,7 @@ mutual
     convGen q defs env NErased _ = pure True
     convGen q defs env _ NErased = pure True
     convGen q defs env NType NType = pure True
-    convGen q defs env (NQuote x) (NQuote y) = convGen q defs env x y
+    convGen q defs env (NQuote _ x) (NQuote _ y) = convGen q defs env x y
     convGen q defs env (NCode  x) (NCode  y) = convGen q defs env x y
     convGen q defs env x y = pure False
 

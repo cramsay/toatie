@@ -36,7 +36,7 @@ extraction (Ref nt n) = Ref nt n       -- Same as above
 extraction (Meta n args) = Meta n (map extraction args)
 extraction TType = TType
 extraction Erased = Erased
-extraction (Quote  tm) = Quote  (extraction tm)
+extraction (Quote ty tm) = Quote (extraction ty) (extraction tm)
 extraction (TCode  tm) = TCode  (extraction tm)
 extraction (Eval   tm) = Eval   (extraction tm)
 extraction (Escape tm) = Escape (extraction tm)
@@ -65,7 +65,7 @@ mutual
 
   extractAlt : {args : _} -> CaseAlt args -> CaseAlt args
   extractAlt (ConCase x tag ys y) = ConCase x tag ys $ extractTree y
-  extractAlt (QuoteCase x ct)     = QuoteCase x $ extractTree ct
+  extractAlt (QuoteCase ty x ct)     = QuoteCase ty x $ extractTree ct
   extractAlt (DefaultCase x     ) = DefaultCase $ extractTree x
 
 export
@@ -88,7 +88,7 @@ isFreeVar n (Bind n' b scope) = isFreeVar {outer=n'::outer} n scope
 isFreeVar n (App _ f a) = isFreeVar n f || isFreeVar n a
 isFreeVar n TType = False
 isFreeVar n Erased = False
-isFreeVar n (Quote  tm) = isFreeVar n tm
+isFreeVar n (Quote ty tm) = isFreeVar n tm
 isFreeVar n (TCode  tm) = isFreeVar n tm
 isFreeVar n (Eval   tm) = isFreeVar n tm
 isFreeVar n (Escape tm) = isFreeVar n tm

@@ -39,7 +39,7 @@ mutual
        NType    : NF vars
        NErased  : NF vars
        -- Staging constructs
-       NQuote   : Closure vars -> NF vars -- Idris 2's Delay construct also carries it's type as a closure... should we?
+       NQuote   : (ty : Closure vars) -> (tm :Closure vars) -> NF vars
        NCode    : NF vars -> NF vars
        NEscape  : NF vars -> NF vars -- Perhaps we need a NEval too? -- Nah, that's only on closed terms, so we can always evalute it straight away.
 
@@ -80,6 +80,6 @@ export
   show (NTCon n _ _ _ args) = show n ++ " [" ++ show (length args) ++ " closures]"
   show (NErased) = "[__]"
   show (NType) = "Type"
-  show (NQuote _) = "NQuote [closure]"
+  show (NQuote _ _) = "NQuote [closure]"
   show (NCode  x) = "NCode " ++ show x
   show (NEscape x) = "NEscape " ++ show x

@@ -128,7 +128,7 @@ freeVars env (Bind n b scope) = freeVars (b :: env) scope
 freeVars env (App i f a) = freeVars env f ++ freeVars env a
 freeVars env TType = []
 freeVars env Erased = []
-freeVars env (Quote x) = freeVars env x
+freeVars env (Quote _ x) = freeVars env x
 freeVars env (TCode x) = freeVars env x
 freeVars env (Eval x) = freeVars env x
 freeVars env (Escape x) = freeVars env x
@@ -174,7 +174,7 @@ emptyRHS (Case idx el sc alts) = Case idx el sc (map emptyRHSalt alts)
   where
   emptyRHSalt : CaseAlt vars -> CaseAlt vars
   emptyRHSalt (ConCase n t args sc) = ConCase n t args (emptyRHS sc)
-  emptyRHSalt (QuoteCase arg sc) = QuoteCase arg (emptyRHS sc)
+  emptyRHSalt (QuoteCase ty arg sc) = QuoteCase ty arg (emptyRHS sc)
   emptyRHSalt (DefaultCase sc) = DefaultCase (emptyRHS sc)
 emptyRHS (STerm s) = STerm Erased
 emptyRHS sc = sc
@@ -189,7 +189,7 @@ mkAlt sc (cn, t, ar)
 altMatch : CaseAlt vars -> CaseAlt vars -> Bool
 altMatch _ (DefaultCase _) = True
 altMatch (ConCase _ t _ _) (ConCase _ t' _ _) = t == t'
-altMatch (QuoteCase _ _) (QuoteCase _ _) = True
+altMatch (QuoteCase _ _ _) (QuoteCase _ _ _) = True
 altMatch _ _ = False
 
 -- Given a type and a list of case alternatives, return the
@@ -252,12 +252,12 @@ addNot v t ((v', ts) :: xs)
 
 tagIs : Int -> CaseAlt vars -> Bool
 tagIs t (ConCase _ t' _ _) = t == t'
-tagIs t (QuoteCase _ _) = False
+tagIs t (QuoteCase _ _ _) = False
 tagIs t (DefaultCase _) = True
 
 tagIsNot : List Int -> CaseAlt vars -> Bool
 tagIsNot ts (ConCase _ t' _ _) = not (t' `elem` ts)
-tagIsNot ts (QuoteCase _ _) = True
+tagIsNot ts (QuoteCase _ _ _) = True
 tagIsNot ts (DefaultCase _) = False
 
 -- Replace a default case with explicit branches for the constructors.
@@ -323,9 +323,9 @@ buildArgs defs known not ps cs@(Case {name = var} idx el ty altsIn)
                              (apply con (map (\a => (AImplicit, Ref Bound a)) args))) ps
              buildArgs defs (weakenNs args ((MkVar el, t) :: known))
                                (weakenNs args not') ps' sc
-    buildArgAlt not' (QuoteCase a sc)
-        = let ps' = map (substName var (Quote (Ref Bound a))) ps
-          in buildArgs defs (weakenNs [a] known) (weakenNs [a] not') ps' sc
+    buildArgAlt not' (QuoteCase t a sc)
+        = let ps' = map (substName var (Quote (Ref Bound t) (Ref Bound a))) ps
+          in buildArgs defs (weakenNs [t, a] known) (weakenNs [t, a] not') ps' sc
     buildArgAlt not' (DefaultCase sc)
         = buildArgs defs known not' ps sc
 
@@ -371,7 +371,7 @@ match (Ref Bound n) _ = True
 match (Ref _ n) (Ref _ n') = n == n'
 match (App _ f a) (App _ f' a') = match f f' && match a a'
 match (TCode tm) (TCode tm') = match tm tm'
-match (Quote tm) (Quote tm') = match tm tm'
+match (Quote _ tm) (Quote _ tm') = match tm tm'
 match (Eval tm)  (Eval tm')  = match tm tm'
 match (Escape tm) (Escape tm') = match tm tm'
 match (Erased) _ = True
