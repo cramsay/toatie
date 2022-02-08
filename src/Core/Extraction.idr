@@ -65,6 +65,7 @@ mutual
 
   extractAlt : {args : _} -> CaseAlt args -> CaseAlt args
   extractAlt (ConCase x tag ys y) = ConCase x tag ys $ extractTree y
+  extractAlt (QuoteCase x ct)     = QuoteCase x $ extractTree ct
   extractAlt (DefaultCase x     ) = DefaultCase $ extractTree x
 
 export

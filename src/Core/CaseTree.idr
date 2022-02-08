@@ -31,6 +31,8 @@ mutual
        -- Constructor for a data type; bind the arguments and subterms.
        ConCase : Name -> (tag : Int) -> (args : List Name) -> -- TODO, do I need to track AppInfo here?
                  CaseTree (args ++ vars) -> CaseAlt vars
+       -- Quote for a staged term
+       QuoteCase : (arg : Name) -> CaseTree (arg :: vars) -> CaseAlt vars
        -- Catch-all case
        DefaultCase : CaseTree vars -> CaseAlt vars
 
@@ -61,6 +63,9 @@ mutual
                     insertCaseNames {outer = args ++ outer} {inner} ns
                         (rewrite sym (appendAssociative args outer inner) in
                                  ct))
+  insertCaseAltNames {outer} {inner} ns (QuoteCase x ct)
+      = QuoteCase x
+           (insertCaseNames {outer = x :: outer} {inner} ns ct)
   insertCaseAltNames ns (DefaultCase ct)
       = DefaultCase (insertCaseNames ns ct)
 
@@ -74,6 +79,7 @@ public export
 data Pat : Type where
      PCon : AppInfo -> Name -> (tag : Int) -> (arity : Nat) ->
             List (AppInfo, Pat) -> Pat
+     PQuote : AppInfo -> Pat -> Pat
      PLoc : AppInfo -> Name -> Pat
      PUnmatchable : Term [] -> Pat
 
@@ -83,12 +89,14 @@ Show Pat where
   show (PCon AImplicit n t a args) = "{" ++ show n ++ show (t, a) ++ show args ++ "}"
   show (PLoc AExplicit n) = "(" ++ show n ++ ")"
   show (PLoc AImplicit n) = "{" ++ show n ++ "}"
+  show (PQuote AExplicit p) = "( [|" ++ show p ++ "|] )"
   show _ = "_"
 
 export
 mkPat' : AppInfo -> List (AppInfo, Pat) -> Term [] -> Term [] -> Pat
 mkPat' i args orig (Ref Bound n) = PLoc i n
 mkPat' i args orig (Ref (DataCon t a) n) = PCon i n t a args
+mkPat' i args orig (Quote tm) = PQuote i $ mkPat' i args orig tm
 mkPat' i args orig (App info fn arg)
     = let parg = mkPat' (combineInfo info i) [] arg arg
       in mkPat' i ((combineInfo info i, parg) :: args) orig fn
@@ -108,6 +116,7 @@ export
 mkTerm : (vars : List Name) -> Pat -> Term vars
 mkTerm vars (PCon i n tag arity xs)
     = apply (Ref (DataCon tag arity) n) (map (\(i,p)=>(i, mkTerm vars p)) xs)
+mkTerm vars (PQuote i pat) = mkTerm vars pat
 mkTerm vars (PLoc i n)
     = case isVar n vars of
            Just (MkVar prf) => Local _ prf
@@ -132,6 +141,8 @@ showCT indent Impossible = "Impossible"
 showCA indent (ConCase n tag args sc)
         = showSep " " (map show (n :: args)) ++ " => " ++
           showCT indent sc
+showCA indent (QuoteCase x sc)
+        = "Quote " ++ show x ++ " => " ++ showCT indent sc
 showCA indent (DefaultCase sc)
         = "_ => " ++ showCT indent sc
 
@@ -173,6 +184,7 @@ getNames add ns sc = getSet ns sc
     mutual
       getAltSet : SortedMap Name Bool -> CaseAlt vs -> SortedMap Name Bool
       getAltSet ns (ConCase n t args sc) = getSet ns sc
+      getAltSet ns (QuoteCase x sc) = getSet ns sc
       getAltSet ns (DefaultCase sc) = getSet ns sc
 
       getAltSets : SortedMap Name Bool -> List (CaseAlt vs) -> SortedMap Name Bool

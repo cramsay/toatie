@@ -208,11 +208,13 @@ data ClauseType = ConClause | VarClause
 
 namesIn : List Name -> Pat -> Bool
 namesIn pvars (PCon _ _ _ _ ps) = all (namesIn pvars) (map snd ps) -- TODO should we care about implicitness?
+namesIn pvars (PQuote _ p) = namesIn pvars p
 namesIn pvars (PLoc _ n) = n `elem` pvars
 namesIn pvars _ = True
 
 namesFrom : Pat -> List Name
 namesFrom (PCon _ _ _ _ ps) = concatMap namesFrom (map snd ps) -- TODO should we care about implicitness
+namesFrom (PQuote _ p) = namesFrom p
 namesFrom (PLoc _ n) = [n]
 namesFrom _ = []
 
@@ -223,6 +225,7 @@ clauseType (MkPatClause pvars (MkInfo arg _ ty :: rest) rhs)
     -- used to get the remaining clause types
     clauseType' : Pat -> ClauseType
     clauseType' (PCon _ _ _ _ xs) = ConClause -- TODO Circuit runtime, want AExplicit. Compile time, want _
+    clauseType' (PQuote _ p) = clauseType' p
     clauseType' _               = VarClause
 
     getClauseType : Pat -> ClauseType
@@ -253,6 +256,7 @@ partition (x :: xs) with (partition xs)
 
 data ConType : Type where
      CName : Name -> (tag : Int) -> ConType
+     CQuote : ConType
 -- Idris 2 also needs to know if it's a delayed expression or constant:
 --      CDelay : ConType
 --      CConst : Constant -> ConType
@@ -263,6 +267,8 @@ conTypeEq (CName x tag) (CName x' tag')
         case decEq tag tag' of
              Yes Refl => Just Refl
              No contra => Nothing
+conTypeEq CQuote CQuote = Just Refl
+conTypeEq _ _ = Nothing
 
 data Group : List Name -> -- variables in scope
              List Name -> -- pattern variables still to process
@@ -271,6 +277,9 @@ data Group : List Name -> -- variables in scope
                 Name -> (tag : Int) ->
                 List (PatClause (newargs ++ vars) (newargs ++ todo)) ->
                 Group vars todo
+     QuoteGroup : {arg : _} ->
+                  List (PatClause (arg :: vars) (arg :: todo)) ->
+                  Group vars todo
 -- Idris 2 also has to group delays and constants:
 --      DelayGroup : {tyarg, valarg : _} ->
 --                   List (PatClause (tyarg :: valarg :: vars)
@@ -284,6 +293,8 @@ data GroupMatch : ConType -> List Pat -> Group vars todo -> Type where
   ConMatch : LengthMatch ps newargs ->
              GroupMatch (CName n tag) ps
                (ConGroup {newargs} n tag (MkPatClause pvs pats rhs :: rest))
+  QuoteMatch : GroupMatch CQuote []
+               (QuoteGroup {arg} (MkPatClause pvs pats rhs :: rest))
   NoMatch : GroupMatch ct ps g
 
 checkGroupMatch : (c : ConType) -> (ps : List Pat) -> (g : Group vars todo) ->
@@ -295,6 +306,7 @@ checkGroupMatch (CName x tag) ps (ConGroup {newargs} x' tag' (MkPatClause pvs pa
                             (Just Refl, Yes Refl) => ConMatch prf
                             _ => NoMatch
 checkGroupMatch (CName x tag) ps _ = NoMatch
+checkGroupMatch CQuote [] (QuoteGroup (MkPatClause pvs pats rhs :: rest)) = QuoteMatch
 checkGroupMatch _ _ _ = NoMatch
 
 data PName : Type where
@@ -337,6 +349,7 @@ nextNames {vars} root ((pi, p) :: pats) fty
   where
   updatePatInfo : AppInfo -> Pat -> Pat
   updatePatInfo i (PCon x y tag arity xs) = PCon i y tag arity xs
+  updatePatInfo i (PQuote _ p) = PQuote i p
   updatePatInfo i (PLoc x y) = PLoc i y
   updatePatInfo i (PUnmatchable x) = PUnmatchable x
 
@@ -362,6 +375,7 @@ updatePatNames ns (pi :: ps)
   where
     update : Pat -> Pat
     update (PCon info n i a ps) = PCon info n i a (map (\(i,x)=>(i, update x)) ps)
+    update (PQuote i p) = PQuote i (update p)
     update (PLoc i n)
         = case lookup n ns of
                Nothing => PLoc i n
@@ -426,6 +440,34 @@ groupCons fn pvars cs
         = do gs' <- addConG n tag pargs pats rhs gs
              pure (g :: gs')
 
+    addQuoteG : {vars', todo' : _} ->
+                Pat ->
+                NamedPats vars' todo' ->
+                (rhs : Term vars') ->
+                (acc : List (Group vars' todo')) ->
+                Core (List (Group vars' todo'))
+    addQuoteG parg pats rhs []
+      = do coreLift $ putStrLn $ show pats
+           ([argname] ** newargs) <- nextNames "e" [(AExplicit, parg)] Nothing -- TODO Do I need to construct a type here?
+              | _ => throw (InternalError "Error compiling Quote pattern match")
+
+           let pats' = updatePatNames (updateNames [(argname, parg)]) (weakenNs [argname] pats)
+           let clause = MkPatClause {todo = argname :: todo'} pvars (newargs ++ pats') (weakenNs [argname] rhs)
+           pure [QuoteGroup [clause]]
+
+    addQuoteG parg pats rhs (g :: gs) with (checkGroupMatch CQuote [] g)
+      addQuoteG parg pats rhs ((QuoteGroup {arg} ((MkPatClause pvars ps tm) :: rest)) :: gs)
+        | (QuoteMatch {arg})
+        = do let newps = newPats [parg] (ConsMatch NilMatch) ps
+             let pats' = updatePatNames (updateNames [(arg, parg)]) (weakenNs [arg] pats)
+             let newclause : PatClause (arg :: vars') (arg :: todo')
+                           = MkPatClause pvars (newps ++ pats') (weakenNs [arg] rhs)
+             pure $ ((QuoteGroup (MkPatClause pvars ps tm :: rest ++ [newclause])) :: gs)
+
+      addQuoteG parg pats rhs (g :: gs) | NoMatch
+        = do gs' <- addQuoteG parg pats rhs gs
+             pure (g :: gs')
+
     addGroup : {vars, todo, idx : _} ->
                Pat -> (0 p : IsVar name idx vars) ->
                NamedPats vars todo -> Term vars ->
@@ -435,6 +477,7 @@ groupCons fn pvars cs
          = if a == length pargs
               then addConG n t pargs pats rhs acc
               else throw (CaseCompile fn (NotFullyApplied n))
+    addGroup (PQuote i arg) pprf pats rhs acc = addQuoteG arg pats rhs acc
     addGroup _ pprf pats rhs acc = pure acc -- Can't happen, not a constructor
 --         -- FIXME: Is this possible to rule out with a type? Probably.
 
@@ -504,6 +547,7 @@ samePat (pi :: xs)
     samePatAs (PCon i n t a args) (PCon i' n' t' _ _ :: ps)
         = n == n' && t == t' && i == i' && samePatAs (PCon i n t a args) ps
     samePatAs (PLoc i n) (PLoc i' n' :: ps) = n == n' && i == i' && samePatAs (PLoc i n) ps
+    samePatAs (PQuote i p) (PQuote i' p' :: ps) = i==i' && samePatAs p [p'] && samePatAs (PQuote i p) ps
     samePatAs x y = False
 
 getFirstCon : NamedPats ns (p :: ps) -> Pat
@@ -515,11 +559,13 @@ countDiff xs = length (distinct [] (map getFirstCon xs))
   where
     isVar : Pat -> Bool
     isVar (PCon _ _ _ _ _) = False
+    isVar (PQuote _ p) = isVar p
     isVar _ = True
 
     -- Return whether two patterns would lead to the same match
     sameCase : Pat -> Pat -> Bool
     sameCase (PCon _ _ t _ _) (PCon _ _ t' _ _) = t == t'
+    sameCase (PQuote _ p) (PQuote _ p') = True -- sameCase p p'
     sameCase x y = isVar x && isVar y
 
     distinct : List Pat -> List Pat -> List Pat
@@ -566,6 +612,7 @@ pickNext {ps = q :: qs} fn npss
 
 isAccessible : Pat -> Bool
 isAccessible (PCon i cn tag arity xs) = i == AExplicit
+isAccessible (PQuote i p) = i == AExplicit
 isAccessible (PLoc i vn) = i == AExplicit
 isAccessible (PUnmatchable tm) = False
 
@@ -670,6 +717,10 @@ mutual
           = do crest <- match fn rest (map (weakenNs newargs) errorCase)
                cs' <- altGroups cs
                pure (ConCase cn tag newargs crest :: cs')
+      altGroups (QuoteGroup {arg} rest :: cs)
+          = do crest <- match fn rest (map (weakenNs [arg]) errorCase)
+               cs' <- altGroups cs
+               pure (QuoteCase arg crest :: cs')
 
   conRule : {a, vars, todo : _} ->
             {auto i : Ref PName Int} ->
@@ -693,6 +744,7 @@ mutual
            -- Don't add a fallthough case for con groups of implicit patterns
            let err' = case pat of
                         (PCon AImplicit _ _ _ _) => Nothing
+                        (PQuote AImplicit _) => Nothing
                         (PLoc AImplicit _) => Nothing
                         _ => err
 

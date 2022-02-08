@@ -174,6 +174,7 @@ emptyRHS (Case idx el sc alts) = Case idx el sc (map emptyRHSalt alts)
   where
   emptyRHSalt : CaseAlt vars -> CaseAlt vars
   emptyRHSalt (ConCase n t args sc) = ConCase n t args (emptyRHS sc)
+  emptyRHSalt (QuoteCase arg sc) = QuoteCase arg (emptyRHS sc)
   emptyRHSalt (DefaultCase sc) = DefaultCase (emptyRHS sc)
 emptyRHS (STerm s) = STerm Erased
 emptyRHS sc = sc
@@ -188,6 +189,7 @@ mkAlt sc (cn, t, ar)
 altMatch : CaseAlt vars -> CaseAlt vars -> Bool
 altMatch _ (DefaultCase _) = True
 altMatch (ConCase _ t _ _) (ConCase _ t' _ _) = t == t'
+altMatch (QuoteCase _ _) (QuoteCase _ _) = True
 altMatch _ _ = False
 
 -- Given a type and a list of case alternatives, return the
@@ -250,10 +252,12 @@ addNot v t ((v', ts) :: xs)
 
 tagIs : Int -> CaseAlt vars -> Bool
 tagIs t (ConCase _ t' _ _) = t == t'
+tagIs t (QuoteCase _ _) = False
 tagIs t (DefaultCase _) = True
 
 tagIsNot : List Int -> CaseAlt vars -> Bool
 tagIsNot ts (ConCase _ t' _ _) = not (t' `elem` ts)
+tagIsNot ts (QuoteCase _ _) = True
 tagIsNot ts (DefaultCase _) = False
 
 -- Replace a default case with explicit branches for the constructors.
@@ -319,6 +323,9 @@ buildArgs defs known not ps cs@(Case {name = var} idx el ty altsIn)
                              (apply con (map (\a => (AImplicit, Ref Bound a)) args))) ps
              buildArgs defs (weakenNs args ((MkVar el, t) :: known))
                                (weakenNs args not') ps' sc
+    buildArgAlt not' (QuoteCase a sc)
+        = let ps' = map (substName var (Quote (Ref Bound a))) ps
+          in buildArgs defs (weakenNs [a] known) (weakenNs [a] not') ps' sc
     buildArgAlt not' (DefaultCase sc)
         = buildArgs defs known not' ps sc
 

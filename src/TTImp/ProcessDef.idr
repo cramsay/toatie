@@ -181,7 +181,7 @@ findExp bound tm
                     Just (MkGlobalDef nty _) <- lookupDef n (defs)
                          | Nothing => pure []
                     findExpArg !(nf defs [] nty) args
-           --(Quote tm, []) => findExp bound tm
+           (Quote tm, []) => findExp bound tm
            _ => pure []
     where
       findExpArg : {vars : _} ->
@@ -258,7 +258,8 @@ addDots (IPi Implicit mn argTy retTy)  = pure $ IPi Implicit mn argTy retTy
 addDots (IPi Explicit mn argTy retTy)  = pure $ IPi Explicit mn argTy retTy
 addDots (ILet n margTy argVal scope)   = pure $ ILet n margTy argVal scope -- Can't have ILet on LHS...
 addDots (IMustUnify x) = pure $ IMustUnify x
-addDots (IQuote x)     = pure $ IQuote  !(addDots x)
+addDots (IQuote x)     = pure $ --IQuote (IMustUnify x)
+                                IQuote  !(addDots x)
 addDots (ICode x)      = pure $ ICode   !(addDots x)
 addDots (IEval x)      = pure $ IEval   !(addDots x)
 addDots (IEscape x)    = pure $ IEscape !(addDots x)
@@ -402,6 +403,7 @@ mutual
          Just cty <- lookupDefType n defs
            | Nothing => throw (InternalError $ "Undefined constructor name " ++ show n)
          checkImplicitConCase (implicits ++ filterImplicitArgs args cty) ct
+  checkImplicitConAlt implicits (QuoteCase a sc) = checkImplicitConCase implicits sc
   checkImplicitConAlt implicits (DefaultCase ct) = checkImplicitConCase implicits ct
 
   -- A case tree respects implicitness if when we match on an implicit argument, there are
@@ -451,6 +453,7 @@ processDef n clauses
                                                   (type gdef)
          coreLift $ putStrLn $ show tree_ct
          checkImplicitConCase topImplicitArgs tree_ct
+         --checkQuoteConCase tree_ct
 
          -- check that we've solved all RHS holes too
          solveConstraints InTerm

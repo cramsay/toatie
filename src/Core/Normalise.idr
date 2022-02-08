@@ -177,6 +177,9 @@ parameters (defs : Defs)
          = if tag == tag'
               then evalConAlt env loc stk args args' sc
               else pure NoMatch
+    -- Quote matching
+    tryAlt {more} env loc stk (NQuote arg) (QuoteCase argn sc)
+        = evalTree env (arg :: loc) stk sc
     -- Default case matches against any *concrete* value
     tryAlt env loc stk val (DefaultCase sc)
          = if concrete val
