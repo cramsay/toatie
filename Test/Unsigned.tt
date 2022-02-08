@@ -185,32 +185,32 @@ pat w, xn, xsn, yn, ysn, c : Nat,
                        {prfUAdd c xn yn a b xsn ysn prf}
                        {_} ans
 
- -- -- -- Unsigned binary addition (with staging)
- -- uAddCirc : {w,x,y,c : Nat} ->
- --            < Unsigned w x > -> < Unsigned w y > -> < Bit c > ->
- --            < Unsigned (S w) (plus c (plus x y)) >
- -- 
- -- pat c : Nat, cin : <Bit c>, xs : <Unsigned 0 0>, ys : <Unsigned 0 0> =>
- --   uAddCirc {0} {0} {0} {c} xs ys cin
- --     = [| UCons {0} {0} {c} UNil ~cin |]
- -- 
- -- pat w, xval, yval, c : Nat,
- --     cin : <Bit c>, xbin : <Unsigned (S w) xval>, ybin : <Unsigned (S w) yval> =>
- --   uAddCirc {S w} {xval} {yval} {c} xbin ybin cin
- --     = [|
- --          case ~(xbin) of
- --            pat xns : Nat, xn : Nat, xb : Bit xn, xbs : Unsigned w xns =>
- --              (UCons {w} {xns} {xn} xbs xb) ==> _
- --       |]
+-- -- Unsigned binary addition (with staging)
+uAddCirc : (w : Nat) -> {x,y,c : Nat} ->
+           < Unsigned w x > -> < Unsigned w y > -> < Bit c > ->
+           < Unsigned (S w) (plus c (plus x y)) >
 
- --   = case (addBit {_} {_} {_} cin xb yb) of
- --       pat a, b : Nat, cin' : Bit a, lsb : Bit b,
- --           prf : Equal Nat (plus b (double a)) (plus c (plus xn yn))
- --       => (MkBitPair {a} {b} {c} {xn} {yn} {prf} cin' lsb) ==>
- --            let rec = uAdd {_} {_} {_} {_} xbs ybs cin'
- --                ans = UCons {_} {_} {_} rec lsb
- --            in eqInd2 {_} {_} {_}
- --                      {prfUAdd c xn yn a b xsn ysn prf}
- --                      {_} ans
+pat c : Nat, cin : <Bit c>, xs : <Unsigned 0 0>, ys : <Unsigned 0 0> =>
+  uAddCirc 0 {0} {0} {c} [|UNil|] [|UNil|] cin
+    = [| UCons {_} {0} {c} UNil ~cin |]
 
--- \ba => \bb => \bc => \bd => \a : Bit ba => \b : Bit bb => \c : Bit bc => \d : Bit bd => uAddS _ {_} {_} {_} [| UCons {_} {_} {_} (UCons {_} {_} {_} UNil a) b |] [| UCons {_} {_} {_} (UCons {_} {_} {_} UNil c) d |] [| O |]
+pat w, xn, xsn, yn, ysn, c : Nat,
+    cin : <Bit c>, xb : Bit xn, yb : Bit yn,
+    xbs : Unsigned w xsn, ybs : Unsigned w ysn =>
+  uAddCirc (S w) {_} {_} {c} [| UCons {w} {xsn} {xn} xbs xb |]
+                             [| UCons {w} {ysn} {yn} ybs yb |] cin
+    = [| case (addBit {_} {_} {_} ~cin xb yb) of
+
+           pat a, b : Nat, cin' : Bit a, lsb : Bit b,
+               prf : Equal Nat (plus b (double a)) (plus c (plus xn yn))
+           => (MkBitPair {a} {b} {c} {xn} {yn} {prf} cin' lsb) ==>
+
+                let rec = ~(uAddCirc _ {_} {_} {_} [|xbs|] [|ybs|] [|cin'|])
+                    ans = UCons {_} {_} {_} rec lsb
+                in eqInd2 {_} {_} {_}
+                          {prfUAdd c xn yn a b xsn ysn prf}
+                          {_} ans
+      |]
+
+
+-- \ba => \bb => \bc => \bd => \a : Bit ba => \b : Bit bb => \c : Bit bc => \d : Bit bd => uAddCirc _ {_} {_} {_} [| UCons {_} {_} {_} (UCons {_} {_} {_} UNil a) b |] [| UCons {_} {_} {_} (UCons {_} {_} {_} UNil c) d |] [| O |]
