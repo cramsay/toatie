@@ -23,6 +23,18 @@ import Data.List
 import Data.Maybe
 import Data.SortedMap
 
+-- Command line options
+data FOpt : Type where
+  FTypeCheckOnly : FOpt
+
+Eq FOpt where
+  FTypeCheckOnly == FTypeCheckOnly = True
+
+parseFOpt : String -> IO FOpt
+parseFOpt "-fTypeCheckOnly" = pure FTypeCheckOnly
+parseFOpt s = do putStrLn $ "Unrecognised option: " ++ s
+                 exitFailure
+
 repl : {auto c : Ref Ctxt Defs} ->
        {auto u : Ref UST UState} ->
        {auto s : Ref Stg Stage} ->
@@ -44,8 +56,8 @@ repl = do coreLift $ putStr "> "
 
           repl
 
-runMain : FileName -> List ImpDecl -> Core ()
-runMain fname decls
+runMain : List FOpt -> FileName -> List ImpDecl -> Core ()
+runMain fopts fname decls
     = do c <- newRef Ctxt !initDefs
          u <- newRef UST initUState
          s <- newRef Stg (the Stage 0)
@@ -53,9 +65,8 @@ runMain fname decls
          let dirs = defaultModulePaths fname
          traverse_ (processDecl dirs) decls
 
-         --defs <- get Ctxt
-         --coreLift $ putStrLn $ show defs
-         repl
+         when (not $ FTypeCheckOnly `elem` fopts)
+               repl
 
 banner : String
 banner = """
@@ -75,11 +86,17 @@ banner = """
   """
 
 main : IO ()
-main = do [_, fname] <- getArgs
-              | _ => putStrLn "Usage: tinyidris <filename>"
+main = do (_ :: args) <- getArgs
+             | _ => putStrLn "Usage: tinyidris <filename>"
+          let (fname :: args) = reverse args
+             | _ => putStrLn "Usage: tinyidris <filename>"
+
+          fopts <- traverse parseFOpt args
+
           Right decls <- parseFile fname (do p <- prog fname; eoi; pure p)
               | Left err => printLn err
           putStrLn banner
-          coreRun (runMain fname decls)
-                  (\err => printLn err)
+          coreRun (runMain fopts fname decls)
+                  (\err => do printLn err
+                              exitFailure)
                   pure

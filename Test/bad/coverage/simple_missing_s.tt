@@ -1,0 +1,4 @@
+import Data.Nat
+
+pred : Nat -> Nat
+pred Z = Z

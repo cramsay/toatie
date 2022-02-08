@@ -12,6 +12,7 @@
         devShell = pkgs.mkShell {
 
 		  shellHook = ''
+			export PATH=$PWD/build/exec:$PATH
 			${idris2-dev.packages.${system}.idris-emacs}/bin/emacs --eval "(require 'idris2-mode)" &
           '';
 

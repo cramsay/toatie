@@ -1,0 +1,5 @@
+import Data.Nat
+
+pred : Nat -> Nat
+pat n : Nat =>
+  pred (S n) = n
