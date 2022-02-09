@@ -1,0 +1,10 @@
+import Data.Nat
+import Proofs
+
+-- Cross-stage persistence. `plus` is free variable bound at level 0, so we
+-- should be able to use it at level 1. For example:
+g : <Nat>
+g = [| plus 2 3 |]
+
+example : Equal Nat 5 !g
+example = Refl {Nat} {5}

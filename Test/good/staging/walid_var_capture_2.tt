@@ -1,0 +1,17 @@
+import Data.Nat
+import Proofs
+
+-- Page 50 in Walid's thesis has more on the need for renaming.
+-- First define a function with a bound name, x...
+g : <Nat> -> <Nat -> Nat>
+pat e : <Nat> =>
+  g e = [| \x:Nat => plus x ~e |]
+
+
+-- Now if we call this via a lambda with the same bound name, x, does it
+-- mistakenly expand to \x => \x => x + x or with unique names like
+-- \x_1 => \x_2 => x_1 + x_2?
+--
+-- Let's try with args 2 and 3.
+example : Equal Nat 5 ((\x => !(g [| x |])) 2 3)
+example = Refl {Nat} {5}

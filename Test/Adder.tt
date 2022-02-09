@@ -27,10 +27,6 @@ and I I = I
 data Pair : Type -> Type where
      MkP : {a : Type} -> a -> a -> Pair a
 
-dup : Bit -> Pair Bit
-pat b : Bit =>
-    dup b = MkP {Bit} b b
-
 fa : Bit -> Bit -> Bit -> Pair Bit
 pat a : Bit, b : Bit, cin : Bit =>
     fa a b cin = let axorb = xor a b

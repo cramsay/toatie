@@ -1,0 +1,6 @@
+import Data.Nat
+
+-- Cross-stage safety.
+-- We shouldn't be allowed to evaluate something at level 0 if it is defined at level 1
+g : < Nat -> Nat >
+g = [| \x => ~x |]

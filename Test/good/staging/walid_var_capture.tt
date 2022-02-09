@@ -1,0 +1,20 @@
+import Data.Nat
+import Proofs
+
+-- Example of accidental name capture from "A Gentle Introduction to Multi-stage
+-- Programming" by Walid Taha. Demonstrates that we _do not_ accidentally
+-- capture variable names when unstaging (in this case, the repeated use of `x`
+-- during recursion).
+h : (n : Nat) -> (z : <Nat>) -> <Nat>
+pat z : <Nat> =>
+  h Z z = z
+pat n : Nat, z : <Nat> =>
+  h (S n) z = [| (\x : Nat => ~(h n [| plus x ~z |]))
+                 (S n)
+              |]
+
+-- Example in paper suggests running h 3 [|1|], which should return [|7|]. Our
+-- tests only type check just now (no explicit eval), so let's use encode it as
+-- a proof
+example : Equal Nat 7 !(h 3 [| 1 |])
+example = Refl {Nat} {7}

@@ -1,0 +1,12 @@
+import Data.Nat
+
+-- Page 29 of Walid's thesis talks about two useful functions --- `back` and
+-- `forth`. Let's define them here.
+
+back : (a : Type) -> (b : Type) -> (<a> -> <b>) -> <a -> b>
+pat a, b, f : (<a> -> <b>) =>
+  back _ _ f = [| \x => ~(f [|x|]) |]
+
+forth : (a : Type) -> (b : Type) -> <a -> b> -> (<a> -> <b>)
+pat a, b, f : <a -> b> =>
+  forth _ _ f = \x => [| ~f ~x |]

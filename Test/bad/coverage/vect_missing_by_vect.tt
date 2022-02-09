@@ -1,0 +1,15 @@
+import Data.Nat
+
+data Vect : Nat -> Type -> Type where
+     VNil : (a : Type) -> Vect Z a
+     VCons : (a : Type) -> (k : Nat) ->
+             a -> Vect k a -> Vect (S k) a
+
+-- Possible cases direct by another Vect
+-- Don't handle case for two empty Vects
+pluses : (n : Nat) ->
+         Vect n Nat ->
+         Vect n Nat ->
+         Vect n Nat
+pat n, x, xs, y, ys =>
+  pluses _ (VCons _ n x xs) (VCons _ _ y ys) = VCons _ _ (plus x y) (pluses n xs ys)

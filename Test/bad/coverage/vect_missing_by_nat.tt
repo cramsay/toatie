@@ -1,0 +1,13 @@
+import Data.Nat
+
+data Vect : Nat -> Type -> Type where
+     VNil : (a : Type) -> Vect Z a
+     VCons : (a : Type) -> (k : Nat) ->
+             a -> Vect k a -> Vect (S k) a
+
+-- Possible cases directed by Nat.
+-- Missing case for n = Z
+succs : (n : Nat) ->
+        Vect n Nat -> Vect n Nat
+pat n, x, xs =>
+  succs (S n) (VCons _ _ x xs) = VCons _ _ (S x) (succs n xs)

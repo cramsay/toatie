@@ -1,0 +1,17 @@
+import Data.Nat
+
+data Vect : Nat -> Type -> Type where
+     VNil : (a : Type) -> Vect Z a
+     VCons : (a : Type) -> (k : Nat) ->
+             a -> Vect k a -> Vect (S k) a
+
+-- Extra case where or two Vects have different length
+pluses' : (n : Nat) ->
+         Vect n Nat ->
+         Vect n Nat ->
+         Vect n Nat
+pluses' _ (VNil _) (VNil _) = VNil _
+pat n, x, xs, y, ys =>
+  pluses' _ (VCons _ n x xs) (VCons _ _ y ys) = VCons _ _ (plus x y) (pluses' n xs ys)
+pat n, x, xs =>
+  pluses' _ (VCons _ n x xs) (VNil _) = VNil _ 

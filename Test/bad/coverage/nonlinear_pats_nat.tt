@@ -1,0 +1,10 @@
+import Data.Nat
+
+data Bool : Type where
+  False : Bool
+  True  : Bool
+
+eq : Nat -> Nat -> Bool
+pat n =>
+  eq n n = True
+eq _ _ = False

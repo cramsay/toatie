@@ -1,0 +1,49 @@
+import Data.Nat
+
+data Vect : Nat -> Type -> Type where
+     VNil : (a : Type) -> Vect Z a
+     VCons : (a : Type) -> (k : Nat) ->
+             a -> Vect k a -> Vect (S k) a
+
+-- Possible cases directed by Nat.
+-- Impossible cases are explicit.
+succs : (n : Nat) ->
+        Vect n Nat -> Vect n Nat
+succs Z (VNil _) = VNil _
+succs Z (VCons _ _ _ _) impossible
+pat n, x, xs =>
+  succs (S n) (VCons _ _ x xs) = VCons _ _ (S x) (succs n xs)
+pat n =>
+  succs (S n) (VNil _) impossible
+
+-- Possible cases directed by Nat.
+-- Impossible cases are implicit.
+succs' : (n : Nat) ->
+        Vect n Nat -> Vect n Nat
+succs' Z (VNil _) = VNil _
+pat n, x, xs =>
+  succs' (S n) (VCons _ _ x xs) = VCons _ _ (S x) (succs' n xs)
+
+-- Possible cases direct by another Vect
+pluses : (n : Nat) ->
+         Vect n Nat ->
+         Vect n Nat ->
+         Vect n Nat
+pluses _ (VNil _) (VNil _) = VNil _
+pat n, x, xs, y, ys =>
+  pluses _ (VCons _ n x xs) (VCons _ _ y ys) = VCons _ _ (plus x y) (pluses n xs ys)
+
+-- Possible cases directed by computation on Nat
+head : (n : Nat) -> Vect (S n) Nat ->
+       Nat
+pat n, x, xs =>
+  head _ (VCons _ n x xs) = x
+
+{- ERRS
+
+Extra impossible cases, precluded by a Nat
+Missing possible cases, precluded by a Nat
+
+Extra impossible cases, precluded by a Vect
+Missing possible cases, precluded by a Vect
+-}

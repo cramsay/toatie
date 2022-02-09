@@ -1,6 +1,13 @@
 import Data.Nat
 
+-- Split on constructors OK
 pred : Nat -> Nat
 pred Z = Z
 pat n : Nat =>
   pred (S n) = n
+
+-- Default case OK too
+succ : Nat -> Nat
+pat n : Nat =>
+  succ n = S n
+

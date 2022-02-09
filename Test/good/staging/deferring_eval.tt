@@ -1,0 +1,25 @@
+import Data.Nat
+
+{- FIXME
+
+  Walid talks about a true _multi_stage language so escaped quotes are only ever
+  evaluated when going from stage 2 -> stage 1. Our language is more for two
+  stages, so we evaluate every stage... the staging is more for spliting
+  synthesisable code from non-synthesisable generators.
+ 
+  > g : <Nat>
+  > g = [| plus 2 3 |]
+
+  For example, g above, shows [| 5 |] at the REPL. They can wrap it in one
+  more set of quotes to show that the evaluation really is deferred, but ours
+  will still reduce the inner expression
+ 
+  > [| g |]
+  Checked: [|g|]
+  Type: <<Nat>>
+  Evaluated: [|[|5|]|]
+
+  Can we implement that? And _should_ we? Can imagine this has implications for
+  unification and proofs...
+
+-}
