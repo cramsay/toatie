@@ -121,25 +121,6 @@ getNestData : (Name, (Maybe Name, List (Var vars), a)) ->
               (Name, Maybe Name, List (Var vars))
 getNestData (n, (mn, enames, _)) = (n, mn, enames)
 
-bindCaseLocals : List (Name, Maybe Name, List (Var vars)) ->
-                 List (Name, Name)-> RawImp -> RawImp
-bindCaseLocals [] args rhs = rhs
-bindCaseLocals ((n, mn, envns) :: rest) argns rhs
-  = ICaseLocal n (fromMaybe n mn)
-               (map getNameFrom envns)
-               (bindCaseLocals rest argns rhs)
-  where
-  getArg : List (Name, Name) -> Nat -> Maybe Name
-  getArg [] _ = Nothing
-  getArg ((_, x) :: xs) Z = Just x
-  getArg (x :: xs) (S k) = getArg xs k
-
-  getNameFrom : Var vars -> Name
-  getNameFrom (MkVar {i} _)
-  = case getArg argns i of
-      Nothing => n
-      Just n' => n'
-
 lamsToPisEnv : Env Term vars -> Env Term vars
 lamsToPisEnv [] = []
 lamsToPisEnv ((Lam s i ty) :: bs) = Pi s i ty :: lamsToPisEnv bs
@@ -204,9 +185,6 @@ caseBlock {vars} mode env scr scrtm scrty alts expected
        pure (appTm, gnf env caseretty)
   where
 
-  -- Return the original name in the environment, and what it needs to be
-  -- called in the case block. We need to mapping to build the ICaseLocal
-  -- so that it applies to the right original variable
   getBindName : Int -> Name -> List Name -> (Name, Name)
   getBindName idx n@(UN un) vs
     = if n `elem` vs then (n, MN un idx) else (n, n)

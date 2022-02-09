@@ -17,7 +17,6 @@ mutual
           -- inferred, but in this initial version everything is explicit
        IApp : AppInfo -> RawImp -> RawImp -> RawImp
        ICase : (scr : RawImp) -> (scrty : RawImp) -> List ImpClause -> RawImp
-       ICaseLocal : (uname : Name) -> (internalName : Name) -> (args : List Name) -> RawImp -> RawImp
 
        IMustUnify : RawImp -> RawImp
        Implicit : RawImp
@@ -108,7 +107,6 @@ mutual
     show (IApp AImplicit f a) = show f ++ " {" ++ show a ++ "}"
     show (IApp AExplicit f a) = show f ++ " (" ++ show a ++ ")"
     show (ICase scr scrty alts) = "case " ++ show scr ++ " : " ++ show scrty ++ " of " ++ show alts
-    show (ICaseLocal uname iname args sc) = "caselocal (" ++ show uname ++ " " ++ show iname ++ " " ++ show args ++ ") " ++ show sc
     show (IMustUnify tm) = ".(" ++ show tm ++ ")"
     show Implicit = "_"
     show IType = "Type"

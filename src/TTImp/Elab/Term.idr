@@ -365,10 +365,6 @@ checkTerm env (IEscape code) (Just exp)
 -- TODO Have a second pass at the staging rules and make sure we're not doing
 -- too much extra work (evaluating normal forms twice for glued, etc.)
 
-checkTerm {vars} env (ICaseLocal uname iname args sc) exp
-  = do defs <- get Ctxt
-       checkTerm env sc exp
-       --TODO This!! Above is placeholder
 checkTerm env (ICase scr scrty alts) exp = checkCase InExpr env scr scrty alts exp
 
 export

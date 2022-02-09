@@ -279,7 +279,6 @@ addDots (IVar x) = do (pats, founds) <- get
                                         pure $ IVar x
                         False => pure $ IVar x
 addDots (ICase scr scrty alts) = pure $ ICase !(addDots scr) !(addDots scrty) alts
-addDots (ICaseLocal uname iname args sc) = pure $ ICaseLocal uname iname args !(addDots sc)
 
 processLHS :  {auto c : Ref Ctxt Defs} ->
               {auto u : Ref UST UState} ->
