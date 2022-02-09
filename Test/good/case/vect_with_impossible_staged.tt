@@ -1,0 +1,33 @@
+import Data.Nat
+import Data.Vect
+import Proofs
+
+-- Dependently typed case with an impossible case and staging
+stagedtail : {a : Type} -> {n : Nat} -> < Vect (S n) a -> Vect n a >
+pat a : Type, n : Nat =>
+  stagedtail {a} {n}
+    = [| \xs : Vect (S n) a =>
+         case xs of
+             pat y : a, ys : Vect n a =>
+               VCons {a} {n} y ys ==> ys
+             --VNil {a} impossible
+      |]
+
+{- FIXME This example should typecheck but when we have a case inside our quote
+         it looks like it doesn't fully evaluate at first, doesn't have a quote
+         at the start, and so we can't get past the Eval rule.
+
+         Do we need partial eval or just inlining? Not sure...
+         This will surely crop up again when we start playing with circuits
+         and their normal form.
+
+         Bit strange but it does actually work OK at the REPL... is this because
+         it's in the type for some reason?
+
+         > \a => \n => \xs => !(stagedtail {a} {n}) xs
+
+example : (a : Type) -> (n : Nat) -> (x : a) -> (xs : Vect n a) ->
+          Equal (Vect n a) xs (!(stagedtail {a} {n}) (VCons {a} {n} x xs))
+pat a, n, x, xs =>
+  example a n x xs = Refl {_} {_}
+-}

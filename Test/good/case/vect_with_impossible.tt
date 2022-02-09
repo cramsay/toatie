@@ -1,0 +1,17 @@
+import Data.Nat
+import Data.Vect
+import Proofs
+
+-- Dependently typed case with an impossible case
+mytail : {a : Type} -> {n : Nat} -> Vect (S n) a -> Vect n a
+pat a : Type, n : Nat, xs : Vect (S n) a =>
+  mytail {a} {n} xs
+    = case xs of
+        pat y : a, ys : Vect n a =>
+          VCons {a} {n} y ys ==> ys
+        VNil {a} impossible
+
+example : (a : Type) -> (n : Nat) -> (x : a) -> (xs : Vect n a) ->
+          Equal (Vect n a) xs (mytail {a} {n} (VCons {a} {n} x xs))
+pat a, n, x, xs =>
+  example a n x xs = Refl {_} {_}

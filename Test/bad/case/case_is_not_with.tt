@@ -1,0 +1,23 @@
+import Data.Nat
+import Data.Vect
+
+data Pair : Type -> Type where
+  MkPair : {a : Type} -> a -> a -> Pair a
+
+-- Example of trying to implement a zip over vectors only using case statements.
+-- We don't have `with` views, so this can't (and shouldn't!) typecheck.
+-- We'd need to use the normal pattern matching definitions to implement it properly
+
+myzip : {a : Type} -> {n : Nat} -> Vect n a -> Vect n a -> Vect n (Pair a)
+pat a, n, xs : Vect n a, ys : Vect n a =>
+  myzip {a} {n} xs ys
+    = case n of
+        Z ==> case xs of
+                VNil {a} ==> case ys of
+                               VNil {a} ==> VNil {Pair a}
+        pat m
+        => S m ==> case xs of
+                    pat x', xs' : Vect m a
+                    => VCons {a} {m} x' xs' ==> case ys of
+                                                    pat y', ys' : Vect m a
+                                                    => VCons {a} {m} y' ys' ==> VCons {a} {m} (MkPair {a} x' y') (myzip {a} {m} xs' ys')

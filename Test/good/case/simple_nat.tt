@@ -1,0 +1,19 @@
+import Data.Nat
+import Proofs
+
+-- Simple case, matching on Nat
+mux : Nat -> Nat -> Nat -> Nat
+pat n, m, o =>
+  mux n m o
+    = case n of
+        Z ==> m
+        pat x : Nat =>
+          (S x) ==> o
+
+example_bz : (x,y : Nat) -> Equal Nat x (mux Z x y)
+pat x, y =>
+  example_bz x y = Refl {Nat} {x}
+
+example_bs : (x,y : Nat) -> Equal Nat y (mux 1 x y)
+pat x, y =>
+  example_bs x y = Refl {Nat} {y}

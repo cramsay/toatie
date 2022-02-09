@@ -1,0 +1,17 @@
+import Data.Nat
+import Data.Vect
+import Proofs
+
+-- Example of a scrutinee (without an explicit type) who contains a
+-- (dependently typed) function call
+dropTwo : {n : Nat} -> {a : Type} -> Vect (S (S n)) a -> Vect n a
+pat a, n, xs : Vect (S (S n)) a =>
+  dropTwo {_} {_} xs
+    = case (tail {_} {_} xs) of
+        pat x' , xs' : Vect n a =>
+          (VCons {_} {_} x' xs') ==> xs'
+
+example : (a : Type) -> (n : Nat) -> (x,y : a) -> (xs : Vect n a) ->
+          Equal (Vect n a) xs (dropTwo {_} {_} (VCons {_} {_} x (VCons {_} {_} y xs)))
+pat a, n, x, y, xs =>
+  example a n x y xs = Refl {_} {_}

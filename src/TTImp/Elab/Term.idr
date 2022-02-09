@@ -297,7 +297,7 @@ checkTerm env (ICode scty) exp
        put Stg stage
        -- Then so is our Code type
        checkExp env (TCode sctytm) gType exp
-checkTerm env (IEval code) exp
+checkTerm env (IEval code) Nothing
   = do -- Only eval in stage 0
        Z <- get Stg
         | _ => throw (GenericMsg "Eval appears in non-zero stage")
@@ -313,7 +313,25 @@ checkTerm env (IEval code) exp
        case !(nf defs env codetm) of
          NBind _ _ _ => throw (GenericMsg "Maybe trying to eval something with free variables?")
                         -- Then we're good to go by returning the inner term with it's inner type
-         _           => checkExp env (Eval codetm) (gnf env aty) exp
+         _           => checkExp env (Eval codetm) (gnf env aty) Nothing
+checkTerm env (IEval code) (Just exp)
+  = do -- Only eval in stage 0
+       Z <- get Stg
+        | _ => throw (GenericMsg "Eval appears in non-zero stage")
+       -- Only eval closed terms with type TCode A
+       let innerExp = gnf env (TCode $ !(getTerm exp))
+       (codetm, gcodety) <- checkTerm env code (Just innerExp)
+       codetyNF <- getNF gcodety
+       defs <- get Ctxt
+       TCode aty <- quote defs env codetyNF
+             | _ => throw (GenericMsg "Cannot eval non-code type")
+       -- TODO How do we check for closed terms?! For now, I'm just checking
+       -- that the NF doesn't start on a bind, but I think that's not quite
+       -- right
+       case !(nf defs env codetm) of
+         NBind _ _ _ => throw (GenericMsg "Maybe trying to eval something with free variables?")
+                        -- Then we're good to go by returning the inner term with it's inner type
+         _           => checkExp env (Eval codetm) (gnf env aty) (Just exp)
 checkTerm env (IEscape code) Nothing
   = do -- Are we in a non-zero stage?
        S n <- get Stg

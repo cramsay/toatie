@@ -83,7 +83,7 @@ parameters (defs : Defs)
              pure $ NCode tm'
     eval env locs (Eval   tm) stk -- Keep Eval simple since we only want this for closed terms
         = do (NQuote _ tm') <- eval env locs tm stk
-               | _ => throw (GenericMsg "Eval on unquoted term")
+               | tm' => throw (GenericMsg $ "Eval on unquoted term: " ++ show tm')
              evalLocClosure env stk tm'
     eval env locs (Escape tm) stk
         = do -- Version for single eval on escaped term

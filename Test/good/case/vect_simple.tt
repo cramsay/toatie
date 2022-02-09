@@ -1,0 +1,17 @@
+import Data.Nat
+import Data.Vect
+import Proofs
+
+-- Map example with case on Vect, backed up by an implicit length
+mymap : {n : Nat} -> {a : Type} -> {b : Type} ->
+        (f : a -> b) ->
+        Vect n a -> Vect n b
+pat n, a, b, f : (a->b), xs : Vect n a =>
+  mymap {_} {_} {_} f xs
+    = case xs of
+        (VNil {_}) ==> VNil {_}
+        pat m, y, ys : Vect m a =>
+          (VCons {_} {_} y ys) ==> VCons {_} {_} (f y) (mymap {_} {_} {_} f ys)
+
+example : Equal (Vect 4 Nat) ([4,3,6,1]) (mymap {4} {Nat} {Nat} (S) [3,2,5,0])
+example = Refl {_} {_}

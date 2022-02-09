@@ -2,51 +2,6 @@ import Data.Nat
 import Data.Vect
 import ExampleVects
 
--- Simple case, matching on Nat
-mux : Nat -> Nat -> Nat -> Nat
-pat n, m, o : Nat =>
-  mux n m o
-    = case n of
-        Z ==> m
-        pat x : Nat =>
-          (S x) ==> o
-
--- Dependently typed case with an impossible case
-mytail : {a : Type} -> {n : Nat} -> Vect (S n) a -> Vect n a
-pat a : Type, n : Nat, xs : Vect (S n) a =>
-  mytail {a} {n} xs
-    = case xs of
-        pat y : a, ys : Vect n a =>
-          VCons {a} {n} y ys ==> ys
-        VNil {a} impossible
-
--- Dependently typed case with an impossible case and staging
-stagedtail : {a : Type} -> {n : Nat} -> < Vect (S n) a -> Vect n a >
-pat a : Type, n : Nat =>
-  stagedtail {a} {n}
-    = [| \xs : Vect (S n) a =>
-         case xs of
-             pat y : a, ys : Vect n a =>
-               VCons {a} {n} y ys ==> ys
-             --VNil {a} impossible
-      |]
-
-mymap : {n : Nat} -> {a : Type} -> {b : Type} ->
-        (f : a -> b) ->
-        Vect n a -> Vect n b
-pat n : Nat, a : Type, b : Type, f : (a->b), xs : Vect n a =>
-  mymap {n} {a} {b} f xs
-    = case xs of
-        (VNil {a})                                                ==> VNil {b}
-        pat m : Nat, y : a, ys : Vect m a => (VCons {a} {m} y ys) ==> VCons {b} {m} (f y) (mymap {m} {a} {b} f ys)
-
-tailTail : {n : Nat} -> {a : Type} -> Vect (S (S n)) a -> Vect n a
-pat a : Type, n : Nat, xs : Vect (S (S n)) a =>
-  tailTail {n} {a} xs
-    = case (tail {a} {S n} xs) of
-        pat xhead : a, xs' : Vect n a =>
-          (VCons {a} {n} xhead xs') ==> xs'
-
 stagedVecPat : (n : Nat) -> <Vect n Nat> -> <Vect n Nat>
 stagedVecPat Z     [| VNil {Nat} |] = [| VNil {Nat} |]
 pat n : Nat, x : Nat, xs : Vect n Nat =>
