@@ -14,9 +14,8 @@ test : $(good_tests) $(bad_tests)
 	(echo "Test $@ failed" && exit 1)
 
 %.badtest : %.tt
-	@toatie -fTypeCheckOnly $< > /dev/null && \
-	(echo "Test $@ failed" && exit 1)|| \
-	exit 0
+	@! toatie -fTypeCheckOnly $< > /dev/null || \
+	(echo "Test $@ failed" && exit 1)
 
 all : test
 	@echo "Success, all tests passed."

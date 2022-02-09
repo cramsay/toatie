@@ -30,23 +30,7 @@
         "type": "github"
       }
     },
-    "idris-emacs-src": {
-      "flake": false,
-      "locked": {
-        "lastModified": 1613351183,
-        "narHash": "sha256-ngg48SzrR2LCtjle3WR3BOK86USRB0ZXmgXWu9EzQbo=",
-        "owner": "redfish64",
-        "repo": "idris2-mode",
-        "rev": "77390611a934f13e03a45e9f8a4e476dd17a9c5b",
-        "type": "github"
-      },
-      "original": {
-        "owner": "redfish64",
-        "repo": "idris2-mode",
-        "type": "github"
-      }
-    },
-    "idris2-dev": {
+    "idris": {
       "inputs": {
         "flake-utils": "flake-utils_2",
         "idris-emacs-src": "idris-emacs-src",
@@ -65,6 +49,22 @@
         "owner": "idris-lang",
         "ref": "v0.5.1",
         "repo": "Idris2",
+        "type": "github"
+      }
+    },
+    "idris-emacs-src": {
+      "flake": false,
+      "locked": {
+        "lastModified": 1613351183,
+        "narHash": "sha256-ngg48SzrR2LCtjle3WR3BOK86USRB0ZXmgXWu9EzQbo=",
+        "owner": "redfish64",
+        "repo": "idris2-mode",
+        "rev": "77390611a934f13e03a45e9f8a4e476dd17a9c5b",
+        "type": "github"
+      },
+      "original": {
+        "owner": "redfish64",
+        "repo": "idris2-mode",
         "type": "github"
       }
     },
@@ -116,7 +116,7 @@
     "root": {
       "inputs": {
         "flake-utils": "flake-utils",
-        "idris2-dev": "idris2-dev",
+        "idris": "idris",
         "nixpkgs": "nixpkgs_2"
       }
     }

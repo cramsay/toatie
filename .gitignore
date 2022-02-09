@@ -15,5 +15,5 @@
 .vscode/*
 
 papers
-/build
-TinyIdris-v2/build
+build
+result
