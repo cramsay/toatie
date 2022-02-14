@@ -1,0 +1,18 @@
+import Data.Nat
+
+data Bool : Type
+  where False : Bool
+        True : Bool
+
+isEven : Nat -> Bool
+isOdd : Nat -> Bool
+
+{- Missing function definition for isEven. Should fail
+isEven Z = True
+pat n : Nat =>
+  isEven (S n) = isOdd n
+-}
+
+isOdd Z = False
+pat n : Nat =>
+  isOdd (S n) = isEven n

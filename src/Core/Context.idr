@@ -71,6 +71,10 @@ export
 mapDefs : Defs -> (GlobalDef -> GlobalDef) -> Core Defs
 mapDefs d f = pure . fromList $ map (\(k,v) => (k, f v)) (Data.SortedMap.toList d)
 
+export
+traverseDefs_ : Defs -> ((Name, GlobalDef) -> Core ()) -> Core ()
+traverseDefs_ d f = traverse_ f $ Data.SortedMap.toList d
+
 -- A phantom type for finding references to the context
 export
 data Ctxt : Type where

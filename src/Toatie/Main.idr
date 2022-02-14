@@ -64,6 +64,7 @@ runMain fopts fname decls
          m <- newRef Mods []
          let dirs = defaultModulePaths fname
          traverse_ (processDecl dirs) decls
+         checkUndefineds
 
          when (not $ FTypeCheckOnly `elem` fopts)
                repl

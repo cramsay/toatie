@@ -37,6 +37,18 @@ getBaseDir fname = foldl dirconcat "" (init $ split (=='/') fname)
         dirconcat a e = a ++ e ++ "/"
 
 export
+checkUndefineds : {auto c : Ref Ctxt Defs} ->
+                 Core ()
+checkUndefineds
+  = do defs <- get Ctxt
+       traverseDefs_ defs (\(n,gdef) => case gdef of
+                                      (MkGlobalDef type (PMDef args treeCT))     => pure ()
+                                      (MkGlobalDef type (DCon tag arity))        => pure ()
+                                      (MkGlobalDef type (TCon x tag arity cons)) => pure ()
+                                      (MkGlobalDef type _) => throw $ GenericMsg $ "Entry in context doesn't have a definition: " ++ show n
+                          )
+
+export
 defaultModulePaths : FileName -> List ModName
 defaultModulePaths fname
  = nub [ ""               -- Current dir
@@ -80,6 +92,7 @@ mutual
          Right decls <- coreLift $ parseFile fname' (do p <- prog fname'; eoi; pure p)
            | Left err => coreLift $ printLn err
          traverse_ (processDecl dirs) decls
+         checkUndefineds
 
          coreLift $ putStrLn $ "Returning to importer"
 
