@@ -161,10 +161,6 @@ getRHSEnv env (Bind n (PVar stage i ty) sc) (Bind n' (PVTy _ _) scty) with (name
       = getRHSEnv (PVar stage i ty :: env) sc scty
 getRHSEnv env lhs ty = pure (vars ** (env, lhs, ty))
 
--- TODO I don't bother with the find/set/combineLinear functions...
---      I just find names used in an Explicit position at least once
---      and call it a day. Bad move?
-
 -- List all of the PVar names which are used explicit positions (once or more) in the LHS
 -- Based on idris2's findLinear function
 findExp : {vars : _} ->

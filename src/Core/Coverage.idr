@@ -288,6 +288,37 @@ replaceDefaults defs nfty cs
         = c :: dropRep (filter (not . tagIs t) rest)
     dropRep (c :: rest) = c :: dropRep rest
 
+getNameInfos : Defs -> Name -> Core (List AppInfo)
+getNameInfos defs n = do Just ty <- lookupDefType n defs
+                           | Nothing => throw $ InternalError $ "Couldn't find type for name " ++ show n ++ " in context while building missing clause terms."
+                         pure $ getInfos ty
+  where getInfos : Term vars -> List AppInfo
+        getInfos (Bind x b sc)
+          = let info = case binderInfo b of
+                              Just Explicit => AExplicit
+                              Just Implicit => AImplicit
+                              Nothing       => AExplicit
+            in info :: getInfos sc
+        getInfos tm = []
+
+applyInferInfo : Defs -> Term vars -> List (Term vars) -> Core (Term vars)
+applyInferInfo defs fn [] = pure fn
+applyInferInfo defs (Ref Func n) args
+  = do infos <- getNameInfos defs n
+       pure $ apply (Ref Func n) (zip infos args)
+applyInferInfo defs (Ref (DataCon tag arity) n) args
+  = do infos <- getNameInfos defs n
+       pure $ apply (Ref (DataCon tag arity) n) (zip infos args)
+applyInferInfo defs (Bind x y scope) (a :: args)
+  = let info = case binderInfo y of -- Infer from binder info
+                 Just Explicit => AExplicit
+                 Just Implicit => AImplicit
+                 Nothing       => AExplicit
+    in applyInferInfo defs (App info (Bind x y scope) a) args
+applyInferInfo defs fn (a :: args) -- Default to implicit
+  = applyInferInfo defs (App AImplicit fn a) args
+
+
 -- Traverse a case tree and refine the arguments while matching, so that
 -- when we reach a leaf we know what patterns were used to get there,
 -- and return those patterns.
@@ -319,8 +350,8 @@ buildArgs defs known not ps cs@(Case {name = var} idx el ty altsIn)
                   CaseAlt vars -> Core (List (List (Term [])))
     buildArgAlt not' (ConCase n t args sc)
         = do let con = Ref (DataCon t (length args)) n
-             let ps' = map (substName var
-                             (apply con (map (\a => (AImplicit, Ref Bound a)) args))) ps
+             replaceTm <- applyInferInfo defs con (map (Ref Bound) args)
+             let ps' = map (substName var replaceTm) ps
              buildArgs defs (weakenNs args ((MkVar el, t) :: known))
                                (weakenNs args not') ps' sc
     buildArgAlt not' (QuoteCase t a sc)
@@ -358,8 +389,8 @@ getMissing n ctree
   = do defs <- get Ctxt
        let psIn = map (Ref Bound) vars
        patss <- buildArgs defs [] [] psIn ctree
-       let patss = map (map (\a=>(AImplicit, a))) patss --TODO Should I be propagating the appinfo all the way properly?
-       pure (map (apply (Ref Func n)) patss)
+       --let patss = map (map (\a=>(AImplicit, a))) patss --TODO Should I be propagating the appinfo all the way properly?
+       traverse (applyInferInfo defs (Ref Func n)) patss
 
 
 -- Does the second term match against the first?

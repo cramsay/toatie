@@ -37,7 +37,7 @@
         devShell = pkgs.mkShell {
           shellHook = ''
             export PATH=$PWD/build/exec:$PATH
-            alias devEmacs="${idris.packages.${system}.idris-emacs}/bin/emacs --eval \"(require \'idris2-mode)\" &"
+            alias devEmacs="${idris.packages.${system}.idris-emacs}/bin/emacs --eval \"(require 'idris2-mode)\" &"
             alias devTest="(cd $PWD; make check)"
             alias devBuild="(cd $PWD; make bin)"
             alias devRepl="$PWD/build/exec/toatie"

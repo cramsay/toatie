@@ -213,11 +213,11 @@ checkTerm env (IApp i f a) exp
                        -- FIXME do check implicitness unless the mode says we're checking a term we've generated...
                        --       this way we don't have to tag our applications correctly. Bit of a hack
 
-                       -- -- Check implicitness of application and binder match
-                       -- True <- checkImplicitness bInfo i
-                       --   | _ => throw (GenericMsg $ "Can't apply " ++ show i ++
-                       --                 " argument (" ++ show atm ++ ") to " ++
-                       --                 show bInfo ++ " binder (" ++ show x ++ ")" )
+                       -- Check implicitness of application and binder match
+                       True <- checkImplicitness bInfo i
+                         | _ => throw (GenericMsg $ "Can't apply " ++ show i ++
+                                       " argument (" ++ show atm ++ ") to " ++
+                                       show bInfo ++ " binder (" ++ show x ++ ")" )
 
                        -- Calculate the type of the application by continuing
                        -- to evaluate the scope with 'atm'
