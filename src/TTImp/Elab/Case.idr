@@ -172,15 +172,7 @@ caseBlock {vars} mode env scr scrtm scrty alts expected
 
        let alts' = map (updateClause casen casefnty splitOn env) alts
 
-       coreLift $ putStrLn $ "CASE: calling env = " ++ show env
-       coreLift $ putStrLn $ "CASE: caseretty = " ++ show caseretty
-       coreLift $ putStrLn $ "CASE: casefnty = " ++ show casefnty
-       coreLift $ putStrLn $ "CASE: appTm = " ++ show appTm
-       coreLift $ putStrLn $ "CASE: alts = " ++ show alts
-       coreLift $ putStrLn $ "CASE: alts' = " ++ show alts'
-
        processDef casen alts'
-       coreLift $ putStrLn $ "Processed case!"
 
        pure (appTm, gnf env caseretty)
   where
@@ -295,12 +287,7 @@ caseBlock {vars} mode env scr scrtm scrty alts expected
           argsNoPatBind = impsToImplicit fnty (removePatBinds args')
           lhs' = wrapPatBinds (reverse pats ++ findPatBinds [lhs]) -- findPatBinds (map snd args'))
                               (apply (IVar casen) argsNoPatBind) in
-      trace (unlines ["args: " ++ show args,
-                      "args': " ++ show args',
-                      "splitOn: " ++ show (isJust splitOn),
-                      "lhs: " ++ show lhs
-            ])
-        $ PatClause lhs' rhs
+      PatClause lhs' rhs
 
 
 export

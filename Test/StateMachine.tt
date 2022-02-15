@@ -13,6 +13,8 @@ encryption), and a free-for-all write and clear.
 -}
 
 import Data.Nat
+import Data.List
+import Data.Vect
 
 data Auth : Type where
   NoAuth : Auth
@@ -22,11 +24,26 @@ data Auth : Type where
 data KeyStore : Type where
   Key : Nat -> KeyStore
 
--- Implementing state monad
--- (https://stackoverflow.com/questions/47660589/how-can-i-have-a-constrained-finite-state-machine-in-haskell-idris)
+{-
+Implementing state monad
+https://stackoverflow.com/questions/47660589/how-can-i-have-a-constrained-finite-state-machine-in-haskell-idris
+
+Computations of `a -> State s b` are essentially mealy machines.
+Raises an interesting question about being able to encode _functions_ as bits though...
+How would we ensure that `run` is enough to flatten this out to a "normal" function?
+-}
+data Unit : Type where
+  MkUnit : Unit
 
 data Tup : Type -> Type -> Type where
   MkTup : {a,b : Type} -> a -> b -> Tup a b
+
+data Elem : (a : Type) -> a -> List a -> Type where
+     Here  : {a : Type} -> {x : a} -> {xs : List a} ->
+             Elem a x (Cons a x xs)
+     There : {a : Type} -> {x : a} -> {xs : List a} -> {y : a} -> Elem a x xs ->
+             Elem a x (Cons a y xs)
+
 
 data State : Type -> Type -> Type where
   MkState : {s, a : Type} -> (s -> Tup s a) -> State s a
@@ -40,5 +57,144 @@ pat s, a, inp =>
   pure {s} {a} inp = MkState {_} {_} (\state : s => MkTup {_} {_} state inp)
 
 bind : {s, a, b : Type} -> State s a -> (a -> State s b) -> State s b
-pat s, a, b, fma : (s -> Tup s a), f : (a -> State s b) =>
-  bind {s} {a} {b} (MkState {s} {a} fma) f = MkState {s} {b} (_)
+pat s, a, b, m, f =>
+  bind {s} {a} {b} m f
+    = MkState {_} {_}
+      \initS =>
+        case run {_} {_} m initS of
+        pat midS midOut => MkTup {_} {_} midS midOut ==>
+          run {_} {_} (f midOut) midS 
+
+get : {s : Type} -> State s s
+pat s =>
+  get {s} = MkState {_} {_}
+            \x => MkTup {_} {_} x x
+
+put : {s : Type} -> s -> State s Unit
+pat s, x =>
+  put {s} x = MkState {_} {_}
+              \a => MkTup {_} {_} x MkUnit
+
+-- Silly example using state monads to sum all Nats in a vector
+-- > stateSum _ [2,9,1]
+
+stateSum : (n : Nat) -> Vect n Nat -> State Nat Unit
+stateSum _ (VNil {_}) = bind {_} {_} {_} (get {_}) (put {_})
+pat n, x, xs =>
+  stateSum (S n) (VCons {_} {_} x xs)
+    = bind {_} {_} {_} (stateSum n xs)      \a =>
+      bind {_} {_} {_} (get {_})            \a =>
+                       (put {_} (plus a x))
+
+{-
+Playing with indexed monads now
+-}
+
+data IxState : Type -> Type -> Type -> Type where
+  MkIxState : {i,j,a : Type} -> (i -> Tup a j) -> IxState i j a
+
+ixRun : {i,j,a : Type} -> IxState i j a -> i -> Tup a j
+pat i, a, j, f : (i -> Tup a j), x =>
+  ixRun {_} {_} {_} (MkIxState {_} {_} {_} f) x = f x
+
+ixReturn : {i, a : Type} -> a -> IxState i i a
+pat i, a, x =>
+  ixReturn {i} {a} x
+    = MkIxState {i} {i} {a}
+      \initS => MkTup {_} {_} x initS
+
+ixBind : {i,j,k,a,b : Type} -> IxState i j a -> (a -> IxState j k b) -> IxState i k b
+pat i, j, k, a, b, m, f =>
+  ixBind {i} {j} {k} {a} {b} m f
+    = MkIxState {i} {_} {_}
+      \initS =>
+        case ixRun {_} {_} {_} m initS of
+          pat midA, midJ => MkTup {_} {_} midA midJ ==>
+            ixRun {_} {_} {_} (f midA) midJ
+
+ixGet : {i : Type} -> IxState i i i
+pat i =>
+  ixGet {i} = MkIxState {_} {_} {_} \si =>
+              MkTup {_} {_} si si
+
+ixPut : {i,j : Type} -> j -> IxState i j Unit
+pat i, j, so =>
+  ixPut {i} {j} so = MkIxState {_} {_} {_} \si =>
+                     MkTup {_} {_} MkUnit so
+
+-- Salad example
+
+data Ingredient : Type where
+  Lettuce : Ingredient
+  Tomato   : Ingredient
+  Cucumber : Ingredient
+
+data SaladState : Type where
+  Salad : (xs : List Ingredient) -> SaladState
+  Ready :                           SaladState
+
+data Bowl : SaladState -> Type where
+  MkBowl : (ss : SaladState) -> Bowl ss
+  
+emptyBowl : {i : Type} -> IxState i (Bowl (Salad `[])) Unit
+pat i =>
+  emptyBowl {i} = ixPut {_} {_} (MkBowl _)
+
+addLettuce : (xs : List Ingredient) -> IxState (Bowl (Salad xs)) (Bowl (Salad (Cons Ingredient Lettuce xs))) Unit
+pat xs =>
+  addLettuce xs = ixPut {_} {_} (MkBowl (Salad (Cons Ingredient Lettuce xs)))
+
+addCucumber : (xs : List Ingredient) -> IxState (Bowl (Salad xs)) (Bowl (Salad (Cons Ingredient Cucumber xs))) Unit
+pat xs =>
+  addCucumber xs = ixPut {_} {_} (MkBowl (Salad (Cons Ingredient Cucumber xs)))
+
+addTomato : (xs : List Ingredient) -> IxState (Bowl (Salad xs)) (Bowl (Salad (Cons Ingredient Tomato xs))) Unit
+pat xs =>
+  addTomato xs = ixPut {_} {_} (MkBowl (Salad (Cons Ingredient Tomato xs)))
+
+mix : (xs : List Ingredient) ->
+      Elem Ingredient Lettuce  xs ->
+      Elem Ingredient Tomato   xs ->
+      Elem Ingredient Cucumber xs ->
+      IxState (Bowl (Salad xs)) (Bowl Ready) Unit
+pat xs, el et ec =>
+  mix xs el et ec = ixPut {_} {_} (MkBowl Ready)
+
+-- Example of a good recipe.
+-- Go from any start state to a ready bowl of salad.
+-- Perfect every time.
+-- TODO can we improve inference on Elem? Does Idris handle this OK?
+
+goodRecipe : {i : Type} -> IxState i (Bowl Ready) Unit
+pat i =>
+  goodRecipe {i} = ixBind {_} {_} {_} {_} {_} (emptyBowl   {_}) \ab =>
+                   ixBind {_} {_} {_} {_} {_} (addLettuce   _ ) \al =>
+                   ixBind {_} {_} {_} {_} {_} (addTomato    _ ) \at =>
+                   ixBind {_} {_} {_} {_} {_} (addCucumber  _ ) \ac =>
+                   mix `[Cucumber, Tomato, Lettuce]
+                       (There {_} {_} {_} {_} (There {_} {_} {_} {_} (Here {_} {_} {_})))
+                       (                       There {_} {_} {_} {_} (Here {_} {_} {_}))
+                       (                                              Here {_} {_} {_})
+
+altRecipe : {i : Type} -> IxState i (Bowl Ready) Unit
+pat i =>
+  altRecipe {i} =  ixBind {_} {_} {_} {_} {_} (emptyBowl   {_}) \ab =>
+                   ixBind {_} {_} {_} {_} {_} (addTomato    _ ) \at =>
+                   ixBind {_} {_} {_} {_} {_} (addLettuce   _ ) \al =>
+                   ixBind {_} {_} {_} {_} {_} (addCucumber  _ ) \ac =>
+                   mix `[Cucumber, Lettuce, Tomato]
+                       (                       There {_} {_} {_} {_} (Here {_} {_} {_}))
+                       (There {_} {_} {_} {_} (There {_} {_} {_} {_} (Here {_} {_} {_})))
+                       (                                              Here {_} {_} {_})
+
+{- Example of a bad recipe that doesn't typecheck!
+
+badRecipe : {i : Type} -> IxState i (Bowl Ready) Unit
+pat i =>
+  badRecipe {i} =  ixBind {_} {_} {_} {_} {_} (emptyBowl   {_}) \ab =>
+                   ixBind {_} {_} {_} {_} {_} (addTomato    _ ) \at =>
+                   mix `[Cucumber, Tomato, Lettuce]
+                       (There {_} {_} {_} {_} (There {_} {_} {_} {_} (Here {_} {_} {_})))
+                       (                       There {_} {_} {_} {_} (Here {_} {_} {_}))
+                       (                                              Here {_} {_} {_})
+-}
