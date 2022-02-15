@@ -351,7 +351,6 @@ processClause (PatClause lhs_in rhs)
          defs <- get Ctxt
          rhsnf <- normalise defs env rhstm
 
-         -- TODO want to 1) show term with holes, 2) show environment and types, 3) error on MN holes
          solveConstraints InLHS
          ust <- get UST
          let [] = SortedSet.toList $ holes ust
@@ -364,10 +363,14 @@ processClause (PatClause lhs_in rhs)
 
          pure (Right $ MkClause env lhsenv rhsnf)
   where
+  splitPis : {vars : _} -> Name -> Term vars -> List String
+  splitPis n (Bind x@(UN _) (Pi s i ty) sc) = (show x ++ ":_" ++ show s ++ " " ++ show ty) :: splitPis n sc
+  splitPis n tm = "--------------------------------" :: (show n ++ " : " ++ show tm) :: []
+
   dumpHole : Defs -> Name -> Core String
   dumpHole defs n = do Just htype <- lookupDefType n defs
                          | Nothing => throw $ GenericMsg "Unresolved hole has no type"
-                       pure $ (show n) ++ " : " ++ show htype
+                       pure $ unlines $ splitPis n htype
 
 nameListEq : (xs : List Name) -> (ys : List Name) -> Maybe (xs = ys)
 nameListEq [] [] = Just Refl

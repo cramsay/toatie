@@ -4,7 +4,7 @@
 
 We poke, bend, and otherwise abuse Tiny Idris --- introduced by [Edwin
 Brady](https://github.com/edwinb) at [SPLV20](https://github.com/edwinb/SPLV20).
-Our new concerns for describing hardware surround erasure/irrelevance of
+Our main additions to support hardware description include erasure/irrelevance of
 non synthesisable terms, staging for circuit generators, deriving bit
 representations, and the synthesis itself.
 

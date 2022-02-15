@@ -20,8 +20,8 @@
           buildPhase = ''
             make bin
           '';
-	        checkPhase = ''
-		        export PATH=$PWD/build/exec:$PATH
+	  checkPhase = ''
+	    export PATH=$PWD/build/exec:$PATH
             make check
           '';
           installPhase = ''

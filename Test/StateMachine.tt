@@ -1,0 +1,44 @@
+{-
+
+I want to find a good example of why it might be a good to support recursive (or
+at least fancier types) in hardware. Might be interesting to think about how
+state machines could be encoded once we have memory. Nice presentation to work
+though @
+https://www.lambdadays.org/static/upload/media/1519637389130819oskarwickstromfinitestatemachines_.pdf
+
+Maybe a key store would be a compelling example? Can have authenticated (by
+interface flag like trust zone?) READ (maybe FW will use it for actual
+encryption), and a free-for-all write and clear.
+
+-}
+
+import Data.Nat
+
+data Auth : Type where
+  NoAuth : Auth
+  YesAuth : Auth
+
+-- These should be private...
+data KeyStore : Type where
+  Key : Nat -> KeyStore
+
+-- Implementing state monad
+-- (https://stackoverflow.com/questions/47660589/how-can-i-have-a-constrained-finite-state-machine-in-haskell-idris)
+
+data Tup : Type -> Type -> Type where
+  MkTup : {a,b : Type} -> a -> b -> Tup a b
+
+data State : Type -> Type -> Type where
+  MkState : {s, a : Type} -> (s -> Tup s a) -> State s a
+
+run : {s, a : Type} -> State s a -> s -> Tup s a
+pat s, a, f : (s -> Tup s a), initS =>
+  run {_} {_} (MkState {_} {_} f) initS = f initS
+
+pure : {s, a : Type} -> a -> State s a
+pat s, a, inp =>
+  pure {s} {a} inp = MkState {_} {_} (\state : s => MkTup {_} {_} state inp)
+
+bind : {s, a, b : Type} -> State s a -> (a -> State s b) -> State s b
+pat s, a, b, fma : (s -> Tup s a), f : (a -> State s b) =>
+  bind {s} {a} {b} (MkState {s} {a} fma) f = MkState {s} {b} (_)
