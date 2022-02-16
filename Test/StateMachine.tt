@@ -16,14 +16,6 @@ import Data.Nat
 import Data.List
 import Data.Vect
 
-data Auth : Type where
-  NoAuth : Auth
-  YesAuth : Auth
-
--- These should be private...
-data KeyStore : Type where
-  Key : Nat -> KeyStore
-
 {-
 Implementing state monad
 https://stackoverflow.com/questions/47660589/how-can-i-have-a-constrained-finite-state-machine-in-haskell-idris
@@ -32,11 +24,12 @@ Computations of `a -> State s b` are essentially mealy machines.
 Raises an interesting question about being able to encode _functions_ as bits though...
 How would we ensure that `run` is enough to flatten this out to a "normal" function?
 -}
+
 data Unit : Type where
   MkUnit : Unit
 
-data Tup : Type -> Type -> Type where
-  MkTup : {a,b : Type} -> a -> b -> Tup a b
+data Pair : Type -> Type -> Type where
+  MkPair : {a,b : Type} -> a -> b -> Pair a b
 
 data Elem : (a : Type) -> a -> List a -> Type where
      Here  : {a : Type} -> {x : a} -> {xs : List a} ->
@@ -46,15 +39,15 @@ data Elem : (a : Type) -> a -> List a -> Type where
 
 
 data State : Type -> Type -> Type where
-  MkState : {s, a : Type} -> (s -> Tup s a) -> State s a
+  MkState : {s, a : Type} -> (s -> Pair s a) -> State s a
 
-run : {s, a : Type} -> State s a -> s -> Tup s a
-pat s, a, f : (s -> Tup s a), initS =>
+run : {s, a : Type} -> State s a -> s -> Pair s a
+pat s, a, f : (s -> Pair s a), initS =>
   run {_} {_} (MkState {_} {_} f) initS = f initS
 
 pure : {s, a : Type} -> a -> State s a
 pat s, a, inp =>
-  pure {s} {a} inp = MkState {_} {_} (\state : s => MkTup {_} {_} state inp)
+  pure {s} {a} inp = MkState {_} {_} (\state : s => MkPair {_} {_} state inp)
 
 bind : {s, a, b : Type} -> State s a -> (a -> State s b) -> State s b
 pat s, a, b, m, f =>
@@ -62,18 +55,18 @@ pat s, a, b, m, f =>
     = MkState {_} {_}
       \initS =>
         case run {_} {_} m initS of
-        pat midS midOut => MkTup {_} {_} midS midOut ==>
+        pat midS midOut => MkPair {_} {_} midS midOut ==>
           run {_} {_} (f midOut) midS 
 
 get : {s : Type} -> State s s
 pat s =>
   get {s} = MkState {_} {_}
-            \x => MkTup {_} {_} x x
+            \x => MkPair {_} {_} x x
 
 put : {s : Type} -> s -> State s Unit
 pat s, x =>
   put {s} x = MkState {_} {_}
-              \a => MkTup {_} {_} x MkUnit
+              \a => MkPair {_} {_} x MkUnit
 
 -- Silly example using state monads to sum all Nats in a vector
 -- > stateSum _ [2,9,1]
@@ -91,17 +84,17 @@ Playing with indexed monads now
 -}
 
 data IxState : Type -> Type -> Type -> Type where
-  MkIxState : {i,j,a : Type} -> (i -> Tup a j) -> IxState i j a
+  MkIxState : {i,j,a : Type} -> (i -> Pair a j) -> IxState i j a
 
-ixRun : {i,j,a : Type} -> IxState i j a -> i -> Tup a j
-pat i, a, j, f : (i -> Tup a j), x =>
+ixRun : {i,j,a : Type} -> IxState i j a -> i -> Pair a j
+pat i, a, j, f : (i -> Pair a j), x =>
   ixRun {_} {_} {_} (MkIxState {_} {_} {_} f) x = f x
 
 ixReturn : {i, a : Type} -> a -> IxState i i a
 pat i, a, x =>
   ixReturn {i} {a} x
     = MkIxState {i} {i} {a}
-      \initS => MkTup {_} {_} x initS
+      \initS => MkPair {_} {_} x initS
 
 ixBind : {i,j,k,a,b : Type} -> IxState i j a -> (a -> IxState j k b) -> IxState i k b
 pat i, j, k, a, b, m, f =>
@@ -109,18 +102,18 @@ pat i, j, k, a, b, m, f =>
     = MkIxState {i} {_} {_}
       \initS =>
         case ixRun {_} {_} {_} m initS of
-          pat midA, midJ => MkTup {_} {_} midA midJ ==>
+          pat midA, midJ => MkPair {_} {_} midA midJ ==>
             ixRun {_} {_} {_} (f midA) midJ
 
 ixGet : {i : Type} -> IxState i i i
 pat i =>
   ixGet {i} = MkIxState {_} {_} {_} \si =>
-              MkTup {_} {_} si si
+              MkPair {_} {_} si si
 
 ixPut : {i,j : Type} -> j -> IxState i j Unit
 pat i, j, so =>
   ixPut {i} {j} so = MkIxState {_} {_} {_} \si =>
-                     MkTup {_} {_} MkUnit so
+                     MkPair {_} {_} MkUnit so
 
 -- Salad example
 
@@ -176,13 +169,15 @@ pat i =>
                        (                       There {_} {_} {_} {_} (Here {_} {_} {_}))
                        (                                              Here {_} {_} {_})
 
+-- Another good recipe. Bit tomato heavy and the steps are in a different order.
 altRecipe : {i : Type} -> IxState i (Bowl Ready) Unit
 pat i =>
   altRecipe {i} =  ixBind {_} {_} {_} {_} {_} (emptyBowl   {_}) \ab =>
                    ixBind {_} {_} {_} {_} {_} (addTomato    _ ) \at =>
+                   ixBind {_} {_} {_} {_} {_} (addTomato    _ ) \at =>
                    ixBind {_} {_} {_} {_} {_} (addLettuce   _ ) \al =>
                    ixBind {_} {_} {_} {_} {_} (addCucumber  _ ) \ac =>
-                   mix `[Cucumber, Lettuce, Tomato]
+                   mix `[Cucumber, Lettuce, Tomato, Tomato]
                        (                       There {_} {_} {_} {_} (Here {_} {_} {_}))
                        (There {_} {_} {_} {_} (There {_} {_} {_} {_} (Here {_} {_} {_})))
                        (                                              Here {_} {_} {_})
@@ -197,4 +192,17 @@ pat i =>
                        (There {_} {_} {_} {_} (There {_} {_} {_} {_} (Here {_} {_} {_})))
                        (                       There {_} {_} {_} {_} (Here {_} {_} {_}))
                        (                                              Here {_} {_} {_})
+-}
+
+{-
+
+This example captures everything we need for state machines where each
+transition can never fail. If, for example, the human could _try_ to put lettuce
+in the bowl and fail (due to lettuce underflow?), we couldn't enforce that the
+programmer deals with this check properly.
+
+To address that issue we've got an implementation of the Data Store example from
+the intro of Edwin's "State Machines All The Way Down"
+(https://www.idris-lang.org/drafts/sms.pdf)
+
 -}

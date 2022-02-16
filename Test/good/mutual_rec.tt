@@ -1,8 +1,5 @@
+import Data.Bool
 import Data.Nat
-
-data Bool : Type
-  where False : Bool
-        True : Bool
 
 isEven : Nat -> Bool
 isOdd : Nat -> Bool

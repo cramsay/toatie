@@ -33,8 +33,12 @@ checkExp env term got (Just exp)
      do defs <- get Ctxt
 
         -- First convert our terms to their extractions
-        let gotExt = extraction !(getTerm got)
-        let expExt = extraction !(getTerm exp)
+        -- FIXME since we don't do extraction globally, this can fail! Wrong #args to functions etc...
+        --       For now, we'll take the hit on typechecking without extracting first
+        let gotExt = --extraction
+                     !(getTerm got)
+        let expExt = --extraction
+                     !(getTerm exp)
 
         ures <- unify InTerm env !(nf defs env gotExt) !(nf defs env expExt)
 

@@ -1,3 +1,5 @@
+import Data.Bool
+
 data Nat : Type where
      Z : Nat
      S : Nat -> Nat
@@ -23,3 +25,10 @@ pat x : Nat =>
   pow x Z = 1
 pat i, x : Nat =>
   pow x (S i) = mul x (pow x i)
+
+eqNat : (x,y : Nat) -> Bool
+eqNat Z Z = True
+pat x, y =>
+  eqNat (S x) (S y) = eqNat x y
+pat x, y =>
+  eqNat x y = False
