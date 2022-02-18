@@ -1,0 +1,9 @@
+import Data.Nat
+import Data.Vect
+
+-- OK: We _can_ infer information about the implicit here since matching on
+--     the vector constructor tells us unambiguously that `n` is Z or S.
+f : {n : Nat} -> Vect n Nat -> Vect n Nat
+f {Z} (VNil {_}) = VNil {_}
+pat n, x, xs =>
+  f {S n} (VCons {_} {_} x xs) = VCons {_} {_} x xs

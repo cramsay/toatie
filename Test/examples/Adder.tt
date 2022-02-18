@@ -1,6 +1,6 @@
--- Example with a full adder
--- Building up to demonstrating resource sharing with let bindings
--- (i.e. the `a xor b` computation should be shared between both outputs)
+-- Simple example of a single bit full adder
+--
+-- No fancy verification... See our Unsigned adder example for that.
 
 object Bit : Type where
      O : Bit
@@ -28,7 +28,9 @@ data Pair : Type -> Type where
      MkP : {a : Type} -> a -> a -> Pair a
 
 fa : Bit -> Bit -> Bit -> Pair Bit
-pat a : Bit, b : Bit, cin : Bit =>
-    fa a b cin = let axorb = xor a b
-                 in MkP {Bit} (xor axorb cin)
-                              (or (and axorb cin) (and a b))
+pat a, b, cin =>
+  fa a b cin
+    = let axorb = xor a b
+          sum   = xor axorb cin
+          cout  = or (and axorb cin) (and a b)
+      in MkP {_} cout sum

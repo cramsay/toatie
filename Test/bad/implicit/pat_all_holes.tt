@@ -1,0 +1,8 @@
+import Data.Nat
+
+data SNat : Nat -> Type where
+  Singleton : {n : Nat} -> SNat n
+
+-- Error: Shouldn't infer `n`
+f : {n : Nat} -> SNat n -> SNat n
+f {_} (Singleton {_}) = Singleton {_}

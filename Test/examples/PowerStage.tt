@@ -7,19 +7,16 @@
 import Data.Nat
 
 power : Nat -> < Nat > -> < Nat >
-pat m : < Nat > =>
+pat m =>
   power Z m = [| S Z |]
-pat n : Nat, m : < Nat > =>
+pat n m =>
   power (S n) m = [| mul (~m) (~(power n m)) |]
 
 power' : Nat -> < Nat -> Nat >
-power' Z = [| \ x:Nat => S Z |]
-pat n : Nat =>
+power' Z = [| \x => S Z |]
+pat n =>
   power' (S n) = [| \x => mul x (~(power' n) x) |]
-
--- Quirk in type checking where we error on a lambda if the
--- arg is unused and we need to infer it's type
 
 -- Examples at REPL:
 -- > power' 6
--- > \b : <Nat> => power 3 b
+-- > \b => power 3 b

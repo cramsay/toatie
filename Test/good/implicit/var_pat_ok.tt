@@ -1,0 +1,9 @@
+import Data.Nat
+
+data SNat : Nat -> Type where
+  Singleton : {n : Nat} -> SNat n
+
+-- OK: Doesn't need to case split on implicit since it's a var pattern
+f : {n : Nat} -> SNat n -> SNat n
+pat k : Nat =>
+  f {k} (Singleton {k}) = Singleton {k}

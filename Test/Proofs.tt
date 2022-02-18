@@ -21,17 +21,9 @@ eqInd : (A : Type) ->
         {P : (A -> Type)} ->
         (val : P x) ->
         P y
-pat A : Type, x : A, P : (A -> Type), val : P x =>
-  eqInd A {x} {x} (Refl {A} {x}) {P} val = val
+pat A, x, P, val =>
+  eqInd A {x} {_} (Refl {A} {x}) {P} val = val
 
--- This is maybe a bit problematic as a non-primitive rule...
--- We pattern match on the implicit Equal argument...
--- This is "OK" because there is only one constructor (Refl)
--- i.e. it is still an inaccesible pattern.
--- I don't think we actually have a special case for this in the language though
---
--- Would this be addressed by the same totality checking required for the eqInd
--- rule?
 eqInd2 : {A : Type} ->
          {x : A} ->
          {y : A} ->
@@ -39,32 +31,32 @@ eqInd2 : {A : Type} ->
          {P : (A -> Type)} ->
          (val : P x) ->
          P y
-pat A : Type, x : A, P : (A -> Type), val : P x =>
-  eqInd2 {A} {x} {x} {Refl {A} {x}} {P} val = val
+pat A x P val =>
+  eqInd2 {A} {x} {_} {Refl {A} {x}} {P} val = val
 
 eqSym : {A : Type} ->
         {x : A} ->
         {y : A} ->
         (p : Equal A x y) ->
         Equal A y x
-pat A : Type, x : A =>
-  eqSym {A} {x} {x} (Refl {A} {x}) = Refl {_} {_}
+pat A x =>
+  eqSym {A} {x} {_} (Refl {A} {x}) = Refl {_} {_}
 
 eqTrans : {A : Type} ->
           {x,y,z : A} ->
           (l : Equal A x y) ->
           (r : Equal A y z) ->
           Equal A x z
-pat A : Type, y : A =>
-  eqTrans {A} {y} {y} {y} (Refl {A} {y}) (Refl {A} {y}) = Refl {_} {_}
+pat A y =>
+  eqTrans {A} {y} {_} {_} (Refl {A} {y}) (Refl {A} {y}) = Refl {_} {_}
 
 eqCong : {A,B : Type} ->
          {f : A -> B} ->
          {x, y : A} ->
          (p : Equal A x y) ->
          Equal B (f x) (f y)
-pat A, B : Type, f : (A->B), x : A =>
-  eqCong {A} {B} {f} {x} {x} (Refl {A} {x}) = Refl {B} {f x}
+pat A, B, f, x =>
+  eqCong {A} {B} {f} {x} {_} (Refl {A} {x}) = Refl {B} {f x}
          
 
 -- Let's try to prove some of the Nat properties from Idris2's base Nat library
@@ -81,56 +73,55 @@ pat left : Nat =>
 natSuccInjective : {left, right : Nat} ->
                    Equal Nat (S left) (S right) ->
                    Equal Nat left right
-pat left : Nat =>
-  natSuccInjective {left} {left} (Refl {Nat} {S left}) = Refl {Nat} {left}
+pat left =>
+  natSuccInjective {left} {_} (Refl {Nat} {S left}) = Refl {_} {_}
 
 plusZeroLeftNeutral : (right : Nat) -> Equal Nat (plus 0 right) right
-pat right : Nat =>
-  plusZeroLeftNeutral right = Refl {Nat} {right}
+pat right =>
+  plusZeroLeftNeutral right = Refl {_} {_}
 
 plusZeroRightNeutral : (left : Nat) -> Equal Nat (plus left 0) left
-plusZeroRightNeutral Z = Refl {Nat} {Z}
-pat left : Nat =>
+plusZeroRightNeutral Z = Refl {_} {_}
+pat left =>
   plusZeroRightNeutral (S left)
     = let h = plusZeroRightNeutral left
-      in eqCong {Nat} {Nat} {S} {plus left 0} {left} h
+      in eqCong {_} {_} {S} {_} {_} h
 
 plusSuccRightSucc : (left, right : Nat) -> Equal Nat (S (plus left right)) (plus left (S right))
-pat right : Nat =>
+pat right =>
   plusSuccRightSucc Z right = Refl {Nat} {S right}
-pat left, right : Nat =>
+pat left, right =>
   plusSuccRightSucc (S left) right
     = let h = plusSuccRightSucc left right
-      in eqCong {Nat} {Nat} {S} {S (plus left right)} {plus left (S right)} h
+      in eqCong {_} {_} {S} {_} {_} h
 
 plusAssociative : (left, centre, right : Nat) ->
                   Equal Nat (plus left (plus centre right))
                             (plus (plus left centre) right)
-pat centre, right : Nat =>
+pat centre, right =>
   plusAssociative Z centre right = Refl {_} {_}
-pat left, centre, right : Nat =>
+pat left, centre, right =>
   plusAssociative (S left) centre right =
     let h = plusAssociative left centre right
     in eqCong {_} {_} {S} {_} {_} h
 
 plusCommutative : (left, right : Nat) -> Equal Nat (plus left right)
                                                    (plus right left)
-pat right : Nat =>
+pat right =>
   plusCommutative Z right
     = eqSym {_} {_} {_} (plusZeroRightNeutral right)
-pat left, right : Nat =>
+pat left, right =>
   plusCommutative (S left) right
-    = let
-          h1 = plusCommutative left right
-          h2 = eqCong {Nat} {Nat} {S} {plus left right} {plus right left} h1
+    = let h1 = plusCommutative left right
+          h2 = eqCong {_} {_} {S} {_} {_} h1
           h3 = eqInd2 {_} {_} {_} {plusSuccRightSucc right left}
-                      {\x : Nat => Equal Nat (S (plus left right)) x} h2
+                      {\x => Equal Nat (S (plus left right)) x} h2
       in h3
 
 
 doubleAssociative : (a,b : Nat) -> Equal Nat (double (plus a b))
                                              (plus (double a) (double b))
-pat a, b : Nat =>
+pat a, b =>
   doubleAssociative a b
     = let h1 = Refl {Nat} {double (plus a b)}
           h2 = eqInd2 {_} {_} {_} {eqSym {_} {_} {_} (plusAssociative a b (plus a b))}
@@ -145,7 +136,7 @@ pat a, b : Nat =>
 
 plusPlusAssociative : (a,b,c,d : Nat) -> Equal Nat (plus (plus a b) (plus c d))
                                                    (plus (plus a c) (plus b d))
-pat a,b,c,d : Nat =>
+pat a,b,c,d =>
   plusPlusAssociative a b c d
     = let h1 = Refl {Nat} {plus (plus a b) (plus c d)}
           h2 = eqInd2 {_} {_} {_} {eqSym {_} {_} {_} (plusAssociative a b (plus c d))}

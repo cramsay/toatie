@@ -6,10 +6,6 @@ state machines could be encoded once we have memory. Nice presentation to work
 though @
 https://www.lambdadays.org/static/upload/media/1519637389130819oskarwickstromfinitestatemachines_.pdf
 
-Maybe a key store would be a compelling example? Can have authenticated (by
-interface flag like trust zone?) READ (maybe FW will use it for actual
-encryption), and a free-for-all write and clear.
-
 -}
 
 import Data.Nat

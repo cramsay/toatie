@@ -1,0 +1,12 @@
+import Data.Nat
+
+data SNat : Nat -> Type where
+  Singleton : {n : Nat} -> SNat n
+
+-- Error: Requires ambiguous pattern match on implicit arg.
+--        Would be OK if matching on another argument acted as a witness that
+--        our implicit's constructor is unique.
+f : {n : Nat} -> SNat n -> SNat n
+f {Z} (Singleton {Z}) = Singleton {Z}
+pat k : Nat =>
+  f {S k} (Singleton {S k}) = Singleton {S k}

@@ -1,0 +1,9 @@
+import Data.Nat
+
+data SNat : Nat -> Type where
+  Singleton : {n : Nat} -> SNat n
+
+-- Error: different names for irrelevant arg and singleton's nat
+f : {n : Nat} -> SNat n -> SNat n
+pat l, k : Nat =>
+  f {l} (Singleton {k}) = Singleton {k}

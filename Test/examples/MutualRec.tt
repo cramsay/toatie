@@ -1,16 +1,13 @@
+import Data.Bool
 import Data.Nat
-
-data Bool : Type
-  where False : Bool
-        True : Bool
 
 isEven : Nat -> Bool
 isOdd : Nat -> Bool
 
 isEven Z = True
-pat n : Nat =>
+pat n =>
   isEven (S n) = isOdd n
 
 isOdd Z = False
-pat n : Nat =>
+pat n =>
   isOdd (S n) = isEven n

@@ -20,11 +20,11 @@ data BitPair : Nat -> Nat -> Nat -> Type where
 -- AND gates
 
 and : Nat -> Nat -> Nat
-pat x, y : Nat =>
+pat x, y =>
   and (S x) (S y) = 1
-pat y : Nat =>
+pat y =>
   and Z y = 0
-pat x : Nat =>
+pat x =>
   and x Z = 0
 
 -- Need a nudge to show that `and x 0` is always zero? Can maybe improve case
@@ -35,15 +35,15 @@ pat x : Nat =>
 -- all four possible input combinations, but it's bound to come up at some point!
 
 prfAndZeroRight : (x : Nat) -> Equal Nat 0 (and x 0)
-prfAndZeroRight Z = Refl {Nat} {0}
-pat x : Nat =>
-  prfAndZeroRight (S x) = Refl {Nat} {0}
+prfAndZeroRight Z = Refl {_} {_}
+pat x =>
+  prfAndZeroRight (S x) = Refl {_} {_}
 
 andGate : {x,y : Nat} -> Bit x -> Bit y -> Bit (and x y)
 andGate {_} {_} I I = I
-pat y : Nat, b : Bit y =>
+pat y, b =>
   andGate {_} {y} O b = O
-pat x : Nat, a : Bit x =>
+pat x, a =>
   andGate {x} {_} a O
     = let ans = O in
       eqInd2 {_} {_} {_} {prfAndZeroRight x} {_} ans
@@ -52,21 +52,21 @@ pat x : Nat, a : Bit x =>
 
 or : Nat -> Nat -> Nat
 or Z Z = 0
-pat x, y : Nat =>
+pat x, y =>
   or (S x) y = 1
-pat x, y : Nat =>
+pat x, y =>
   or x (S y) = 1
 
 prfOrOneRight : (x : Nat) -> Equal Nat 1 (or x 1)
-prfOrOneRight Z = Refl {Nat} {1}
-pat x : Nat =>
-  prfOrOneRight (S x) = Refl {Nat} {1}
+prfOrOneRight Z = Refl {_} {_}
+pat x =>
+  prfOrOneRight (S x) = Refl {_} {_}
 
 orGate : {x,y : Nat} -> Bit x -> Bit y -> Bit (or x y)
 orGate {Z} {Z} O O = O
-pat y : Nat, b : Bit y =>
+pat y, b =>
   orGate {_} {y} I b = I
-pat x : Nat, a : Bit x =>
+pat x, a =>
   orGate {x} {_} a I =
     let ans = I in
     eqInd2 {_} {_} {_} {prfOrOneRight x} {_} ans
@@ -75,12 +75,12 @@ pat x : Nat, a : Bit x =>
 -- XOR gates
 
 xor : Nat -> Nat -> Nat
-xor Z     Z     = 0
-pat x : Nat =>
+xor Z       Z     = 0
+pat x =>
   xor (S x) Z     = 1
-pat y : Nat =>
+pat y =>
   xor Z     (S y) = 1
-pat x, y : Nat =>
+pat x, y =>
   xor (S x) (S y) = 0
 
 xorGate : {x,y : Nat} -> Bit x -> Bit y -> Bit (xor x y)
@@ -125,7 +125,7 @@ prfUAdd : (c, xb, yb, a, b, xsb, ysb : Nat) ->
            (plus b (double (plus a (plus xsb ysb))))
            (plus c (plus (plus xb (double xsb)) (plus yb (double ysb))))
           )
-pat c, xb, yb, a, b, xsb, ysb : Nat,
+pat c, xb, yb, a, b, xsb, ysb,
     prf : (Equal Nat (plus b (double a))
                      (plus c (plus xb yb))) =>
   prfUAdd c xb yb a b xsb ysb prf
@@ -167,12 +167,11 @@ uAdd : {w,x,y,c : Nat} ->
        Unsigned w x -> Unsigned w y -> Bit c ->
        Unsigned (S w) (plus c (plus x y))
 
-pat c : Nat, cin : Bit c =>
+pat c, cin =>
   uAdd {0} {0} {0} {c} UNil UNil cin
     = UCons {_} {0} {c} UNil cin
 
-pat w, xn, xsn, yn, ysn, c : Nat,
-    cin : Bit c, xb : Bit xn, yb : Bit yn,
+pat w, xn, xsn, yn, ysn, c, cin, xb, yb,
     xbs : Unsigned w xsn, ybs : Unsigned w ysn =>
   uAdd {S w} {_} {_} {c} (UCons {w} {xsn} {xn} xbs xb) (UCons {w} {ysn} {yn} ybs yb) cin
     = case (addBit {_} {_} {_} cin xb yb) of
