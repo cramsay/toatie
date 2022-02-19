@@ -1,0 +1,7 @@
+data A : Type where
+  MkA : A
+
+data B : Type -> Type where
+  Ok  : A -> B A
+  Bad : A -> A
+

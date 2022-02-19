@@ -14,14 +14,17 @@ import TTImp.Elab.Term
 
 import TTImp.Parser
 import TTImp.ProcessDecl
+import TTImp.ProcessData
 import TTImp.TTImp
 
 import Parser.Source
 
 import System
 import Data.List
+import Data.List1
 import Data.Maybe
 import Data.SortedMap
+import Data.String
 
 -- Command line options
 data FOpt : Type where
@@ -35,26 +38,54 @@ parseFOpt "-fTypeCheckOnly" = pure FTypeCheckOnly
 parseFOpt s = do putStrLn $ "Unrecognised option: " ++ s
                  exitFailure
 
+data ReplCmd : Type where
+  RC_BitRep : ReplCmd
+
+parseReplCmd : String -> Maybe ReplCmd
+parseReplCmd ":BitRep" = Just RC_BitRep
+parseReplCmd _ = Nothing
+
 repl : {auto c : Ref Ctxt Defs} ->
        {auto u : Ref UST UState} ->
        {auto s : Ref Stg Stage} ->
        Core ()
 repl = do coreLift $ putStr "> "
           inp <- coreLift getLine
-          let Right ttexp = runParser Nothing inp (expr "(input)" init)
-              | Left err => do coreLift $ printLn err
-                               repl
-          (tm, ty) <- checkTerm [] ttexp Nothing
-          coreLift $ putStrLn $ "Checked: " ++ show tm
-          defs <- get Ctxt
-          coreLift $ putStrLn $ "Type: " ++ show !(normalise defs [] !(getTerm ty))
-          nf <- normalise defs [] tm
-          coreLift $ putStrLn $ "Evaluated: " ++ show nf
+          let (cmd, inp') = break (' '==) inp
+          case parseReplCmd cmd of
 
-          -- Show extracted versions too
-          coreLift $ putStrLn $ "Extraction Evaluated: " ++ show (extraction nf)
+            Just RC_BitRep =>
+              do let Right ttexp = runParser Nothing inp' (expr "(input)" init)
+                     | Left err => do coreLift $ printLn err
+                                      repl
+                 (tm, _) <- checkTerm [] ttexp Nothing
+                 defs <- get Ctxt
+                 tm <- normalise defs [] tm
+                 coreLift $ putStrLn $ "Type : " ++ show tm
+                 dcons <- dataConsForType [] tm
+                 coreLift $ putStrLn $ "Possible data constructors:\n" ++ unlines (map show dcons)
+                 w_tag <- tyTagWidth [] tm
+                 coreLift $ putStrLn $ "Tag width: " ++ show w_tag
+                 w_field <- tyFieldWidth [] tm
+                 coreLift $ putStrLn $ "Field width: " ++ show w_field
+                 repl
 
-          repl
+          -- Not a command, so just interpret it as a term
+            Nothing =>
+              do let Right ttexp = runParser Nothing inp (expr "(input)" init)
+                     | Left err => do coreLift $ printLn err
+                                      repl
+                 (tm, ty) <- checkTerm [] ttexp Nothing
+                 coreLift $ putStrLn $ "Checked: " ++ show tm
+                 defs <- get Ctxt
+                 coreLift $ putStrLn $ "Type: " ++ show !(normalise defs [] !(getTerm ty))
+                 nf <- normalise defs [] tm
+                 coreLift $ putStrLn $ "Evaluated: " ++ show nf
+
+                 -- Show extracted versions too
+                 coreLift $ putStrLn $ "Extraction Evaluated: " ++ show (extraction nf)
+
+                 repl
 
 runMain : List FOpt -> FileName -> List ImpDecl -> Core ()
 runMain fopts fname decls
