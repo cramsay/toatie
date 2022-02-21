@@ -144,7 +144,18 @@ checkTerm env (IPi p mn argTy retTy) exp
          let env' : Env Term (n :: vars)
                   = Pi stage p argTytm :: env
          (retTytm, gretTyty) <- checkTerm env' retTy (Just gType)
+
+         -- If this name is bound in a nonzero stage, we need to make sure it's term won't
+         -- affect the type of another nonzero stage variable after extraction.
+         -- We need bit representations to be fixed at compile time!
+         when (stage > 0)
+           (do let Just ok = shrinkTerm (extraction retTytm) (DropCons SubRefl)
+                     | Nothing => throw $ GenericMsg $ "Pi bound name " ++ show n ++
+                         " from nonzero stage exists in extraction of the type: " ++ show retTytm
+               pure ()
+           )
          checkExp env (Bind n (Pi stage p argTytm) retTytm) gType exp
+
 checkTerm env (ILam p mn argTy scope) Nothing
     = do let n = fromMaybe (MN "_" 0) mn
          (argTytm, gargTyty) <- checkTerm env argTy (Just gType)

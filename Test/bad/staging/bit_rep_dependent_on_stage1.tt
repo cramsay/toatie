@@ -1,0 +1,26 @@
+import Data.Nat
+import Data.Vect
+
+data Bit : Type where
+  O : Bit
+  I : Bit
+
+bitToNat : Bit -> Nat
+bitToNat O = 0
+bitToNat I = 1
+
+f : (b : Bit) -> Vect (bitToNat b) Bit
+f O = []
+f I = [O]
+
+badCircuit : < (b : Bit) -> Vect (bitToNat b) Bit >
+badCircuit = [| \b => f b |]
+
+{-
+
+FIXME
+
+I shouldn't let Pi binders in nonzero stages affect the type of something if
+that'll change the bit representation at circuit run-time... how do I do that?
+
+-}
