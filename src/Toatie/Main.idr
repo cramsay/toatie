@@ -16,6 +16,7 @@ import TTImp.Parser
 import TTImp.ProcessDecl
 import TTImp.ProcessData
 import TTImp.TTImp
+import Utils.Bits
 
 import Parser.Source
 
@@ -39,10 +40,12 @@ parseFOpt s = do putStrLn $ "Unrecognised option: " ++ s
                  exitFailure
 
 data ReplCmd : Type where
-  RC_BitRep : ReplCmd
+  RC_BitRepTy : ReplCmd
+  RC_BitRepTm : ReplCmd
 
 parseReplCmd : String -> Maybe ReplCmd
-parseReplCmd ":BitRep" = Just RC_BitRep
+parseReplCmd ":BitRepTy" = Just RC_BitRepTy
+parseReplCmd ":BitRepTm" = Just RC_BitRepTm
 parseReplCmd _ = Nothing
 
 repl : {auto c : Ref Ctxt Defs} ->
@@ -54,7 +57,7 @@ repl = do coreLift $ putStr "> "
           let (cmd, inp') = break (' '==) inp
           case parseReplCmd cmd of
 
-            Just RC_BitRep =>
+            Just RC_BitRepTy =>
               do let Right ttexp = runParser Nothing inp' (expr "(input)" init)
                      | Left err => do coreLift $ printLn err
                                       repl
@@ -68,6 +71,27 @@ repl = do coreLift $ putStr "> "
                  coreLift $ putStrLn $ "Tag width: " ++ show w_tag
                  w_field <- tyFieldWidth [] tm
                  coreLift $ putStrLn $ "Field width: " ++ show w_field
+                 repl
+
+            Just RC_BitRepTm =>
+              do let Right ttexp = runParser Nothing inp' (expr "(input)" init)
+                     | Left err => do coreLift $ printLn err
+                                      repl
+                 (tm, gty) <- checkTerm [] ttexp Nothing
+                 ty <- getTerm gty
+                 defs <- get Ctxt
+                 tm <- normalise defs [] tm
+                 ty <- normalise defs [] ty
+                 coreLift $ putStrLn $ "Term : " ++ show tm
+                 coreLift $ putStrLn $ "Type : " ++ show ty
+                 dcons <- dataConsForType [] ty
+                 coreLift $ putStrLn $ "Possible data constructors:\n" ++ unlines (map show dcons)
+                 w_tag <- tyTagWidth [] ty
+                 coreLift $ putStrLn $ "Tag width: " ++ show w_tag
+                 w_field <- tyFieldWidth [] ty
+                 coreLift $ putStrLn $ "Field width: " ++ show w_field
+                 bittree <- decomposeDCon [] tm ty
+                 coreLift $ putStrLn $ "Bit tree:\n" ++ show bittree
                  repl
 
           -- Not a command, so just interpret it as a term

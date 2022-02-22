@@ -15,6 +15,8 @@ import Data.List
 import Data.SortedMap
 import Data.SortedSet
 
+import Utils.Bits
+
 appendInnerAssoc : (left: List a) -> (centre : a) -> (right : List a) -> (left ++ [centre]) ++ right = left ++ (centre :: right)
 appendInnerAssoc [] centre right = Refl
 appendInnerAssoc (x :: xs) centre right = let h = appendInnerAssoc xs centre right in cong (x ::) h
@@ -28,12 +30,30 @@ getRetTy (Bind n (Pi _ _ _) sc)
     in (bs ++ [n] ** rec')
 getRetTy tm = ([] ** tm)
 
+-- Get the return type of a type definition
+getRetTyWithEnv : {vars :_} -> Env Term vars -> Term vars -> (bs ** (Env Term (bs ++ vars), Term (bs ++ vars)))
+getRetTyWithEnv env (Bind n b@(Pi _ _ _) sc)
+  = let (bs ** (env',tm')) = getRetTyWithEnv (b :: env) sc
+        rec' : (Env Term ((bs ++ [n]) ++ vars), Term ((bs ++ [n]) ++ vars))
+             = rewrite (appendInnerAssoc bs n vars) in (env',tm')
+    in (bs ++ [n] ** rec')
+getRetTyWithEnv env tm = ([] ** (env,tm))
+
 -- Try to retrieve the type con name from its type
 getTyConName : {vars :_} -> Term vars -> Maybe Name
 getTyConName (App _ f _) = getTyConName f
 getTyConName (Ref (TyCon _ _ _) n) = Just n
 getTyConName tm = Nothing
 
+-- Try to retrieve the data con name from a term
+getDConName : {vars :_} -> Term vars -> Maybe Name
+getDConName (App _ f _) = getDConName f
+getDConName (Ref (DataCon _ _) n) = Just n
+getDConName tm = Nothing
+
+-- Get a list of the data constructors which could have produced a given type,
+-- along with their specialised constructor types after unification with our
+-- given type
 export
 dataConsForType : {auto c : Ref Ctxt Defs} ->
                   {auto u : Ref UST UState} ->
@@ -84,8 +104,6 @@ dataConsForType env ty
                           -- Lookup the data constructor type
                           Just (MkGlobalDef dconty (DCon tag arity)) <- lookupDef dcon defs
                             | _ => throw $ InternalError $ "Data constructor name wasn't found in context: " ++ show dcon
-                          --let dcontyWeaken = rewrite sym (appendNilRightNeutral vars) in weakenNs vars dconty
-
 
                           -- Replace all the args with new metavars
                           tcty <- wrapMetaEnv env ty
@@ -111,9 +129,10 @@ dataConsForType env ty
                           put Ctxt defs
                           pure res
 
-clog2 : Nat -> Nat
+clog2 : Nat -> Nat -- TODO should really define this on nats properly so we can prove things about it!
 clog2 x = cast . ceiling $ (log $ cast x) / (log 2)
 
+-- A type's tag width is ceil . log2 of the number of unique constructors.
 export
 tyTagWidth : {auto c : Ref Ctxt Defs} ->
              {auto u : Ref UST UState} ->
@@ -126,6 +145,8 @@ tyTagWidth env ty
          1 => pure 0
          n => pure $ clog2 n
 
+-- A type's field width is the maximum width for any valid constructor using the
+-- sum of each explicit argument's tag and field width
 export
 tyFieldWidth : {auto c : Ref Ctxt Defs} ->
              {auto u : Ref UST UState} ->
@@ -151,10 +172,41 @@ tyFieldWidth env ty
 
   dataConFieldWidth : (Name, Term[]) -> Core Nat
   dataConFieldWidth (dcon, dconty)
-    = do defs <- get Ctxt
-         --Just (MkGlobalDef dconty (DCon tag arity)) <- lookupDef dcon defs
-         --  | _ => throw $ InternalError $ "Data constructor name wasn't found in context: " ++ show dcon
-         argsFieldWidth 0 [] dconty
+    = argsFieldWidth 0 [] dconty
+
+export
+decomposeDCon : {auto c : Ref Ctxt Defs} ->
+                {auto u : Ref UST UState} ->
+                {vars : _} ->
+                Env Term vars -> (tm: Term vars) -> (ty : Term vars) -> Core BitRepTree
+decomposeDCon env tm ty
+  = do let (Just dconName) = getDConName tm
+           | Nothing => throw $ InternalError $ "Couldn't deduce DataCon name from the term " ++ show tm
+       dcons <- dataConsForType env ty
+       tagWidth <- tyTagWidth env ty
+       let dconsI = zip dcons [0 .. length dcons]
+       let [((_,dconty),tag)] = filter (\((dn,dty),i) => dn == dconName) dconsI
+             | _ => throw $ InternalError $ "Couldn't find expected data con name in list of valid constructors: " ++ show dconName ++ " in " ++ show dcons
+       let Just tagBits = fromNat tagWidth tag
+             | Nothing => throw $ InternalError $ "Tag " ++ show tag ++ " did not fit into expected word length: " ++ show tagWidth
+       let weakDconTy = rewrite sym (appendNilRightNeutral vars) in weakenNs vars dconty
+       pure $ BRNode tagWidth tagBits !(decomposeArgs env (getFnInfoArgs tm) weakDconTy)
+  where
+    weakenSnds : {n : _} -> {vars' : _} -> List (AppInfo, Term vars') -> List (AppInfo, Term (n::vars'))
+    weakenSnds = map (\(i,tm) => (i,weaken tm))
+
+    decomposeArgs : {vars' : _} -> Env Term vars' -> (Term vars', List (AppInfo, Term vars')) -> (ty : Term vars') -> Core (List BitRepTree)
+    decomposeArgs env (Ref (DataCon _ _) n', []) ty = pure []
+    decomposeArgs env (f, (AImplicit, arg) :: args) (Bind n b sc)
+      = do --coreLift $ putStrLn $ "Doing implicit on " ++ show arg
+           decomposeArgs (b :: env) (weaken f, weakenSnds args) sc
+
+    decomposeArgs env (f, (AExplicit, arg) :: args) (Bind n b sc)
+      = do --coreLift $ putStrLn $ "Doing explicit on " ++ show arg ++ " with ty : " ++ show (binderType b)
+           argT <- decomposeDCon env arg (binderType b)
+           restT <- decomposeArgs (b :: env) (weaken f, weakenSnds args) sc
+           pure $ argT :: restT
+    decomposeArgs env tm ty = do throw $ InternalError $ "Failed to convert DCon args into their bit representation: " ++ show tm ++ " : " ++ show ty
 
 export
 processCon : {auto c : Ref Ctxt Defs} ->

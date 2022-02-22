@@ -36,3 +36,11 @@ simple RGBVect : Nat -> Type -> Type where
              a -> RGBVect k a -> RGBVect (S k) a
      BCons : {a : Type} -> {k : Nat} ->
              a -> RGBVect k a -> RGBVect (S k) a
+
+rgbTest1 : RGBVect 2 (Vect 3 Bit)
+rgbTest1 = let v1 = [O,O,I]
+               v2 = [I,O,I]
+           in BCons {_} {_} v2 (
+                RCons {_} {_} v1
+                  (RGBNil {_})
+              )
