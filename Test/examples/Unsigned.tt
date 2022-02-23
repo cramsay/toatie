@@ -5,11 +5,11 @@
 import Data.Nat
 import Proofs
 
-data Bit : Nat -> Type where
+simple Bit : Nat -> Type where
   O : Bit 0
   I : Bit 1
 
-data BitPair : Nat -> Nat -> Nat -> Type where
+simple BitPair : Nat -> Nat -> Nat -> Type where
   MkBitPair : {a,b,c,x,y : Nat} ->
               {prf : Equal Nat
                            (plus b (double a))
@@ -101,7 +101,7 @@ addBit {_} {_} {_} I I I = MkBitPair {1} {1} {1} {1} {1} {Refl {Nat} {3}} I I
 
 -- Unsigned binary types
 
-data Unsigned : Nat -> Nat -> Type where
+simple Unsigned : Nat -> Nat -> Type where
   UNil  : Unsigned 0 0
   UCons : {width,val,b : Nat} ->
           Unsigned width val -> Bit b ->

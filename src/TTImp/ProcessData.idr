@@ -8,7 +8,7 @@ import Core.CaseTree
 import Core.UnifyState
 import Core.Unify
 
-import TTImp.Elab.Term
+import TTImp.Elab.Check
 import TTImp.TTImp
 
 import Data.List
@@ -40,7 +40,9 @@ getRetTyWithEnv env (Bind n b@(Pi _ _ _) sc)
 getRetTyWithEnv env tm = ([] ** (env,tm))
 
 -- Try to retrieve the type con name from its type
+export
 getTyConName : {vars :_} -> Term vars -> Maybe Name
+getTyConName (TCode ty) = getTyConName ty
 getTyConName (App _ f _) = getTyConName f
 getTyConName (Ref (TyCon _ _ _) n) = Just n
 getTyConName tm = Nothing
@@ -214,7 +216,7 @@ processCon : {auto c : Ref Ctxt Defs} ->
              {auto s : Ref Stg Stage} ->
              Name -> ImpTy -> Core (Name, Term [])
 processCon tyName (MkImpTy n ty)
-    = do (tychk, _) <- checkTerm [] ty (Just gType)
+    = do (tychk, _) <- check [] ty (Just gType)
 
          -- Check the data con name hasn't been defined already
          defs <- get Ctxt
@@ -246,7 +248,7 @@ processData (MkImpData n info tycon datacons)
          Nothing <- lookupDef n defs
            | Just gdef => throw (GenericMsg ("Multiple declarations for " ++ show n))
 
-         (tychk, _) <- checkTerm [] tycon (Just gType)
+         (tychk, _) <- check [] tycon (Just gType)
          -- Add it to the context before checking data constructors
          -- Exercise: We should also check whether it's already defined!
          defs <- get Ctxt

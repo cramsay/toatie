@@ -1,7 +1,7 @@
 import Data.Nat
 import Data.Vect
 
-data Bit : Type where
+simple Bit : Type where
   O : Bit
   I : Bit
 

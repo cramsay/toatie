@@ -11,7 +11,9 @@ pat a : Type, n : Nat, xs : Vect (S n) a =>
           VCons {a} {n} y ys ==> ys
         VNil {a} impossible
 
+{- Can't use simple type Vect in dependent type... FIXME?
 example : (a : Type) -> (n : Nat) -> (x : a) -> (xs : Vect n a) ->
           Equal (Vect n a) xs (mytail {a} {n} (VCons {a} {n} x xs))
 pat a, n, x, xs =>
   example a n x xs = Refl {_} {_}
+-}

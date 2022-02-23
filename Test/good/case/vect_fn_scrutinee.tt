@@ -11,7 +11,9 @@ pat a, n, xs : Vect (S (S n)) a =>
         pat x' , xs' : Vect n a =>
           (VCons {_} {_} x' xs') ==> xs'
 
+{- Can't use simple type Vect in dependent type... FIXME?
 example : (a : Type) -> (n : Nat) -> (x,y : a) -> (xs : Vect n a) ->
           Equal (Vect n a) xs (dropTwo {_} {_} (VCons {_} {_} x (VCons {_} {_} y xs)))
 pat a, n, x, y, xs =>
   example a n x y xs = Refl {_} {_}
+-}

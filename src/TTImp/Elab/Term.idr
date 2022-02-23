@@ -14,6 +14,7 @@ import TTImp.TTImp
 import TTImp.Elab.Case
 import TTImp.Elab.Check
 import TTImp.ProcessDef
+import TTImp.ProcessData
 
 import Data.Maybe
 import Data.SortedSet
@@ -140,20 +141,29 @@ checkTerm env (ILet n Nothing argVal scope) exp
 checkTerm env (IPi p mn argTy retTy) exp
     = do let n = fromMaybe (MN "_" 0) mn
          (argTytm, gargTyty) <- checkTerm env argTy (Just gType)
+         defs <- get Ctxt
+         argTytm <- normalise defs env argTytm
+
          stage <- get Stg
          let env' : Env Term (n :: vars)
                   = Pi stage p argTytm :: env
          (retTytm, gretTyty) <- checkTerm env' retTy (Just gType)
 
-         -- If this name is bound in a nonzero stage, we need to make sure it's term won't
-         -- affect the type of another nonzero stage variable after extraction.
-         -- We need bit representations to be fixed at compile time!
-         when (stage > 0)
-           (do let Just ok = shrinkTerm (extraction retTytm) (DropCons SubRefl)
-                     | Nothing => throw $ GenericMsg $ "Pi bound name " ++ show n ++
-                         " from nonzero stage exists in extraction of the type: " ++ show retTytm
-               pure ()
-           )
+         -- If we're binding a Type constructor, we need to make sure simple types
+         -- are not used dependently.
+         case getTyConName argTytm of
+           Nothing => do --coreLift $ putStrLn $ "Couldn't find type con name for " ++ show argTytm
+                         pure ()
+           Just tyconn => do Just (MkGlobalDef _ (TCon tyci _ _ _)) <- lookupDef tyconn defs
+                               | _ => throw $ GenericMsg $ " Couldn't find type constructor in context: " ++ show tyconn
+                             case tyci of
+                               TyConParam => pure () -- Parameter types can appear anywhere
+                               _ => do -- Object and simple types cannot appear later in the telescope
+                                       let Just ok = shrinkTerm (extraction retTytm) (DropCons SubRefl)
+                                             | Nothing => throw $ GenericMsg $ "Non-parameter type bound to " ++ show n ++
+                                                 " appears in the extraction of its scope: " ++ show retTytm
+                                       pure ()
+
          checkExp env (Bind n (Pi stage p argTytm) retTytm) gType exp
 
 checkTerm env (ILam p mn argTy scope) Nothing
