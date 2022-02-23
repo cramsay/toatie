@@ -231,6 +231,7 @@ rhsTypeToPi {vars=v::vs} (b :: bs) exps rhsty
         rec = rhsTypeToPi bs exps $ Bind v (Pi (binderStage b) info ty) rhsty
     in weaken rec
 
+-- TODO, not sure if I need this anymore... I infer the implicitness of IPatvars during type checking now
 processImplicitUse : {auto c : Ref Ctxt Defs} ->
                      {auto u : Ref UST UState} ->
                      {auto s : Ref Stg Stage} ->
@@ -250,8 +251,8 @@ processImplicitUse env lhstm rhstm exprhsty
 addDots : RawImp -> State (SortedSet Name, SortedSet Name) RawImp
 addDots IType    = pure IType
 addDots Implicit = pure Implicit
-addDots (IPi Implicit mn argTy retTy)  = pure $ IPi Implicit mn argTy retTy
-addDots (IPi Explicit mn argTy retTy)  = pure $ IPi Explicit mn argTy retTy
+addDots (IPi Implicit mstage mn argTy retTy)  = pure $ IPi Implicit mstage mn argTy retTy
+addDots (IPi Explicit mstage mn argTy retTy)  = pure $ IPi Explicit mstage mn argTy retTy
 addDots (ILet n margTy argVal scope)   = pure $ ILet n margTy argVal scope -- Can't have ILet on LHS...
 addDots (IMustUnify x) = pure $ IMustUnify x
 addDots (IQuote x)     = pure $ --IQuote (IMustUnify x)
@@ -259,11 +260,11 @@ addDots (IQuote x)     = pure $ --IQuote (IMustUnify x)
 addDots (ICode x)      = pure $ ICode   !(addDots x)
 addDots (IEval x)      = pure $ IEval   !(addDots x)
 addDots (IEscape x)    = pure $ IEscape !(addDots x)
-addDots (IPatvar n ty scope) = do (pats, founds) <- get
-                                  put (insert n pats, founds)
-                                  pure $ IPatvar n ty !(addDots scope)
-addDots (ILam Implicit mn argTy scope) = pure $ ILam Implicit mn argTy !(addDots scope)--(IMustUnify $ addDots scope)
-addDots (ILam Explicit mn argTy scope) = pure $ ILam Explicit mn argTy !(addDots scope)
+addDots (IPatvar ms n ty scope) = do (pats, founds) <- get
+                                     put (insert n pats, founds)
+                                     pure $ IPatvar ms n ty !(addDots scope)
+addDots (ILam Implicit ms mn argTy scope) = pure $ ILam Implicit ms mn argTy !(addDots scope)--(IMustUnify $ addDots scope)
+addDots (ILam Explicit ms mn argTy scope) = pure $ ILam Explicit ms mn argTy !(addDots scope)
 addDots (IApp AImplicit f a) = pure $ IApp AImplicit !(addDots f) !(addDots a)
 addDots (IApp AExplicit f a) = pure $ IApp AExplicit !(addDots f) !(addDots a)
 addDots (IVar x) = do (pats, founds) <- get

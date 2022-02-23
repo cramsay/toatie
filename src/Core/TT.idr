@@ -156,6 +156,14 @@ binderStage (PVar s _ _) = s
 binderStage (PVTy s _) = s
 
 export
+binderStageMap : (Stage -> Stage) -> Binder tm -> Binder tm
+binderStageMap f (Lam  s i ty) = (Lam  (f s) i ty)
+binderStageMap f (Pi   s i ty) = (Pi   (f s) i ty)
+binderStageMap f (Let  s v ty) = (Let  (f s) v ty)
+binderStageMap f (PVar s i ty) = (PVar (f s) i ty)
+binderStageMap f (PVTy s   ty) = (PVTy (f s)   ty)
+
+export
 isLet : Binder tm -> Bool
 isLet (Let _ _ _) = True
 isLet _           = False

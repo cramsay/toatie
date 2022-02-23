@@ -81,6 +81,6 @@ mutual
   getImpossibleTerm tm = do q <- newRef QVar (the Int 0)
                             mkTerm (stripPVars tm) Nothing []
     where stripPVars : RawImp -> RawImp
-          stripPVars (IPatvar n ty scope) = IApp AExplicit (IPatvar n ty $ stripPVars scope) Implicit
+          stripPVars (IPatvar ms n ty scope) = IApp AExplicit (IPatvar ms n ty $ stripPVars scope) Implicit
           stripPVars tm = tm
 

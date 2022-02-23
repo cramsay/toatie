@@ -15,6 +15,7 @@ import TTImp.Elab.Case
 import TTImp.Elab.Check
 import TTImp.ProcessDef
 
+import Data.Nat
 import Data.Maybe
 import Data.SortedSet
 
@@ -76,6 +77,44 @@ checkLamFV n Implicit scopetm
        then throw (GenericMsg $ "Var bound by implicit lambda exists in the extraction of it's body; " ++ show n ++ " in " ++ show scopetmE)
        else pure ()
 
+mapTyStage : (Stage -> Stage) -> Env Term vars -> Term vars -> Term vars
+mapTyStage fn env (Local idx p) = Local idx p
+mapTyStage fn env (Meta x xs) = Meta x (map (mapTyStage fn env) xs)
+mapTyStage fn env (App i f a) = App i (mapTyStage fn env f) (mapTyStage fn env a)
+mapTyStage fn env TType = TType
+mapTyStage fn env Erased = Erased
+mapTyStage fn env (Quote ty tm) = Quote (mapTyStage fn env ty)
+                                            (mapTyStage fn env tm)
+mapTyStage fn env (TCode x) = TCode (mapTyStage fn env x)
+mapTyStage fn env (Eval x) = Eval (mapTyStage fn env x)
+mapTyStage fn env (Escape x) = Escape (mapTyStage fn env x)
+mapTyStage fn env (Ref nt n) = Ref nt n
+mapTyStage fn env (Bind x b scope)
+  = let b' = binderStageMap fn $ map (mapTyStage fn env) b
+    in Bind x b' (mapTyStage fn (b::env) scope)
+
+-- TODO Be able to work out where a term was bound, then update the checking of an application with the true stage for the argument reflected in it's type (as long as it's not larger)
+boundStage : {vars : _} -> Stage -> Env Term vars -> Term vars -> Stage
+boundStage s env (Local idx p) = binderStage (getBinder p env)
+boundStage s env (Ref nt n) = 0 -- TODO not sure on this
+boundStage s env (Meta n tms) = s -- TODO do we ever check the stage of a metavar once solved?!
+                                -- foldr maximum 0 $ map (boundStage s env) tms
+boundStage s env (Bind x b scope)
+  = plus (binderStage b) (countCodeWrappers $ binderType b)
+  where
+  countCodeWrappers : Term vs -> Nat
+  countCodeWrappers (TCode tm) = S (countCodeWrappers tm)
+  countCodeWrappers _ = 0
+boundStage s env (App _ f a) = --maximum (boundStage s env f)
+                             (boundStage s env a)
+boundStage s env TType = 0
+boundStage s env Erased = 0
+boundStage s env (Quote ty tm) = boundStage s env tm
+boundStage s env (TCode x)     = boundStage s env x
+boundStage s env (Eval x)      = S $ boundStage s env x
+boundStage s env (Escape x)    = S $ boundStage s env x
+
+
 -- Check a raw term, given (possibly) the current environment and its expected
 -- type, if known.
 -- Returns a pair of checked term and its type.
@@ -112,6 +151,12 @@ checkTerm env (IVar n) exp
                               DCon t a => DataCon t a
                               TCon i t a cons => TyCon i t a
                               _ => Func
+                --stageNow <- get Stg
+                --let defty = mapTyStage (plus stageNow) [] (type gdef)
+                --coreLift $ putStrLn $ "Increased stage by " ++ show stageNow ++ " on ref " ++ show n
+                --let Just deftyRaw = toTTImp defty
+                --    | Nothing => throw $ GenericMsg $ "Failed to convert type back to RawImp" ++ show defty
+                --_ <- checkTerm [] deftyRaw (Just gType)
                 checkExp env (Ref nt n) (gnf env (embed (type gdef))) exp
 -- Let binding with explicit type
 checkTerm env (ILet n (Just argTy) argVal scope) exp
@@ -137,10 +182,11 @@ checkTerm env (ILet n Nothing argVal scope) exp
          scopeTyTerm <- getTerm gscopetmTy
          pure (Bind n (Let stage argValtm argTytm) scopetm
               ,gnf env (Bind n (Let stage argValtm argTytm) scopeTyTerm))
-checkTerm env (IPi p mn argTy retTy) exp
+checkTerm env (IPi p mstage mn argTy retTy) exp
     = do let n = fromMaybe (MN "_" 0) mn
          (argTytm, gargTyty) <- checkTerm env argTy (Just gType)
          stage <- get Stg
+         let stage = fromMaybe stage mstage
          let env' : Env Term (n :: vars)
                   = Pi stage p argTytm :: env
          (retTytm, gretTyty) <- checkTerm env' retTy (Just gType)
@@ -148,7 +194,16 @@ checkTerm env (IPi p mn argTy retTy) exp
          -- If this name is bound in a nonzero stage, we need to make sure it's term won't
          -- affect the type of another nonzero stage variable after extraction.
          -- We need bit representations to be fixed at compile time!
-         when (stage > 0)
+         -- FIXME just now we also check if our bound type is a code type (then we treat it as a nonzero stage)
+         -- but to do this, we have to normalise it. This is quite expensive... can we sidestep this somehow?
+         defs <- get Ctxt
+         let isCodeType = case !(normalise defs env argTytm) of
+                            TCode _ => True
+                            _       => False
+
+         when (isCodeType)
+              (do coreLift $ putStrLn $ "Found code type: " ++ show n)
+         when (stage > 0 || isCodeType)
            (do let Just ok = shrinkTerm (extraction retTytm) (DropCons SubRefl)
                      | Nothing => throw $ GenericMsg $ "Pi bound name " ++ show n ++
                          " from nonzero stage exists in extraction of the type: " ++ show retTytm
@@ -156,10 +211,11 @@ checkTerm env (IPi p mn argTy retTy) exp
            )
          checkExp env (Bind n (Pi stage p argTytm) retTytm) gType exp
 
-checkTerm env (ILam p mn argTy scope) Nothing
+checkTerm env (ILam p ms mn argTy scope) Nothing
     = do let n = fromMaybe (MN "_" 0) mn
          (argTytm, gargTyty) <- checkTerm env argTy (Just gType)
          stage <- get Stg
+         let stage = fromMaybe stage ms
          let env' : Env Term (n :: vars)
                   = Lam stage p argTytm :: env
          (scopetm, gscopety) <- checkTerm env' scope Nothing
@@ -170,10 +226,11 @@ checkTerm env (ILam p mn argTy scope) Nothing
          checkExp env (Bind n (Lam stage p argTytm) scopetm)
                       (gnf env (Bind n (Pi stage p argTytm) !(getTerm gscopety)))
                       Nothing
-checkTerm env (ILam p mn argTy scope) (Just exp)
+checkTerm env (ILam p ms mn argTy scope) (Just exp)
     = do let n = fromMaybe (MN "_" 0) mn
          (argTytm, gargTyty) <- checkTerm env argTy (Just gType)
          stage <- get Stg
+         let stage = fromMaybe stage ms
          let env' : Env Term (n :: vars)
                   = Lam stage p argTytm :: env
          expTyNF <- getNF exp
@@ -193,9 +250,10 @@ checkTerm env (ILam p mn argTy scope) (Just exp)
                                  (gnf env (Bind n (Pi stage p argTytm) !(getTerm gscopety)))
                                  (Just exp)
               _ => throw (GenericMsg "Lambda must have a function type")
-checkTerm env (IPatvar n ty scope) exp
+checkTerm env (IPatvar ms n ty scope) exp
     = do (ty, gTyty) <- checkTerm env ty (Just gType)
          stage <- get Stg
+         let stage = fromMaybe stage ms
          let env' : Env Term (n :: vars)
                   = PVar stage Implicit ty :: env -- Try with an implicit PVar for now... we'll fix this up afterwards
          (scopetm, gscopety) <- checkTerm env' scope Nothing
@@ -208,8 +266,6 @@ checkTerm env (IPatvar n ty scope) exp
          checkExp env (Bind n (PVar stage i ty) scopetm)
                       (gnf env (Bind n (PVTy stage ty) !(getTerm gscopety)))
                       exp
-  -- TODO here we should infer the implicitness of the pattern var
-  --  Does it appear in an explicit position in the scope? maybe best to do this with the rawImp scope?
 
 checkTerm env (IApp i f a) exp
     = do -- Get the function type (we don't have an expected type)
@@ -218,21 +274,31 @@ checkTerm env (IApp i f a) exp
          -- We can only proceed if it really does have a function type
          case fty of
               -- Ignoring the implicitness for now
-              NBind x (Pi stage bInfo ty) sc =>
+              NBind x (Pi pistage bInfo ty) sc =>
                     do defs <- get Ctxt
                        -- Check the argument type, given the expected argument
                        -- type
                        (atm, gaty) <- checkTerm env a
                                                 (Just (glueBack defs env ty))
 
-                       -- FIXME do check implicitness unless the mode says we're checking a term we've generated...
-                       --       this way we don't have to tag our applications correctly. Bit of a hack
-
                        -- Check implicitness of application and binder match
                        True <- checkImplicitness bInfo i
                          | _ => throw (GenericMsg $ "Can't apply " ++ show i ++
                                        " argument (" ++ show atm ++ ") to " ++
                                        show bInfo ++ " binder (" ++ show x ++ ")" )
+                       let argStage = boundStage pistage env atm
+                       coreLift $ putStrLn $ "IN IAPP: looking at " ++ show atm ++ " with inferred stage " ++ show argStage ++ " and env " ++ show env
+                       when (argStage > 0)
+                            (do coreLift $ putStrLn $ "FFF ty " ++ show fty
+                                coreLift $ putStrLn $ "GGG env " ++ show env
+                                coreLift $ putStrLn $ "HHH arg " ++ show atm
+                                coreLift $ putStrLn $ "HHH ftm " ++ show ftm
+                                defs <- get Ctxt
+                                let Just fnTyRaw = toTTImp !(quote defs env $ NBind x (Pi argStage bInfo ty) sc)
+                                    | Nothing => throw $ GenericMsg $ "Failed to convert type back to RawImp" ++ show fty
+                                _ <- checkTerm env fnTyRaw (Just gType)
+                                pure ()
+                            )
 
                        -- Calculate the type of the application by continuing
                        -- to evaluate the scope with 'atm'

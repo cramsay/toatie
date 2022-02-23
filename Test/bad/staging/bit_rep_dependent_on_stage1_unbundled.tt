@@ -1,0 +1,27 @@
+import Data.Nat
+import Data.Vect
+
+data Bit : Type where
+  O : Bit
+  I : Bit
+
+bitToNat : Bit -> Nat
+bitToNat O = 0
+bitToNat I = 1
+
+f : (b : Bit) -> Vect (bitToNat b) Bit
+f O = []
+f I = [O]
+
+g : {n : Nat} -> Vect n Bit -> Bit
+g {Z} (VNil {_}) = O
+pat n, x, xs =>
+  g {S n} (VCons {_} {_} x xs) = I
+
+badCircuit : (b : <Bit>) -> <Bit>
+pat b : <Bit> =>
+  badCircuit b = [| g {_} (f ~b) |]
+
+badCircuitOrig : (b : <Bit>) -> <Vect (bitToNat ~b) Bit>
+pat b : <Bit> =>
+  badCircuitOrig b = [| f ~b |]
