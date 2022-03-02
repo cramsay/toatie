@@ -1,0 +1,5 @@
+import Data.Nat
+
+simple BTree : Type -> Nat -> Type where
+  Leaf : {a : Type} -> BTree a 0
+  Node : {a : Type} -> {n : Nat} -> a -> BTree a n -> BTree a n -> BTree a (S n)

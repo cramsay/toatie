@@ -1,0 +1,10 @@
+import Data.Nat
+
+simple RGBVect : Nat -> Type -> Type where
+     RGBNil : {a : Type} -> RGBVect Z a
+     RCons : {a : Type} -> {k : Nat} ->
+             a -> RGBVect k a -> RGBVect (S k) a
+     GCons : {a : Type} -> {k : Nat} ->
+             a -> RGBVect k a -> RGBVect (S k) a
+     BCons : {a : Type} -> {k : Nat} ->
+             a -> RGBVect k a -> RGBVect (S k) a

@@ -1,0 +1,17 @@
+import Data.Nat
+
+object Bit' : Nat -> Type where
+  O' : Bit' 0
+  I' : Bit' 1
+
+-- Issue is that:
+--   1) we can't split (plus b (double val)) into their component parts, so
+--      struggle to know where we are in the recursion
+--   2) we have an unknown number of `Bit'`s! Even once val gets to zero, we
+--      can still have _any_ lengths of extra zero bits...
+
+simple BadUnsigned : Nat -> Nat -> Type where
+  BUNil  : BadUnsigned 0 0
+  BUCons : {width,val,b : Nat} ->
+            BadUnsigned width val -> Bit' b ->
+            BadUnsigned width (plus b (double val))

@@ -1,0 +1,10 @@
+import Data.Nat
+
+-- Although this could be considered valid,
+-- we don't really have an easy way to tell that Dummy True is necessarily
+-- "smaller" than Dummy False. Let's keep this as a test to make sure nothing
+-- changes accidentally.
+
+simple Dummy : Bool -> Type where
+  DT : Bool -> Dummy True
+  DF : Bool -> Dummy True  -> Dummy False

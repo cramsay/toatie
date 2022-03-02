@@ -1,0 +1,12 @@
+import Data.Nat
+
+-- Although we have recursion and a base case,
+-- there are no arguments of the type constructor which is structurally decreasing
+-- for every recurisive data constructor.
+
+simple TwoVect : Nat -> Nat -> Type -> Type where
+     VTNil : {a : Type} -> TwoVect Z Z a
+     V1Cons : {a : Type} -> {k,j : Nat} ->
+              a -> TwoVect k j a -> TwoVect (S k) j a
+     V2Cons : {a : Type} -> {k,j : Nat} ->
+              a -> TwoVect k j a -> TwoVect k (S j) a

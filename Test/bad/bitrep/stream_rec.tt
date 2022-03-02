@@ -1,0 +1,6 @@
+object Bit : Type where
+  O : Bit
+  I : Bit
+
+simple Stream : Type -> Type where
+  SCons : {a : Type} -> a -> Stream a -> Stream a

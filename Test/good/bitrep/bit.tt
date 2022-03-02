@@ -1,0 +1,5 @@
+import Data.Nat
+
+object Bit : Type where
+  O : Bit
+  I : Bit

@@ -1,0 +1,11 @@
+import Data.Nat
+
+object Bit' : Nat -> Type where
+  O' : Bit' 0
+  I' : Bit' 1
+
+simple Unsigned : Nat -> Nat -> Type where
+  UNil  : Unsigned 0 0
+  UCons : {width,val,b : Nat} ->
+            Unsigned width val -> Bit' b ->
+            Unsigned (S width) (plus b (double val))

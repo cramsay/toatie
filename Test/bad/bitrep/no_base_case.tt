@@ -1,0 +1,5 @@
+import Data.Nat
+
+-- Here our recursion _is_ structurally decreasing but there's no base case!
+simple Delayed : Type -> Nat -> Type where
+  DCons : {a : Type} -> {n : Nat} -> a -> Delayed a n -> Delayed a (S n)

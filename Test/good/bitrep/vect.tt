@@ -1,0 +1,6 @@
+import Data.Nat
+
+simple Vect : Nat -> Type -> Type where
+     VNil : {a : Type} -> Vect Z a
+     VCons : {a : Type} -> {k : Nat} ->
+             a -> Vect k a -> Vect (S k) a

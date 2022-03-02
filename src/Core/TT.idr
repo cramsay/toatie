@@ -63,6 +63,10 @@ Eq TyConInfo where
   (==) TyConSimp  TyConSimp  = True
   (==) _          _          = False
 
+export
+isParam : TyConInfo -> Bool
+isParam i = i == TyConParam
+
 public export
 data NameType : Type where
      Func : NameType
@@ -778,3 +782,36 @@ Show Covering where
     = "not covering due to call to function " ++ show f
   show (NonCoveringCall cs)
     = "not covering due to calls to functions " ++ showSep ", " (map show cs)
+
+export
+eqBinderBy : (t -> u -> Bool) -> (Binder t -> Binder u -> Bool)
+eqBinderBy eqTU = go where
+  go : Binder t -> Binder u -> Bool
+  go (Lam s i   ty) (Lam s' i'   ty') = s == s' && i == i' && eqTU ty ty'
+  go (Pi  s i   ty) (Pi  s' i'   ty') = s == s' && i == i' && eqTU ty ty'
+  go (PVar s i  ty) (PVar s' i'  ty') = s == s' && i == i' && eqTU ty ty'
+  go (PVTy s    ty) (PVTy s'     ty') = s == s' &&            eqTU ty ty'
+  go (Let s val ty) (Let s' val' ty') = s == s' && eqTU val val' && eqTU ty ty'
+  go _ _ = False
+
+export
+Eq a => Eq (Binder a) where
+  (==) = eqBinderBy (==)
+
+export
+total
+Eq (Term vars) where
+  (==) (Local idx _) (Local idx' _) = idx == idx'
+  (==) (Ref _ n) (Ref _ n') = n == n'
+  (==) (Meta i args) (Meta i' args')
+      = i == i' && assert_total (args == args')
+  (==) (Bind _ b sc) (Bind _ b' sc')
+      = assert_total (b == b' && sc == believe_me sc')
+  (==) (App _ f a) (App _ f' a') = f == f' && a == a'
+  (==) (TCode t) (TCode t') = t == t'
+  (==) (Escape t) (Escape t') = t == t'
+  (==) (Eval t) (Eval t') = t == t'
+  (==) (Quote ty t) (Quote ty' t') = t == t' && ty == ty'
+  (==) (Erased) (Erased) = True
+  (==) (TType) (TType) = True
+  (==) _ _ = False

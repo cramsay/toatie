@@ -1,0 +1,7 @@
+object Bit : Type where
+  O : Bit
+  I : Bit
+
+simple List : Type -> Type where
+  LNil  : {a : Type}                -> List a
+  LCons : {a : Type} -> a -> List a -> List a

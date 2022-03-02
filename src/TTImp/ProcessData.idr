@@ -3,6 +3,7 @@ module TTImp.ProcessData
 import Core.Context
 import Core.Env
 import Core.Normalise
+import Core.Extraction
 import Core.TT
 import Core.CaseTree
 import Core.UnifyState
@@ -11,6 +12,7 @@ import Core.Unify
 import TTImp.Elab.Check
 import TTImp.TTImp
 
+import Data.Maybe
 import Data.List
 import Data.SortedMap
 import Data.SortedSet
@@ -111,8 +113,6 @@ dataConsForType env ty
                           tcty <- wrapMetaEnv env ty
                           (ty',tyArgNames) <- wrapMetaArgs [] dconty
 
-                          --coreLift $ putStrLn $ "Comparing " ++ show ty ++ " and " ++ show ty'
-
                           -- Try to unify with our expected type.
                           -- Constraints are allowable -- better to include
                           -- possibly wrong constructors than ignore possibly correct ones.
@@ -121,10 +121,8 @@ dataConsForType env ty
                                                  solveConstraints InLHS
                                                  defs <- get Ctxt
                                                  dconty' <- substSolvedMetaArgs [] dconty tyArgNames
-                                                 --coreLift $ putStrLn $ "Could be " ++ show dcon ++ " with sig : " ++ show dconty'
                                                  pure $ Just (dcon, dconty'))
-                                             (\err => do --coreLift $ putStrLn $ show err
-                                                         pure Nothing)
+                                             (\err => pure Nothing)
 
                           -- Undo damage to UST and CTXT
                           put UST oldUST
@@ -200,22 +198,155 @@ decomposeDCon env tm ty
     decomposeArgs : {vars' : _} -> Env Term vars' -> (Term vars', List (AppInfo, Term vars')) -> (ty : Term vars') -> Core (List BitRepTree)
     decomposeArgs env (Ref (DataCon _ _) n', []) ty = pure []
     decomposeArgs env (f, (AImplicit, arg) :: args) (Bind n b sc)
-      = do --coreLift $ putStrLn $ "Doing implicit on " ++ show arg
-           decomposeArgs (b :: env) (weaken f, weakenSnds args) sc
+      = do decomposeArgs (b :: env) (weaken f, weakenSnds args) sc
 
     decomposeArgs env (f, (AExplicit, arg) :: args) (Bind n b sc)
-      = do --coreLift $ putStrLn $ "Doing explicit on " ++ show arg ++ " with ty : " ++ show (binderType b)
-           argT <- decomposeDCon env arg (binderType b)
+      = do argT <- decomposeDCon env arg (binderType b)
            restT <- decomposeArgs (b :: env) (weaken f, weakenSnds args) sc
            pure $ argT :: restT
     decomposeArgs env tm ty = do throw $ InternalError $ "Failed to convert DCon args into their bit representation: " ++ show tm ++ " : " ++ show ty
+
+
+-- Equal for the purposes of size change means, ignoring as patterns, all
+-- non-metavariable positions are equal
+scEq : Term vars -> Term vars -> Bool
+scEq (Local idx _) (Local idx' _) = idx == idx'
+scEq (Ref _ n) (Ref _ n') = n == n'
+scEq (Meta i args) _ = True
+scEq _ (Meta i args) = True
+scEq (Bind _ b sc) (Bind _ b' sc') = False -- not checkable
+scEq (App _ f a) (App _ f' a') = scEq f f' && scEq a a'
+scEq (Erased) (Erased) = True
+scEq (TType) (TType) = True
+scEq (TCode t) (TCode t') = scEq t t'
+scEq (Escape t) (Escape t') = scEq t t'
+scEq (Eval t) (Eval t') = scEq t t'
+scEq (Quote ty t) (Quote ty' t') = scEq t t' && scEq ty ty'
+scEq _ _ = False
+
+mutual
+  -- Return whether first argument is structurally smaller than the second.
+  smaller : Bool -> -- Have we gone under a constructor yet?
+            Defs ->
+            Maybe (Term vars) -> -- Asserted bigger thing
+            Term vars -> -- Term we're checking
+            Term vars -> -- Argument it might be smaller than
+            Bool
+  smaller inc defs big _ Erased = False -- Never smaller than an erased thing!
+  smaller True defs big s t
+      = s == t || smallerArg True defs big s t
+  smaller inc defs big s t = smallerArg inc defs big s t
+
+  assertedSmaller : Maybe (Term vars) -> Term vars -> Bool
+  assertedSmaller (Just b) a = scEq b a
+  assertedSmaller _ _ = False
+
+  smallerArg : Bool -> Defs ->
+               Maybe (Term vars) -> Term vars -> Term vars -> Bool
+  smallerArg inc defs big s tm
+        -- If we hit a pattern that is equal to a thing we've asserted_smaller,
+        -- the argument must be smaller
+      = assertedSmaller big tm ||
+                case getFnArgs tm of
+                     (Ref (TyCon _ t a) cn, args)
+                         => any (smaller True defs big s) args
+                     (Ref (DataCon t a) cn, args)
+                         => any (smaller True defs big s) args
+                     _ => case s of
+                               App _ f _ => smaller inc defs big f tm
+                                            -- Higher order recursive argument
+                               _ => False
+
+splitAtVar : (ns : List Name) -> {idx : Nat} ->
+          (0 p : IsVar name idx ns) -> (List Name, Name, List Name)
+splitAtVar (n :: xs) First = ([], n, xs)
+splitAtVar (n :: xs) (Later p) = let (outer,v,inner) = splitAtVar xs p
+                                 in (n :: outer, v, inner)
+
+mutual
+  -- Is the first term a subterm of the second? If so, return the argument positions that are subterms
+  isSubTerm : {vars: _} -> Term vars -> Term vars -> Maybe (List Nat)
+  isSubTerm tm@(App _ f a) tm'@(App _ f' a') =
+    let (n , args ) = getFnArgs tm
+          | _ => Nothing
+        (n', args') = getFnArgs tm'
+          | _ => Nothing
+        subTermArgs = map (\(a,b)=> isSubTermArgs a b) (zip args args')
+        reduceds = map fst . filter ((==True) . snd) $ zip [0 .. length args] subTermArgs
+    in if n==n' && any (==True) subTermArgs
+         then Just reduceds
+         else Nothing
+  isSubTerm _ _ = Nothing
+
+  isSubTermArgs : {vars: _} -> Term vars -> Term vars -> Bool
+  isSubTermArgs (Local idx _) (Local idx' _) = False -- idx == idx'
+  isSubTermArgs (Meta i args) _ = False
+  isSubTermArgs _ (Meta i args) = False
+  isSubTermArgs (Bind _ b sc) (Bind _ b' sc') = False -- not checkable
+  isSubTermArgs tm@(App _ f a) tm'@(App _ f' a') =
+    let (n , args ) = getFnArgs tm
+          | _ => False
+        (n', args') = getFnArgs tm'
+          | _ => False
+    in n==n' && any (==True) (map (uncurry isSubTermArgs) (zip args args'))
+  isSubTermArgs (TCode t) (TCode t') = isSubTermArgs t t'
+  isSubTermArgs (Escape t) (Escape t') = isSubTermArgs t t'
+  isSubTermArgs (Eval t) (Eval t') = isSubTermArgs t t'
+  isSubTermArgs (Quote ty t) (Quote ty' t') = isSubTermArgs t t' && isSubTermArgs ty ty'
+  isSubTermArgs (Local idx p) tm = let (outer,var,inner) = splitAtVar vars p in
+                               isConApp tm && isFreeVar {outer=outer} var (the (Term (outer ++ var :: inner)) (believe_me tm)) -- Yuck!
+    where -- TODO Remove?
+    isConApp : Term vars -> Bool
+    isConApp tm = case getFnArgs tm of
+      (Ref (TyCon _ _ _) _, _) => True
+      (Ref (DataCon _ _) _, _) => True
+      _                        => False
+  isSubTermArgs _ _ = False
+
+-- Join lists of structurally smaller argument positions with an intersection
+intersectionOfRecArgs : List (Maybe (List Nat)) -> Maybe (List Nat)
+intersectionOfRecArgs margs = case mapMaybe id margs of
+                                [] => Nothing
+                                [args] => Just args
+                                (args::argss) => Just $ foldr intersect args argss
+
+export
+checkConRec : {auto c : Ref Ctxt Defs} ->
+              {auto u : Ref UST UState} ->
+              {auto s : Ref Stg Stage} ->
+              Name -> Name -> Term [] -> Core (Maybe (List Nat))
+checkConRec ntycon ndcon ty
+  = do let (bs ** (env, retTy)) = getRetTyWithEnv [] ty
+       defs <- get Ctxt
+       let (isBadRec, tyArgIds) = findRecArgs defs env retTy
+       when isBadRec
+            (throw $ GenericMsg $ "Non-parameter type " ++ show ntycon ++ " (likely) has unbounded recursion")
+       pure tyArgIds
+  where
+
+    -- Flag if the constructor has a recursive argument, and (possibly) which of its
+    -- argument positions are structurally smaller than the return type's
+    findRecArgs : {vs : _} -> Defs -> Env Term vs -> Term vs -> (Bool, Maybe (List Nat))
+    findRecArgs defs [] ty = (False, Nothing)
+    findRecArgs {vs = v :: vs'} defs (b::env) ty
+      = let (recFlag, recArgs) = findRecArgs defs env (subst (Ref Bound v) ty)
+
+            argTy = (binderType b)
+            (bFlag, bArgs) = case getTyConName argTy of
+                               Just argTyCon => if (argTyCon == ntycon)
+                                          then (let subs = isSubTerm (weaken argTy) ty
+                                                in (not $ isJust subs, subs))
+                                          else (False, Nothing)
+                               Nothing => (False, Nothing)
+
+        in (bFlag || recFlag, intersectionOfRecArgs [bArgs, recArgs])
 
 export
 processCon : {auto c : Ref Ctxt Defs} ->
              {auto u : Ref UST UState} ->
              {auto s : Ref Stg Stage} ->
-             Name -> ImpTy -> Core (Name, Term [])
-processCon tyName (MkImpTy n ty)
+             Name -> TyConInfo -> ImpTy -> Core (Name, Term [])
+processCon tyName tyInfo (MkImpTy n ty)
     = do (tychk, _) <- check [] ty (Just gType)
 
          -- Check the data con name hasn't been defined already
@@ -253,8 +384,25 @@ processData (MkImpData n info tycon datacons)
          -- Exercise: We should also check whether it's already defined!
          defs <- get Ctxt
          arity <- getArity defs [] tychk
-         addDef n (newDef tychk (TCon (convTyConInfo info) 0 arity []))
-         chkcons <- traverse (processCon n) datacons
+         let info' = convTyConInfo info
+         addDef n (newDef tychk (TCon info' 0 arity []))
+         chkcons <- traverse (processCon n info') datacons
+
+         -- Check for obvious recursion in any non-parameter types
+         when (not $ isParam info')
+              (do -- Ensure any recursive data cons have at least one structurally decreasing argument
+                  recargs <- traverse (uncurry $ checkConRec n) chkcons
+
+                  -- Check for at least one base case
+                  when (not $ any (==Nothing) recargs)
+                       (throw $ GenericMsg $ "Non-parameter type constructor " ++ show n ++ " is recursive but has no terminating case")
+
+                  -- Check that there is at least one arg position shared between _all_ dcons for our structurally decreasing positions
+                  case intersectionOfRecArgs recargs of
+                    Nothing => pure () -- Non-recursive is OK
+                    Just [] => throw $ GenericMsg $ "Non-parameter type constructor " ++ show n ++ " is recursive but not all recursive constructors are structurally decreasing on the same argument"
+                    Just xs => pure () -- Recursive with shared structurally decreasing arg is OK
+              )
 
          defs <- get Ctxt
          traverse_ (\ (i, (cn, ty)) =>
@@ -277,4 +425,11 @@ processData (MkImpData n info tycon datacons)
         addConNames cons (MkGlobalDef type (TCon x tag arity _)) = MkGlobalDef type (TCon x tag arity cons)
         addConNames cons gdef = gdef
 
+{-
+TODO
 
+Need to check that recursive simple types are terminating
+
+On point of use, we'll need to check that each explicit argument is a simple type
+
+-}
