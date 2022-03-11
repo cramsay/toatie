@@ -242,6 +242,7 @@ parameters (defs : Defs)
          = do (loc', stk') <- argsFromStack ns args
               pure (snd arg :: loc', stk')
 
+    export
     evalDef : {free : _} ->
               Env Term free ->
               Def ->

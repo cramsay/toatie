@@ -9,6 +9,7 @@ import Core.UnifyState
 import Core.CaseTree
 import Core.Extraction
 import Core.Context
+import Compiler.CompileExpr
 
 import TTImp.Elab.Term
 
@@ -42,10 +43,12 @@ parseFOpt s = do putStrLn $ "Unrecognised option: " ++ s
 data ReplCmd : Type where
   RC_BitRepTy : ReplCmd
   RC_BitRepTm : ReplCmd
+  RC_CompileDef : ReplCmd
 
 parseReplCmd : String -> Maybe ReplCmd
 parseReplCmd ":BitRepTy" = Just RC_BitRepTy
 parseReplCmd ":BitRepTm" = Just RC_BitRepTm
+parseReplCmd ":CompileDef"   = Just RC_CompileDef
 parseReplCmd _ = Nothing
 
 repl : {auto c : Ref Ctxt Defs} ->
@@ -92,6 +95,17 @@ repl = do coreLift $ putStr "> "
                  coreLift $ putStrLn $ "Field width: " ++ show w_field
                  bittree <- decomposeDCon [] tm ty
                  coreLift $ putStrLn $ "Bit tree:\n" ++ show bittree
+                 repl
+
+            Just RC_CompileDef =>
+              do let Right (IVar name) = runParser Nothing inp' (expr "(input)" init)
+                       | _ => do coreLift $ printLn "Couldn't parse input as a name"
+                 defs <- get Ctxt
+                 extDefs <- extractCtxt defs
+                 put Ctxt extDefs
+                 comp <- compileDef name
+                 coreLift $ putStrLn $ "Compiled to: " ++ show comp
+                 put Ctxt defs
                  repl
 
           -- Not a command, so just interpret it as a term

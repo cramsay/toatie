@@ -72,6 +72,10 @@ mapDefs : Defs -> (GlobalDef -> GlobalDef) -> Core Defs
 mapDefs d f = pure . fromList $ map (\(k,v) => (k, f v)) (Data.SortedMap.toList d)
 
 export
+traverseDefs : Defs -> ((Name, GlobalDef) -> Core (Name, GlobalDef)) -> Core Defs
+traverseDefs d f = pure $ Data.SortedMap.fromList !(traverse f $ Data.SortedMap.toList d)
+
+export
 traverseDefs_ : Defs -> ((Name, GlobalDef) -> Core ()) -> Core ()
 traverseDefs_ d f = traverse_ f $ Data.SortedMap.toList d
 

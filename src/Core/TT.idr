@@ -233,6 +233,17 @@ apply fn [] = fn
 apply fn ((i,a) :: args) = apply (App i fn a) args
 
 export
+arity : Term vars -> Nat
+arity tm = go 0 tm
+  where
+  go : Nat -> Term vars' -> Nat
+  go a (Bind _ (Lam k x y) scope) = go (S a) scope
+  go a (Bind _ (Pi  k x y) scope) = go (S a) scope
+  go a (Bind _ (PVar k x y) scope) = go a scope
+  go a (Bind _ (PVTy k x  ) scope) = go a scope
+  go a _ = a
+
+export
 embed : Term vars -> Term (vars ++ more)
 embed tm = believe_me tm -- Really??
 
@@ -430,6 +441,14 @@ namespace SubstEnv
   find {outer = x :: xs} First env = Local _ First
   find {outer = x :: xs} (Later p) env = weaken (find p env)
 
+  export
+  findLocalSubst : {drop, vars, outer : _} -> {idx : Nat} ->
+                   (0 p : IsVar name idx (outer ++ (drop ++ vars))) ->
+                   SubstEnv drop vars ->
+                   Term (outer ++ vars)
+  findLocalSubst = find
+
+  export
   substEnv : {drop, vars, outer : _} ->
              SubstEnv drop vars -> Term (outer ++ (drop ++ vars)) ->
              Term (outer ++ vars)

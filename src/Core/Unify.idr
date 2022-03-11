@@ -526,8 +526,8 @@ mutual
                     Core UnifyResult
   unifyBothBinders mode env x (Pi sx ix tx) scx y (Pi sy iy ty) scy
     = do defs <- get Ctxt
-         -- Don't unify if stages are different
-         if sx /= sy
+         -- Don't unify if stages are incompatible
+         if sx > sy
            then convertError env (NBind x (Pi sx ix tx) scx) (NBind y (Pi sy iy ty) scy)
            else
              do empty <- clearDefs defs
@@ -566,7 +566,7 @@ mutual
   unifyBothBinders mode env x (Lam sx ix tx) scx y (Lam sy iy ty) scy
                    = do defs <- get Ctxt
                         -- Check stages
-                        if sx /= sy
+                        if sx > sy
                           then convertError env
                                  (NBind x (Lam sx ix tx) scx)
                                  (NBind y (Lam sy iy ty) scy)

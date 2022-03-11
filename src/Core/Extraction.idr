@@ -3,6 +3,7 @@ module Core.Extraction
 import Core.TT
 import Core.CaseTree
 import Core.Context
+import Core.Env
 
 -- Extraction, as defined by Barras in "The Implicit Calculus of Constructions
 -- as a Programming Language with Dependent Types"
@@ -41,6 +42,7 @@ extraction (TCode  tm) = TCode  (extraction tm)
 extraction (Eval   tm) = Eval   (extraction tm)
 extraction (Escape tm) = Escape (extraction tm)
 
+export
 extractionArity : Term vars -> Nat
 extractionArity (Bind x (Lam k Implicit z) scope) = extractionArity scope
 extractionArity (Bind x (Lam k Explicit z) scope) = S $ extractionArity scope
@@ -48,29 +50,60 @@ extractionArity (Bind x (Pi k Implicit z) scope) = extractionArity scope
 extractionArity (Bind x (Pi k Explicit z) scope) = S $ extractionArity scope
 extractionArity _ = 0
 
+erasedVars : Nat -> Term vars -> List Nat
+erasedVars i (Bind _ b sc) = i :: erasedVars (S i) sc
+erasedVars i tm = []
+
 mutual
-  extractionDef : (ty : Term []) -> Def -> Def
-  extractionDef _  None = None
-  extractionDef ty (DCon   tag arity     ) = DCon   tag (extractionArity ty)
-  extractionDef ty (TCon x tag arity cons) = TCon x tag (extractionArity ty) cons
-  extractionDef _  Hole = Hole
-  extractionDef _  (Guess guess constraints) = Guess (extraction guess) constraints -- TODO update constraints or forbid this
-  extractionDef _  (PMDef args ct) = PMDef args (extractTree ct)
+  extractionDef : (ty : Term []) -> Def -> Core Def
+  extractionDef _  None = pure None
+  extractionDef ty (DCon   tag arity     ) = pure $ DCon   tag (extractionArity ty)
+  extractionDef ty (TCon x tag arity cons) = pure $ TCon x tag (extractionArity ty) cons
+  extractionDef _  Hole = pure Hole
+  extractionDef _  (Guess guess constraints) = pure $ Guess (extraction guess) constraints -- TODO update constraints or forbid this
+  extractionDef ty (PMDef args ct) = pure $ PMDef args !(extractTree (erasedVars 0 ty) ct)
 
-  extractTree : {args : _} -> CaseTree args -> CaseTree args
-  extractTree (Case idx p scTy xs) = Case idx p (extraction scTy) (map extractAlt xs)
-  extractTree (STerm x)            = STerm $ extraction x
-  extractTree (Unmatched msg)      = Unmatched msg
-  extractTree Impossible           = Impossible
+  extractTree : {args : _} -> List Nat -> CaseTree args -> Core (CaseTree args)
+  extractTree es (Case idx p scTy xs)
+    = if idx `elem` es
+         then case xs of
+                [(ConCase n tag args sc)]
+                  => do -- substitute args as eraseds and call sc
+                        let es' = [0 .. length args] ++ map (+(length args)) es
+                        sc' <- extractTree es' sc
+                        pure $ substsTree (substsEnvArgs args) sc'
+                [(QuoteCase ty arg sc)]
+                  => -- substitute ty and arg as erased args and call sc
+                     do let es' = 0 :: 1 :: map (+2) es
+                        sc' <- extractTree es' sc
+                        pure $ substsTree [Erased, Erased] sc'
+                [(DefaultCase sc)]
+                  => extractTree es sc -- We don't introduce any new projected vars here, so we're all good
+                _ => throw $ InternalError $ "Case on erased argument doesn't have only one branch: " ++ show (nameAt idx p)
+         else do alts' <- traverse (extractAlt es) xs
+                 -- TODO check which constructor args are implicit and be sure to mark them as implicit
+                 pure $ Case idx p (extraction scTy) alts'
+    where
+    substsEnvArgs : (args : List Name) -> SubstEnv args var
+    substsEnvArgs [] = []
+    substsEnvArgs (a::as) = Erased :: substsEnvArgs as
+  extractTree es (STerm x)            = pure . STerm $ extraction x
+  extractTree es (Unmatched msg)      = pure $ Unmatched msg
+  extractTree es Impossible           = pure $ Impossible
 
-  extractAlt : {args : _} -> CaseAlt args -> CaseAlt args
-  extractAlt (ConCase x tag ys y) = ConCase x tag ys $ extractTree y
-  extractAlt (QuoteCase ty x ct)     = QuoteCase ty x $ extractTree ct
-  extractAlt (DefaultCase x     ) = DefaultCase $ extractTree x
+  extractAlt : {args : _} -> List Nat -> CaseAlt args -> Core (CaseAlt args)
+  extractAlt es (ConCase x tag ys y) = pure $ ConCase x tag ys !(extractTree es y)
+  extractAlt es (QuoteCase ty x ct)  = pure $ QuoteCase ty x !(extractTree es ct)
+  extractAlt es (DefaultCase x     ) = pure $ DefaultCase !(extractTree es x)
 
 export
-extractionGlobalDef : GlobalDef -> GlobalDef
-extractionGlobalDef (MkGlobalDef ty def) = MkGlobalDef (extraction ty) (extractionDef ty def)
+extractionGlobalDef : GlobalDef -> Core GlobalDef
+extractionGlobalDef (MkGlobalDef ty def) = pure $ MkGlobalDef (extraction ty) !(extractionDef ty def)
+
+export
+extractCtxt : Defs -> Core Defs
+extractCtxt ds = traverseDefs ds (\(n,d) => do d' <- extractionGlobalDef d
+                                               pure (n, d'))
 
 -- Is n the names of a free variable in the _term_ of our arg?
 -- (Ignores presence in types)
