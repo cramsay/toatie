@@ -32,6 +32,8 @@ mutual
               (args : List (CExp vars)) -> CExp vars
        -- A case match statement
        CConCase :  (scr : CExp vars) -> (alts : List (CConAlt vars)) -> (def : Maybe (CExp vars)) -> CExp vars
+       -- Project the an argument of a given constructor
+       CPrj : (con : Name) -> (field : Nat) -> CExp vars -> CExp vars
        -- An erased value
        CErased :  CExp vars
 
@@ -77,6 +79,7 @@ mutual
           alts' = map (insertNamesConAlt ns) alts
           def'  = map (insertNames ns) def
       in CConCase scr' alts' def'
+  insertNames ns (CPrj c f tm) = CPrj c f (insertNames ns tm)
   insertNames ns CErased = CErased
 
   insertNamesConAlt : {outer : _} -> (ns : List Name) -> CConAlt (outer ++ inner) ->
@@ -126,6 +129,7 @@ mutual
     = CConCase (shrinkCExp sub scr)
                (map (shrinkConAlt sub) alts)
                (map (shrinkCExp   sub) def)
+  shrinkCExp sub (CPrj c f tm) = CPrj c f (shrinkCExp sub tm)
   shrinkCExp sub CErased = CErased
 
   shrinkConAlt : SubVars newvars vars -> CConAlt vars -> CConAlt newvars
@@ -181,6 +185,7 @@ mutual
     = CConCase (substEnv env scr)
                (map (substEnvConAlt env) alts)
                (map (substEnv env) def)
+  substEnv env (CPrj c f tm) = CPrj c f (substEnv env tm)
   substEnv env CErased = CErased
 
   substEnvConAlt : {outer, vars, dropped: _} ->
@@ -206,13 +211,14 @@ mutual
   showCExp indent (CLocal {idx} p) = indent ++ "(local " ++ show (nameAt idx p) ++ ")"
   showCExp indent (CRef x) = indent ++ "(ref " ++ show x ++ ")"
   showCExp indent CErased = indent ++ "erased"
+  showCExp indent (CPrj c f tm) = indent ++ "prj^" ++ show c ++ "_" ++ show f ++ " " ++ show tm
   showCExp indent (CLam x ty sc)
     = unlines [ indent ++ "(\\" ++ show x ++ " =>"
               , showCExp (indent ++ "  ") sc ++ indent ++ ")"
               ]
   showCExp indent (CPi x ty sc) = indent ++ "Pi ..."
   showCExp indent (CLet x val ty sc)
-    = indent ++ "(let " ++ show x ++ " = " ++ show val ++ " in " ++ show sc ++ ")"
+    = indent ++ "(let " ++ show x ++ " = " ++ show val ++ " in\n" ++ showCExp indent sc ++ ")"
   showCExp indent (CApp f args)
     = unlines [ indent ++ "(" ++ show f ++ "["
               , unlines (map (showCExp (indent++"  ")) args) ++ indent ++ "])"

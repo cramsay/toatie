@@ -161,9 +161,11 @@ mutual
               = mkDropSubst 0 (erasedArgs $ type gdef) vars args
          sc' <- toCExpTree n sc
          xs' <- conCases n xs
-         pure $ MkConAlt x args' (shrinkCExp sub sc') :: xs'
+         let erasedSc = shrinkCExp sub sc'
+         pure $ MkConAlt x args' erasedSc :: xs'
+    where
 
-  conCases n ((QuoteCase ty arg x) :: xs) = conCases n xs -- TODO Unsure about this do I need projection?
+  conCases n ((QuoteCase ty arg x) :: xs) = conCases n xs
   conCases n ((DefaultCase x) :: xs) = conCases n xs
 
   getDefault : {vars : _} ->
@@ -188,9 +190,30 @@ mutual
   toCExpTree n (Case idx p scTy alts@((ConCase _ _ _ _) :: _))
     = do cases <- conCases n alts
          def <- getDefault n alts
-         if isNil cases
-            then pure (fromMaybe CErased def)
-            else pure (CConCase (CLocal p) cases def)
+         let prjs = concat $ mapMaybe id (map getProjArgs cases)
+         case cases of
+           [] => pure $ fromMaybe CErased def
+           [(MkConAlt x args sc)] => pure $ wrapWithLets' (MkVar p) x 0 args sc
+           _ => do let sc = (CConCase (CLocal p) cases def)
+                   pure $ wrapWithLets (MkVar p) prjs sc
+      where
+        getProjArgs : CConAlt vars -> Maybe (List (Name, Name, Nat))
+        getProjArgs (MkConAlt x args y) = Just $ map (\(a,i)=>(a, x, i)) (zip args [0..length args])
+        getProjArgs _ = Nothing
+        wrapWithLets : (scr : Var vars) -> List (Name, Name, Nat) -> CExp vars -> CExp vars
+        wrapWithLets (MkVar p) ((arg,con,i)::args) tm
+          = CLet arg (CPrj con i $ CLocal p) CErased $
+              weaken (wrapWithLets (MkVar p) args tm)
+        wrapWithLets _ _ tm = tm
+
+        wrapWithLets' : (scr : Var vars) -> Name -> Nat -> (args : List Name) -> (CExp (args++vars) -> CExp (vars))
+        wrapWithLets' (MkVar p) con i (arg::args)
+          = let --rec = wrapWithLets' {outer=outer++[arg]} (MkVar p) con (S i) args
+                --        (rewrite sym (appendAssociative outer [arg] (args ++ vars)) in tm)
+                rec = wrapWithLets' (MkVar p) con (S i) args
+                here = CLet arg (CPrj con i $ weakenNs args $ CLocal p) CErased
+            in rec . here
+        wrapWithLets' _ _ _ [] = id
   toCExpTree n (Case idx p scTy alts@((QuoteCase ty arg sc) :: _))
     = do sc' <- toCExpTree n sc
          let scNoType = shrinkCExp (DropCons SubRefl) sc'
