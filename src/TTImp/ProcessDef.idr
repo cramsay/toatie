@@ -5,6 +5,7 @@ import Core.CaseTree
 import Core.Context
 import Core.Coverage
 import Core.Env
+import Core.Extraction
 import Core.Normalise
 import Core.TT
 import Core.UnifyState
@@ -445,6 +446,54 @@ toPats : Clause -> (vs ** (Env Term vs, Term vs, Term vs))
 toPats (MkClause {vars} env lhs rhs)
   = (_ ** (env, lhs, rhs))
 
+eraseImps : {vars:_} -> Env Term vars -> Term vars -> Term vars
+eraseImps env (Local idx p) = case binderInfo (getBinder p env) of
+                                Just Implicit => Erased
+                                _             => Local idx p
+eraseImps env (Ref nt n) = Ref nt n
+eraseImps env (Meta x xs) = Meta x xs
+eraseImps env (Bind x b scope) = Bind x (map (eraseImps env) b) (eraseImps (b::env) scope)
+eraseImps env (App AImplicit f a) = App AImplicit (eraseImps env f) Erased
+eraseImps env (App AExplicit f a) = App AExplicit (eraseImps env f) (eraseImps env a)
+eraseImps env TType = TType
+eraseImps env Erased = Erased
+eraseImps env (Quote ty tm) = Quote (eraseImps env ty) (eraseImps env tm)
+eraseImps env (TCode x) = TCode (eraseImps env x)
+eraseImps env (Eval x) = Eval (eraseImps env x)
+eraseImps env (Escape x) = Escape (eraseImps env x)
+
+mkRunTime : {auto c : Ref Ctxt Defs} ->
+            {auto u : Ref UST UState} ->
+            {auto s : Ref Stg Stage} ->
+            Name -> Core Def
+mkRunTime n
+  = do defs <- get Ctxt
+       Just (MkGlobalDef ty (PMDef args treect _ pats)) <- lookupDef n defs
+         | _ => throw $ InternalError $ "Undefined case tree name when building run-time version: " ++ show n
+
+       pats' <- traverse toErased pats
+       let clauses = map toClause pats'
+
+       (rargs ** treert) <- getPMDef n ty clauses
+
+       let Just Refl = nameListEq args rargs
+         | Nothing => throw (InternalError "WAT")
+       --                                   ^^^
+       -- This is a quote from the Idris2 source and it deserves to live on here
+
+       pure $ PMDef args treect treert pats
+  where
+    toErased : (vars ** (Env Term vars, Term vars, Term vars)) ->
+               Core (vars ** (Env Term vars, Term vars, Term vars))
+    toErased (vars ** (env, lhs, rhs))
+      = do let lhs' = eraseImps env lhs
+           let rhs' = eraseImps env rhs
+           -- TODO might want to do some transforms here too?
+           pure $ (vars ** (env, lhs', rhs'))
+
+    toClause : (vars ** (Env Term vars, Term vars, Term vars)) -> Clause
+    toClause (_ ** (env, lhs, rhs)) = MkClause env lhs rhs
+
 export
 processDef : {auto c : Ref Ctxt Defs} ->
              {auto u : Ref UST UState} ->
@@ -491,10 +540,15 @@ processDef n clauses
                 | hs => throw $ GenericMsg $ "Unresolved holes in " ++ show n ++ " "
                                 ++ show hs ++ "\nTerm is " ++ show tree_ct
 
+         -- Patch in our run-time tree
+         PMDef cargs tree_ct tree_rt pats <- mkRunTime n
+           | _ => throw $ InternalError $ "Compilation of run-time tree didn't return a tree definition!"
+         updateDef n (record { definition = PMDef cargs tree_ct tree_rt pats})
+
          coreLift $ putStrLn $ "Complete ----------------------"
          coreLift $ putStrLn $ "Args = " ++ show cargs
          coreLift $ putStrLn $ "Tree = " ++ show tree_ct
-         coreLift $ putStrLn $ "Pats = " ++ show pats
+         coreLift $ putStrLn $ "RTree = " ++ show tree_rt
          coreLift $ putStrLn $ "Processed " ++ show n
   where
 
