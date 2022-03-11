@@ -22,7 +22,7 @@ numArgs defs (Ref _ n)
   = do Just gdef <- lookupDef n defs
          | Nothing => pure 0
        case definition gdef of
-         (PMDef _ _)    => pure . extractionArity $ type gdef
+         (PMDef _ _ _ _)    => pure . extractionArity $ type gdef
          (DCon  _ _)    => pure . extractionArity $ type gdef
          (TCon _ _ _ _) => pure . extractionArity $ type gdef
          _ => pure 0
@@ -129,7 +129,7 @@ mutual
          Just gdef <- lookupDef n defs
            | Nothing => throw $ GenericMsg $ "Name undefined in context: " ++ show n
          case definition gdef of
-           (PMDef args treeCT) => pure $ CApp (CRef n) []
+           (PMDef args _ treeCT _) => pure $ CApp (CRef n) []
            (DCon tag arity) =>  pure $ CCon n []
            (TCon x tag arity cons) => pure $ CCon n []
            def => throw $ GenericMsg $ "Cannot compile definition to CExp: " ++ show def
@@ -203,7 +203,7 @@ mutual
 toCDef : {auto c : Ref Ctxt Defs} ->
          Name -> Term [] -> Def ->
          Core CDef
-toCDef n ty (PMDef args treeCT) -- TODO How should we handle pattern vars?
+toCDef n ty (PMDef args _ treeCT _) -- TODO How should we handle pattern vars?
   = do let erased = erasedArgs ty
        let (args' ** p) = mkSub 0  args erased
        comptree <- toCExpTree n treeCT

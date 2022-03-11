@@ -212,7 +212,7 @@ instantiate {newvars} env mname mdef locs tm
          defs <- get Ctxt
          Just rhs <- mkDef locs INil tm ty
            | _ => pure False
-         let newdef = record { definition = PMDef [] (STerm rhs) } mdef
+         let newdef = record { definition = PMDef [] (STerm rhs) (STerm rhs) [([]**([], Ref Func mname, rhs))] } mdef
          addDef mname newdef
          removeHole mname
          pure True
@@ -785,7 +785,7 @@ retryGuess mode n
                            case constraints csAll of
                                 [] => -- fine now, complete the definition
                                       do let gdef = record {
-                                                      definition = PMDef [] (STerm tm)
+                                                      definition = PMDef [] (STerm tm) (STerm tm) [([] ** ([], Ref Func n, tm))]
                                                     } gdef
                                          updateDef n (const gdef)
                                          pure True

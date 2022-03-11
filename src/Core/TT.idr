@@ -441,14 +441,6 @@ namespace SubstEnv
   find {outer = x :: xs} First env = Local _ First
   find {outer = x :: xs} (Later p) env = weaken (find p env)
 
-  export
-  findLocalSubst : {drop, vars, outer : _} -> {idx : Nat} ->
-                   (0 p : IsVar name idx (outer ++ (drop ++ vars))) ->
-                   SubstEnv drop vars ->
-                   Term (outer ++ vars)
-  findLocalSubst = find
-
-  export
   substEnv : {drop, vars, outer : _} ->
              SubstEnv drop vars -> Term (outer ++ (drop ++ vars)) ->
              Term (outer ++ vars)

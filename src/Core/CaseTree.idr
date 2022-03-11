@@ -74,45 +74,6 @@ export
 Weaken CaseTree where
   weakenNs ns t = insertCaseNames {outer = []} ns t
 
-
-mutual
-  substsEnvTree : {drop, vars, outer : _} ->
-               SubstEnv drop vars -> CaseTree (outer ++ drop ++ vars) ->
-               Core (CaseTree (outer ++ vars))
-  substsEnvTree env (Case {name} idx p scTy alts)
-    = do let scTy' = substEnv env scTy
-         alts' <- traverse (substsEnvAlt env) alts
-         case findLocalSubst p env of
-           Local idx' p' => pure $ Case idx' p' scTy' alts' -- our scrutinee wasn't in drop, so continue as normal
-           _ => ---- We're inspecting something in drop, so attempt to continue only if there's one alt.
-                ---- TODO we could do something fancy and check which constructor we're matching but that's
-                ----      more to do with partial eval than our simple substitution
-                --case alts' of
-                --  [(ConCase x tag args y)] => y
-                --  [(QuoteCase ty arg x)] => ?sfdsfd_2
-                --  [(DefaultCase x)] => ?sfdsfd_
-                --  _ => throw $ InternalError $ "Can't substitute term for " ++ show (nameAt idx p) ++ " because there are ambiguous alternatives"
-                throw $ InternalError $ "Can't substitute term for " ++ show (nameAt idx p) ++ " because we need to pattern match on it"
-  substsEnvTree env (STerm x) = pure $ STerm (substEnv env x)
-  substsEnvTree env (Unmatched msg) = pure $ Unmatched msg
-  substsEnvTree env Impossible = pure $ Impossible
-
-  substsEnvAlt : {drop, vars, outer : _} ->
-               SubstEnv drop vars -> CaseAlt (outer ++ drop ++ vars) ->
-               Core (CaseAlt (outer ++ vars))
-  substsEnvAlt env (ConCase x tag args y)
-    = do sc' <- substsEnvTree {outer=args++outer} env $
-                  rewrite sym (appendAssociative args outer (drop++vars)) in y
-         let sc' = rewrite (appendAssociative args outer vars) in sc'
-         pure $ ConCase x tag args sc'
-  substsEnvAlt env (QuoteCase ty arg x) = pure $ QuoteCase ty arg !(substsEnvTree {outer=ty::arg::outer} env x)
-  substsEnvAlt env (DefaultCase x) = pure $ DefaultCase !(substsEnvTree env x)
-
-export
-substsTree : {drop, vars : _} ->
-             SubstEnv drop vars -> CaseTree (drop ++ vars) -> Core (CaseTree vars)
-substsTree env tm = substsEnvTree {outer = []} env tm
-
 -- Patterns, which arise from LHS expressions, and are converted to
 -- case trees
 public export

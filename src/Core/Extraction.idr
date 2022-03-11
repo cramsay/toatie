@@ -61,7 +61,7 @@ mutual
   extractionDef ty (TCon x tag arity cons) = pure $ TCon x tag (extractionArity ty) cons
   extractionDef _  Hole = pure Hole
   extractionDef _  (Guess guess constraints) = pure $ Guess (extraction guess) constraints -- TODO update constraints or forbid this
-  extractionDef ty (PMDef args ct) = pure $ PMDef args !(extractTree (erasedVars 0 ty) ct)
+  extractionDef ty (PMDef args ct rt pats) = pure $ PMDef args ct !(extractTree (erasedVars 0 ty) rt) pats
 
   extractTree : {args : _} -> List Nat -> CaseTree args -> Core (CaseTree args)
   extractTree es (Case idx p scTy xs)
@@ -71,12 +71,12 @@ mutual
                   => do -- substitute args as eraseds and call sc
                         let es' = [0 .. length args] ++ map (+(length args)) es
                         sc' <- extractTree es' sc
-                        pure $ substsTree (substsEnvArgs args) sc'
+                        ?extractTreeC --pure $ substsTree (substsEnvArgs args) sc'
                 [(QuoteCase ty arg sc)]
                   => -- substitute ty and arg as erased args and call sc
                      do let es' = 0 :: 1 :: map (+2) es
                         sc' <- extractTree es' sc
-                        pure $ substsTree [Erased, Erased] sc'
+                        ?extractTreeQ --pure $ substsTree [Erased, Erased] sc'
                 [(DefaultCase sc)]
                   => extractTree es sc -- We don't introduce any new projected vars here, so we're all good
                 _ => throw $ InternalError $ "Case on erased argument doesn't have only one branch: " ++ show (nameAt idx p)

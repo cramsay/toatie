@@ -12,6 +12,8 @@ public export
 data Def : Type where
     None : Def -- Not yet defined
     PMDef : (args : List Name) -> (treeCT : CaseTree args) ->
+                                  (treeRT : CaseTree args) ->
+           (pats : List (vs ** (Env Term vs, Term vs, Term vs))) ->
             Def -- Ordinary function definition
     DCon :              (tag : Int) -> (arity : Nat) -> Def -- data constructor
     TCon : TyConInfo -> (tag : Int) -> (arity : Nat) -> (cons : List Name) -> Def
@@ -141,7 +143,7 @@ branch
 export
 Show Def where
   show None = "None"
-  show (PMDef args treeCT) = "PMDef [" ++ show args ++ "] " ++ show treeCT
+  show (PMDef args treeCT _ _) = "PMDef [" ++ show args ++ "] " ++ show treeCT
   show (DCon tag arity) = "DCon " ++ show tag ++ " " ++ show arity
   show (TCon x tag arity cons) = "TCon " ++ show x ++ " " ++ show tag ++ " " ++ show arity
   show Hole = "Hole"

@@ -248,11 +248,11 @@ parameters (defs : Defs)
               Def ->
               Stack free -> (def : Lazy (NF free)) ->
               Core (NF free)
-    evalDef env (PMDef args tree) stk def
+    evalDef env (PMDef args treect _ _) stk def
         = case argsFromStack args stk of
                Nothing => pure def
                Just (locs', stk') =>
-                    do Result res <- evalTree env locs' stk' tree
+                    do Result res <- evalTree env locs' stk' treect
                             | _ => pure def
                        pure res
     evalDef env _ stk def = pure def

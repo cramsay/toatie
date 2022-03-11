@@ -93,7 +93,7 @@ dataConsForType env ty
   substSolvedMetaArgs env (Bind n b@(Pi s i ty) sc) (m :: metas)
     = do -- check if this meta has been solved
          defs <- get Ctxt
-         Just (MkGlobalDef _ (PMDef [] (STerm tm))) <- lookupDef m defs -- TODO Should I be assuming that args is empty?! Works for most of my examples so far...
+         Just (MkGlobalDef _ (PMDef [] _ (STerm tm) _)) <- lookupDef m defs -- TODO Should I be assuming that args is empty?! Works for most of my examples so far...
            | _ => -- Wasn't solved, so continue
                   do sc' <- substSolvedMetaArgs (b::env) sc metas
                      pure $ Bind n b sc'

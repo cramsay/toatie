@@ -441,6 +441,10 @@ mutual
         Nothing => traverse_ (checkQuoteUsageAlt quotes) alts
   checkQuoteUsageCase quotes _ = pure ()
 
+toPats : Clause -> (vs ** (Env Term vs, Term vs, Term vs))
+toPats (MkClause {vars} env lhs rhs)
+  = (_ ** (env, lhs, rhs))
+
 export
 processDef : {auto c : Ref Ctxt Defs} ->
              {auto u : Ref UST UState} ->
@@ -460,7 +464,8 @@ processDef n clauses
          -- TODO warn for unreachable clauses
 
          -- Update the definition with the compiled tree
-         updateDef n (record { definition = PMDef cargs tree_ct })
+         let pats = map toPats (rights chkcs)
+         updateDef n (record { definition = PMDef cargs tree_ct tree_ct pats})
 
          -- check coverage
          IsCovering <- checkCoverage n (type gdef) chkcs
@@ -489,6 +494,7 @@ processDef n clauses
          coreLift $ putStrLn $ "Complete ----------------------"
          coreLift $ putStrLn $ "Args = " ++ show cargs
          coreLift $ putStrLn $ "Tree = " ++ show tree_ct
+         coreLift $ putStrLn $ "Pats = " ++ show pats
          coreLift $ putStrLn $ "Processed " ++ show n
   where
 
