@@ -87,7 +87,7 @@ parameters (defs : Defs)
              evalLocClosure env stk tm'
     eval env locs (Escape tm) stk
         = do -- Version for single eval on escaped term
-             tm' <- eval env locs tm stk
+             tm' <- eval env locs tm []
              ---- Version for full eval.quote.eval on escaped term
              --tmNorm <- quoteGenNF !(newRef QVar 0) defs None env !(eval env locs tm [])
              --tm' <- eval env locs (weakenNs vars tmNorm) stk
@@ -95,7 +95,7 @@ parameters (defs : Defs)
                -- Resolve Escaped NQuote to new local var
                (NQuote _ arg) => eval env (arg :: locs) (Local {name = UN "fvar"} _ First) stk
                -- Keep NEscape tag for any other (probably stuck) terms
-               otherwise    => pure $ NEscape tm'
+               otherwise    => pure $ NEscape tm' stk
 
     evalLocClosure : {free : _} ->
                      Env Term free ->
@@ -389,11 +389,12 @@ mutual
            pure $ Quote ty' tm'
   quoteGenNF q defs bound env (NCode  tm)
       = pure $ TCode !(quoteGenNF q defs bound env tm)
-  quoteGenNF q defs bound env (NEscape tm)
-      = do case tm of
+  quoteGenNF q defs bound env (NEscape tm args)
+      = do args' <- quoteArgs q defs bound env args
+           case tm of
              NQuote ty arg => do argNf <- evalClosure defs arg
-                                 quoteGenNF q defs bound env argNf
-             otherwise => pure $ Escape !(quoteGenNF q defs bound env tm)
+                                 pure $ apply !(quoteGenNF q defs bound env argNf) args'
+             otherwise => pure $ apply (Escape !(quoteGenNF q defs bound env tm)) args'
 
 export
 Quote NF where

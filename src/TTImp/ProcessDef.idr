@@ -39,7 +39,10 @@ mutual
            else anyM (mismatch defs) (zipWith (curry $ mapHom snd) xargs yargs)
   mismatchNF defs (NCode  x) (NCode  y) = mismatchNF defs x y
   mismatchNF defs (NQuote _ x) (NQuote _ y) = mismatchNF defs !(evalClosure defs x) !(evalClosure defs y)
-  mismatchNF defs (NEscape x) (NEscape y) = mismatchNF defs x y
+  mismatchNF defs (NEscape x xargs) (NEscape y yargs)
+       = do False <- mismatchNF defs x y
+              | True => pure True
+            anyM (mismatch defs) (zipWith (curry $ mapHom snd) xargs yargs)
   mismatchNF _ _ _ = pure False
 
   mismatch : {auto c : Ref Ctxt Defs} ->

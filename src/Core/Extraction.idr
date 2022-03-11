@@ -65,6 +65,9 @@ mutual
 
   extractTree : {args : _} -> List Nat -> CaseTree args -> Core (CaseTree args)
   extractTree es (Case idx p scTy xs)
+    = do alts' <- traverse (extractAlt es) xs
+         pure $ Case idx p (extraction scTy) alts'
+  {-
     = if idx `elem` es
          then case xs of
                 [(ConCase n tag args sc)]
@@ -86,7 +89,7 @@ mutual
     where
     substsEnvArgs : (args : List Name) -> SubstEnv args var
     substsEnvArgs [] = []
-    substsEnvArgs (a::as) = Erased :: substsEnvArgs as
+    substsEnvArgs (a::as) = Erased :: substsEnvArgs as -}
   extractTree es (STerm x)            = pure . STerm $ extraction x
   extractTree es (Unmatched msg)      = pure $ Unmatched msg
   extractTree es Impossible           = pure $ Impossible

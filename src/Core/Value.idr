@@ -41,7 +41,7 @@ mutual
        -- Staging constructs
        NQuote   : (ty : Closure vars) -> (tm :Closure vars) -> NF vars
        NCode    : NF vars -> NF vars
-       NEscape  : NF vars -> NF vars -- Perhaps we need a NEval too? -- Nah, that's only on closed terms, so we can always evalute it straight away.
+       NEscape  : NF vars -> List (AppInfo, Closure vars) -> NF vars -- Perhaps we need a NEval too? -- Nah, that's only on closed terms, so we can always evalute it straight away.
 
 export
 {free : _} -> Show (NHead free) where
@@ -82,4 +82,4 @@ export
   show (NType) = "Type"
   show (NQuote _ _) = "NQuote [closure]"
   show (NCode  x) = "NCode " ++ show x
-  show (NEscape x) = "NEscape " ++ show x
+  show (NEscape x stk) = "NEscape " ++ show x ++ " [" ++ show (length stk) ++ " closures]"

@@ -14,9 +14,11 @@ xor I I = O
 circXor : <Bit -> Bit -> Bit>
 circXor = [| xor |]
 
-twoNots : < Vect 2 Bit -> Vect 2 Bit >
-twoNots = unrollMap 2 {_} {_} [| xor I |]
-
+-- Looks good! We introduce new names for only the head and tail args
 fst : Vect 2 Bit -> Bit
 pat x, xs =>
   fst (VCons {Bit} {1} x xs) = x
+
+-- Looks good!
+twoNots : < Vect 2 Bit -> Vect 2 Bit >
+twoNots = unrollMap 2 {_} {_} [| xor I |]

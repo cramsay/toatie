@@ -662,7 +662,10 @@ mutual
           then unifyArgs mode env xs ys
           else convertError env (NTCon x ix tagx ax xs) (NTCon y iy tagy ay ys)
   unifyNoEta mode env (NCode   x) (NCode   y) = unify mode env x y
-  unifyNoEta mode env (NEscape x) (NEscape y) = unify mode env x y
+  unifyNoEta mode env (NEscape x xargs) (NEscape y yargs)
+    = do cs <- unifyArgs mode env xargs yargs
+         res <- unify mode env x y
+         pure $ union cs res
   unifyNoEta mode env (NQuote ty x) (NQuote ty' y) = unifyArgs mode env [(AExplicit, ty) ,(AExplicit, x)]
                                                                         [(AExplicit, ty'),(AExplicit, y)]
   unifyNoEta mode env x@(NApp fx@(NMeta _ _) axs)

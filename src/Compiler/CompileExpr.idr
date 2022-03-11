@@ -129,7 +129,7 @@ mutual
          Just gdef <- lookupDef n defs
            | Nothing => throw $ GenericMsg $ "Name undefined in context: " ++ show n
          case definition gdef of
-           (PMDef args _ treeCT _) => pure $ CApp (CRef n) []
+           (PMDef args _ treeCT _) => pure $ CRef n
            (DCon tag arity) =>  pure $ CCon n []
            (TCon x tag arity cons) => pure $ CCon n []
            def => throw $ GenericMsg $ "Cannot compile definition to CExp: " ++ show def
@@ -146,8 +146,6 @@ mutual
          a <- numArgs defs f
          pure $ expandToArity a f' args'
 
-
-mutual
   conCases : {vars : _} ->
              {auto c : Ref Ctxt Defs} ->
              Name -> List (CaseAlt vars) ->
@@ -200,27 +198,27 @@ mutual
          pure scNoPrjArg
   toCExpTree n (Case idx p scTy alts@((DefaultCase sc) :: _)) = toCExpTree n sc
 
-toCDef : {auto c : Ref Ctxt Defs} ->
-         Name -> Term [] -> Def ->
-         Core CDef
-toCDef n ty (PMDef args _ treeCT _) -- TODO How should we handle pattern vars?
-  = do let erased = erasedArgs ty
-       let (args' ** p) = mkSub 0  args erased
-       comptree <- toCExpTree n treeCT
-       ty' <- toCExp n ty
-       pure $ MkFun args' ty' (shrinkCExp p comptree)
-toCDef n ty (DCon tag _)
-  = do let arity = extractionArity ty
-       pure $ MkCon (Just tag) arity
-toCDef n ty (TCon x tag _ cons)
-  = do let arity = extractionArity ty
-       pure $ MkCon (Just tag) arity
-toCDef n ty Hole
-  = throw $ GenericMsg $ "Cannot compile a Hole to CDef: " ++ show n
-toCDef n ty (Guess guess constraints)
-  = throw $ GenericMsg $ "Cannot compile a Guess to CDef: " ++ show n
-toCDef n ty None
-  = throw $ GenericMsg $ "Cannot compile a None to CDef: " ++ show n
+  toCDef : {auto c : Ref Ctxt Defs} ->
+           Name -> Term [] -> Def ->
+           Core CDef
+  toCDef n ty (PMDef args _ treeCT _) -- TODO How should we handle pattern vars?
+    = do let erased = erasedArgs ty
+         let (args' ** p) = mkSub 0  args erased
+         comptree <- toCExpTree n treeCT
+         ty' <- toCExp n ty
+         pure $ MkFun args' ty' (shrinkCExp p comptree)
+  toCDef n ty (DCon tag _)
+    = do let arity = extractionArity ty
+         pure $ MkCon (Just tag) arity
+  toCDef n ty (TCon x tag _ cons)
+    = do let arity = extractionArity ty
+         pure $ MkCon (Just tag) arity
+  toCDef n ty Hole
+    = throw $ GenericMsg $ "Cannot compile a Hole to CDef: " ++ show n
+  toCDef n ty (Guess guess constraints)
+    = throw $ GenericMsg $ "Cannot compile a Guess to CDef: " ++ show n
+  toCDef n ty None
+    = throw $ GenericMsg $ "Cannot compile a None to CDef: " ++ show n
 
 ||| Given a name, look up an expression, and compile it to a CExp in the environment
 export
