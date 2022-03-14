@@ -69,7 +69,7 @@ parameters (defs : Defs)
     eval env locs (Bind x (Let s tm ty) scope) stk
         = eval env (MkClosure locs env tm :: locs) scope stk
     eval env locs (Bind x b scope) stk
-        = do b' <- traverse (\tm => eval env locs tm []) b
+        = do let b' = map (MkClosure locs env) b
              pure $ NBind x b'
                       (\defs', arg => evalTop defs' env (arg :: locs) scope stk)
     eval env locs (App info fn arg) stk
@@ -344,23 +344,23 @@ mutual
 
   quoteBinder : {bound, free : _} ->
                 Ref QVar Int -> Defs -> Bounds bound ->
-                Env Term free -> Binder (NF free) ->
+                Env Term free -> Binder (Closure free) ->
                 Core (Binder (Term (bound ++ free)))
   quoteBinder q defs bounds env (Lam s p ty)
-      = do ty' <- quoteGenNF q defs bounds env ty
+      = do ty' <- quoteGenNF q defs bounds env !(evalClosure defs ty)
            pure (Lam s p ty')
   quoteBinder q defs bounds env (Pi s p ty)
-      = do ty' <- quoteGenNF q defs bounds env ty
+      = do ty' <- quoteGenNF q defs bounds env !(evalClosure defs ty)
            pure (Pi s p ty')
   quoteBinder q defs bounds env (Let s val ty)
-      = do val' <- quoteGenNF q defs bounds env val
-           ty'  <- quoteGenNF q defs bounds env ty
+      = do val' <- quoteGenNF q defs bounds env !(evalClosure defs val)
+           ty'  <- quoteGenNF q defs bounds env !(evalClosure defs ty)
            pure (Let s val' ty')
   quoteBinder q defs bounds env (PVar s i ty)
-      = do ty' <- quoteGenNF q defs bounds env ty
+      = do ty' <- quoteGenNF q defs bounds env !(evalClosure defs ty)
            pure (PVar s i ty')
   quoteBinder q defs bounds env (PVTy s ty)
-      = do ty' <- quoteGenNF q defs bounds env ty
+      = do ty' <- quoteGenNF q defs bounds env !(evalClosure defs ty)
            pure (PVTy s ty')
 
   quoteGenNF q defs bound env (NBind n b sc)
@@ -460,7 +460,7 @@ mutual
 
   convBinders : {vars : _} ->
                 Ref QVar Int -> Defs -> Env Term vars ->
-                Binder (NF vars) -> Binder (NF vars) -> Core Bool
+                Binder (Closure vars) -> Binder (Closure vars) -> Core Bool
   convBinders q defs env (Pi _ ix tx) (Pi _ iy ty)
       = convGen q defs env tx ty
   convBinders q defs env (Lam _ ix tx) (Lam _ iy ty)

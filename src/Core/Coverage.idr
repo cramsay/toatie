@@ -205,6 +205,7 @@ getMissingAlts defs (NType) alts
            else pure [DefaultCase (Unmatched "Coverage check")]
 getMissingAlts defs nfty alts
     = do allCons <- getCons defs nfty
+         --coreLift $ putStrLn $ "Got cons for " ++ show nfty ++ " = " ++ show allCons
          pure (filter (noneOf alts)
                  (map (mkAlt (Unmatched "Coverage check") . snd) allCons))
   where

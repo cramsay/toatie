@@ -332,12 +332,15 @@ nextNames {vars} root ((pi, p) :: pats) fty
           fa_tys <- the (Core (Maybe (NF vars), ArgType vars)) $
               case fty of
                    Nothing => pure (Nothing, Unknown)
-                   Just (NBind _ (Pi _ _ NErased) fsc) =>
-                      pure (Just !(fsc defs (toClosure env (Ref Bound n))),
-                        Unknown)
+                   --Just (NBind _ (Pi _ _ NErased) fsc) =>
+                   --   pure (Just !(fsc defs (toClosure env (Ref Bound n))),
+                   --     Unknown)
                    Just (NBind _ (Pi _ _ farg) fsc) =>
-                      pure (Just !(fsc defs (toClosure env (Ref Bound n))),
-                        Known !(quote empty env farg))
+                      do farg <- evalClosure defs farg
+                         case farg of
+                           NErased => pure (Just !(fsc defs (toClosure env (Ref Bound n))), Unknown)
+                           _       => pure (Just !(fsc defs (toClosure env (Ref Bound n))),
+                                            Known !(quote empty env farg))
                    Just t =>
                       pure (Nothing, Stuck !(quote empty env t))
           (args ** ps) <- nextNames {vars} root pats (fst fa_tys)
@@ -404,8 +407,8 @@ groupCons fn pvars cs
     -- the same name in each of the clauses
     addConG {vars'} {todo'} n tag pargs pats rhs []
         = do cty <- the (Core (NF vars')) $ if n == UN "->"
-                      then pure $ NBind (MN "_" 0) (Pi 0 Explicit NType) $ -- We don't care about staging here. We only have case trees on top-level defs, i.e. stage 0.
-                              (\d, a => pure $ NBind (MN "_" 1) (Pi 0 Explicit NErased)
+                      then pure $ NBind (MN "_" 0) (Pi 0 Explicit (MkClosure [] (mkEnv vars') TType)) $ -- We don't care about staging here. We only have case trees on top-level defs, i.e. stage 0.
+                              (\d, a => pure $ NBind (MN "_" 1) (Pi 0 Explicit (MkClosure [] (mkEnv vars') Erased))
                                 (\d, a => pure NType))
                       else do defs <- get Ctxt
                               Just t <- lookupDef n defs
@@ -447,9 +450,9 @@ groupCons fn pvars cs
                 (acc : List (Group vars' todo')) ->
                 Core (List (Group vars' todo'))
     addQuoteG pty parg pats rhs []
-      = do let dty = NBind (MN "a" 0) (Pi 0 Explicit NType) $ --TODO We should really set stages correctly here
-                       (\d, a => do a' <- evalClosure d a
-                                    pure (NBind (MN "x" 0) (Pi 0 Explicit a')
+      = do let dty = NBind (MN "a" 0) (Pi 0 Explicit (MkClosure [] (mkEnv vars') TType)) $ --TODO We should really set stages correctly here
+                       (\d, a => do --a' <- evalClosure d a
+                                    pure (NBind (MN "x" 0) (Pi 0 Explicit a)
                                              (\dv, av => do av' <- evalClosure dv av
                                                             pure (NCode av'))))
 

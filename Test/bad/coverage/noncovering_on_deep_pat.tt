@@ -1,0 +1,10 @@
+import Data.Nat
+import Data.Vect
+
+not : Bool -> Bool
+not False = True
+not True = False
+
+maybeNot : Vect 2 Bool -> Bool
+pat b =>
+  maybeNot [False, b] = b

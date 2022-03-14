@@ -29,7 +29,7 @@ mutual
   -- we can wait until necessary to reduce constructor arguments
   public export
   data NF : List Name -> Type where
-       NBind    : (x : Name) -> Binder (NF vars) ->
+       NBind    : (x : Name) -> Binder (Closure vars) ->
                   (Defs -> Closure vars -> Core (NF vars)) -> NF vars
        NApp     : NHead vars -> List (AppInfo, Closure vars) -> NF vars
        NDCon    : Name -> (tag : Int) -> (arity : Nat) ->

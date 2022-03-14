@@ -290,7 +290,7 @@ getArgTypes : {vars : _} ->
 getArgTypes defs (NBind n (Pi _ _ ty) sc) (a :: as)
   = do Just scTys <- getArgTypes defs !(sc defs a) as
          | Nothing => pure Nothing
-       pure (Just (ty :: scTys))
+       pure (Just (!(evalClosure defs ty) :: scTys))
 getArgTypes _ _ [] = pure (Just [])
 getArgTypes _ _ _ = pure Nothing
 
@@ -519,9 +519,9 @@ mutual
                     {vars : _} ->
                     UnifyMode ->
                     Env Term vars ->
-                    Name -> Binder (NF vars) ->
+                    Name -> Binder (Closure vars) ->
                     (Defs -> Closure vars -> Core (NF vars)) ->
-                    Name -> Binder (NF vars) ->
+                    Name -> Binder (Closure vars) ->
                    (Defs -> Closure vars -> Core (NF vars)) ->
                     Core UnifyResult
   unifyBothBinders mode env x (Pi sx ix tx) scx y (Pi sy iy ty) scy

@@ -44,7 +44,7 @@ mutual
                 Core (Term [])
   processArgs fn (NBind x (Pi s i ty) sc) (a::args)
     = do defs <- get Ctxt
-         a' <- mkTerm a (Just $ !(nfToClosure ty)) []
+         a' <- mkTerm a (Just $ ty) []
          processArgs (App (piInfoToAppInfo i) fn a') !(sc defs (toClosure [] a')) args
   processArgs fn nty [] = pure fn
   processArgs fn nty args = badClause fn args

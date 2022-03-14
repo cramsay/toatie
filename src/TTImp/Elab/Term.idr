@@ -233,7 +233,7 @@ checkTerm env (IApp i f a) exp
                        -- Check the argument type, given the expected argument
                        -- type
                        (atm, gaty) <- checkTerm env a
-                                                (Just (glueBack defs env ty))
+                                                (Just (glueBack defs env !(evalClosure defs ty)))
 
                        -- FIXME do check implicitness unless the mode says we're checking a term we've generated...
                        --       this way we don't have to tag our applications correctly. Bit of a hack
