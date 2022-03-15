@@ -7,6 +7,7 @@ import Core.UnifyState
 import TTImp.ProcessData
 import TTImp.ProcessDef
 import TTImp.ProcessType
+import TTImp.Elab.Check
 
 import TTImp.TTImp
 import TTImp.Parser
@@ -18,17 +19,6 @@ import Data.List1
 import Data.List
 import System.File
 import System.Directory
-
-export
-data Mods : Type where
-
-public export
-DirName : Type
-DirName = FileName
-
-public export
-ModName : Type
-ModName = FileName
 
 export
 getBaseDir : FileName -> DirName
@@ -91,18 +81,20 @@ mutual
          -- Try processing module
          Right decls <- coreLift $ parseFile fname' (do p <- prog fname'; eoi; pure p)
            | Left err => coreLift $ printLn err
-         traverse_ (processDecl dirs) decls
+         traverse_ (process dirs) decls
          checkUndefineds
 
          coreLift $ putStrLn $ "Returning to importer"
 
-  export
-  processDecl : {auto c : Ref Ctxt Defs} ->
+  -- Implements process, declared in TTImp.Elab.Check
+  process : {auto c : Ref Ctxt Defs} ->
                 {auto u : Ref UST UState} ->
                 {auto s : Ref Stg Stage} ->
                 {auto m : Ref Mods (List ModName)} ->
                 List DirName -> ImpDecl -> Core ()
-  processDecl _ (IClaim (MkImpTy n ty)) = processType n ty
-  processDecl _ (IData ddef) = processData ddef
-  processDecl _ (IDef x xs) = processDef x xs
-  processDecl dirs (IImport n) = processImport dirs n
+  process _ (IClaim (MkImpTy n ty)) = processType n ty
+  process _ (IData ddef) = processData ddef
+  process _ (IDef x xs) = processDef x xs
+  process dirs (IImport n) = processImport dirs n
+
+TTImp.Elab.Check.processDecl = process

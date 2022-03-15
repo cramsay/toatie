@@ -17,6 +17,7 @@ import TTImp.Parser
 import TTImp.ProcessDecl
 import TTImp.ProcessData
 import TTImp.TTImp
+import TTImp.Elab.Check
 import Utils.Bits
 
 import Parser.Source

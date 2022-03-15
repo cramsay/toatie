@@ -1,0 +1,30 @@
+import Data.Nat
+import Data.Vect
+
+data Bit : Type where
+  O : Bit
+  I : Bit
+
+and : Bit -> Bit -> Bit
+and O O = O
+and O I = O
+and I O = O
+and I I = I
+
+specAnd : Bit -> Bit
+pat b : Bit => specAnd b = and I b
+
+power : Nat -> Nat -> Nat
+pat m =>
+  power m Z = S Z 
+pat n m =>
+  power m (S n) = mul m (power m n)
+
+power' : Nat -> Nat -> Nat
+pat m =>
+  power' Z m = S Z 
+pat n m =>
+  power' (S n) m = mul m (power' n m)
+
+inc : Nat -> Nat
+pat x => inc x = power' 3 x

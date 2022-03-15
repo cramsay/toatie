@@ -15,6 +15,7 @@ import Core.Unify
 import TTImp.Elab.Check
 import TTImp.TTImp
 import TTImp.Impossible
+import TTImp.PartialEval
 
 import Data.Either
 import Data.Maybe
@@ -490,6 +491,8 @@ mkRunTime n
                Core (vars ** (Env Term vars, Term vars, Term vars))
     toErased (vars ** (env, lhs, rhs))
       = do let lhs' = eraseImps env lhs
+           --let specs = map (\v => (v, 250)) vars
+           rhs <- applySpecialise env Nothing rhs
            let rhs' = eraseImps env rhs
            -- TODO might want to do some transforms here too?
            pure $ (vars ** (env, lhs', rhs'))
