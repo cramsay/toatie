@@ -193,7 +193,10 @@ mutual
          let prjs = concat $ mapMaybe id (map getProjArgs cases)
          case cases of
            [] => pure $ fromMaybe CErased def
-           [(MkConAlt x args sc)] => pure $ wrapWithLets' (MkVar p) x 0 args sc
+           [(MkConAlt x args sc)] => if isNothing def
+                                        then pure $ wrapWithLets' (MkVar p) x 0 args sc
+                                        else do let sc = (CConCase (CLocal p) cases def)
+                                                pure $ wrapWithLets (MkVar p) prjs sc
            _ => do let sc = (CConCase (CLocal p) cases def)
                    pure $ wrapWithLets (MkVar p) prjs sc
       where
