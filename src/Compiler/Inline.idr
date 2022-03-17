@@ -158,7 +158,22 @@ mutual
          pure $ CLet x val' ty' (refToLocal xn x sc')
   eval rec env stk (CApp f args) = eval rec env (!(traverse (eval rec env []) args) ++ stk) f
   eval rec env stk (CCon x args) = pure $ unload stk $ CCon x !(traverse (eval rec env []) args)
-  eval rec env stk (CPrj con field x) = pure $ CPrj con field !(eval rec env [] x)
+  eval rec env stk (CPrj con field sc)
+    = do sc' <- eval rec env [] sc
+         case sc' of
+           CCon scname args => if scname == con
+                                  then getIth field args
+                                  else pure $ CPrj con field sc'
+                                  -- It's OK for scname and con to not match since we specutively
+                                  -- project out terms from clauses
+           _ => pure $ CPrj con field sc'
+    where
+    getIth : Nat -> List (CExp vs) -> Core (CExp vs)
+    getIth Z (arg::args) = pure arg
+    getIth (S n) (arg::args) = getIth n args
+    getIth _ [] = throw $ InternalError $
+                    "Projection term pointing beyond end of arg list: " ++
+                    show (CPrj con field sc)
   eval rec env stk CErased = pure $ unload stk $ CErased
   eval rec env stk (CConCase scr alts def)
     = do scr' <- eval rec env [] scr

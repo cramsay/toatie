@@ -102,7 +102,7 @@ mutual
              Core (CExp vars)
   toCExpTm n (Local idx p) = pure $ CLocal p
   toCExpTm n (Meta x xs)
-    = throw $ GenericMsg $ "Cannot compile unsolved metavar into CExp: " ++ show x
+    = pure CErased --throw $ GenericMsg $ "Cannot compile unsolved metavar into CExp: " ++ show x
       -- Can return CErased if this causes problems
   toCExpTm n (App i f arg) = pure $ CApp !(toCExp n f) [!(toCExp n arg)]
   toCExpTm n TType = pure $ CCon (UN "Type") []
@@ -128,7 +128,8 @@ mutual
     = do defs <- get Ctxt
          Just gdef <- lookupDef n defs
            | Nothing => throw $ GenericMsg $ "Name undefined in context: " ++ show n
-         compileDef n
+         when (isNothing $ compexpr gdef)
+              (compileDef n)
          case definition gdef of
            (PMDef args _ treeCT _) => pure $ CRef n
            (DCon tag arity) =>  pure $ CCon n []
@@ -257,6 +258,9 @@ mutual
 
          when (isJust $ compexpr gdef)
               (pure ())
+
          gdef <- extractionGlobalDef gdef
+         -- Set placeholder compiled expression to prevent loops with mutually recursive definitions
+         setCompiled n (MkCon Nothing 0)
          compexpr <- toCDef n (type gdef) (definition gdef)
          setCompiled n compexpr
