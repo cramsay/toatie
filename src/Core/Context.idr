@@ -3,6 +3,7 @@ module Core.Context
 import Core.CaseTree
 import public Core.Core
 import Core.Env
+import Core.CompileExpr
 import public Core.TT
 
 import Data.SortedMap
@@ -28,10 +29,11 @@ record GlobalDef where
   constructor MkGlobalDef
   type : Term []
   definition : Def
+  compexpr : Maybe CDef
 
 export
 newDef : Term [] -> Def -> GlobalDef
-newDef ty d = MkGlobalDef ty d
+newDef ty d = MkGlobalDef ty d Nothing
 
 -- A mapping from names to definitions
 -- Again there's more to this in Idris 2 since we need to deal with namespaces,
@@ -127,6 +129,15 @@ updateDef n upd
               | Nothing => throw (UndefinedName n)
          addDef n (upd gdef)
 
+export
+setCompiled : {auto c : Ref Ctxt Defs} ->
+              Name -> CDef -> Core ()
+setCompiled n cexp
+  = do defs <- get Ctxt
+       Just gdef <- lookupDef n defs
+       | Nothing => pure ()
+       ignore $ addDef n (record { compexpr = Just cexp } gdef)
+
 -- Call this before trying alternative elaborations, so that updates to the
 -- context are put in the staging area rather than writing over the mutable
 -- array of definitions.
@@ -151,7 +162,7 @@ Show Def where
 
 export
 Show GlobalDef where
-  show (MkGlobalDef type definition) = show definition ++ " : " ++ show type
+  show (MkGlobalDef type definition compexpr) = show definition ++ " : " ++ show type
 
 export
 Show Defs where

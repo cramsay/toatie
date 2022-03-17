@@ -32,10 +32,10 @@ checkUndefineds : {auto c : Ref Ctxt Defs} ->
 checkUndefineds
   = do defs <- get Ctxt
        traverseDefs_ defs (\(n,gdef) => case gdef of
-                                      (MkGlobalDef type (PMDef args treeCT _ _))     => pure ()
-                                      (MkGlobalDef type (DCon tag arity))        => pure ()
-                                      (MkGlobalDef type (TCon x tag arity cons)) => pure ()
-                                      (MkGlobalDef type _) => throw $ GenericMsg $ "Entry in context doesn't have a definition: " ++ show n
+                                      (MkGlobalDef type (PMDef args treeCT _ _) _) => pure ()
+                                      (MkGlobalDef type (DCon tag arity) _)        => pure ()
+                                      (MkGlobalDef type (TCon x tag arity cons) _) => pure ()
+                                      (MkGlobalDef type _ _) => throw $ GenericMsg $ "Entry in context doesn't have a definition: " ++ show n
                           )
 
 export

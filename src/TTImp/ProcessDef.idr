@@ -179,7 +179,7 @@ findExp bound tm
            (Ref _  n, []) => pure []
            (Ref nt n, args)
               => do defs <- get Ctxt
-                    Just (MkGlobalDef nty _) <- lookupDef n (defs)
+                    Just (MkGlobalDef nty _ _) <- lookupDef n (defs)
                          | Nothing => pure []
                     findExpArg !(nf defs [] nty) args
            (Quote ty tm, []) => findExp bound tm
@@ -472,7 +472,7 @@ mkRunTime : {auto c : Ref Ctxt Defs} ->
             Name -> Core Def
 mkRunTime n
   = do defs <- get Ctxt
-       Just (MkGlobalDef ty (PMDef args treect _ pats)) <- lookupDef n defs
+       Just (MkGlobalDef ty (PMDef args treect _ pats) _) <- lookupDef n defs
          | _ => throw $ InternalError $ "Undefined case tree name when building run-time version: " ++ show n
 
        pats' <- traverse toErased pats

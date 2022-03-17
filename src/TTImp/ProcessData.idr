@@ -68,7 +68,7 @@ dataConsForType env ty
   = do let Just ntcon = getTyConName ty
            | Nothing => throw $ GenericMsg $ "Couldn't determine the type constructor name for type: " ++ show ty
        defs <- get Ctxt
-       Just (MkGlobalDef _ (TCon _ _ _ dcons)) <- lookupDef ntcon defs
+       Just (MkGlobalDef _ (TCon _ _ _ dcons) _) <- lookupDef ntcon defs
          | _ => throw $ InternalError $ "Type constructor name wasn't found in context: " ++ show ntcon
        possibleDCons <- traverse checkConRetTy dcons
        pure $ mapMaybe id possibleDCons
@@ -93,7 +93,7 @@ dataConsForType env ty
   substSolvedMetaArgs env (Bind n b@(Pi s i ty) sc) (m :: metas)
     = do -- check if this meta has been solved
          defs <- get Ctxt
-         Just (MkGlobalDef _ (PMDef [] _ (STerm tm) _)) <- lookupDef m defs -- TODO Should I be assuming that args is empty?! Works for most of my examples so far...
+         Just (MkGlobalDef _ (PMDef [] _ (STerm tm) _) _) <- lookupDef m defs -- TODO Should I be assuming that args is empty?! Works for most of my examples so far...
            | _ => -- Wasn't solved, so continue
                   do sc' <- substSolvedMetaArgs (b::env) sc metas
                      pure $ Bind n b sc'
@@ -106,7 +106,7 @@ dataConsForType env ty
   checkConRetTy : Name -> Core (Maybe (Name, Term []))
   checkConRetTy dcon = do defs <- get Ctxt
                           -- Lookup the data constructor type
-                          Just (MkGlobalDef dconty (DCon tag arity)) <- lookupDef dcon defs
+                          Just (MkGlobalDef dconty (DCon tag arity) _) <- lookupDef dcon defs
                             | _ => throw $ InternalError $ "Data constructor name wasn't found in context: " ++ show dcon
 
                           -- Replace all the args with new metavars
@@ -422,7 +422,7 @@ processData (MkImpData n info tycon datacons)
         convTyConInfo ITyCSimp  = TyConSimp
 
         addConNames : List Name -> GlobalDef -> GlobalDef
-        addConNames cons (MkGlobalDef type (TCon x tag arity _)) = MkGlobalDef type (TCon x tag arity cons)
+        addConNames cons (MkGlobalDef type (TCon x tag arity _) compexpr) = MkGlobalDef type (TCon x tag arity cons) compexpr
         addConNames cons gdef = gdef
 
 {-

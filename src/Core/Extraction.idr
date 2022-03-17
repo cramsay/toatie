@@ -101,7 +101,7 @@ mutual
 
 export
 extractionGlobalDef : GlobalDef -> Core GlobalDef
-extractionGlobalDef (MkGlobalDef ty def) = pure $ MkGlobalDef (extraction ty) !(extractionDef ty def)
+extractionGlobalDef (MkGlobalDef ty def compexpr) = pure $ MkGlobalDef (extraction ty) !(extractionDef ty def) compexpr
 
 export
 extractCtxt : Defs -> Core Defs

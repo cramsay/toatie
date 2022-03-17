@@ -154,7 +154,7 @@ checkTerm env (IPi p mn argTy retTy) exp
          case getTyConName argTytm of
            Nothing => do --coreLift $ putStrLn $ "Couldn't find type con name for " ++ show argTytm
                          pure ()
-           Just tyconn => do Just (MkGlobalDef _ (TCon tyci _ _ _)) <- lookupDef tyconn defs
+           Just tyconn => do Just (MkGlobalDef _ (TCon tyci _ _ _) _) <- lookupDef tyconn defs
                                | _ => throw $ GenericMsg $ " Couldn't find type constructor in context: " ++ show tyconn
                              case tyci of
                                TyConParam => pure () -- Parameter types can appear anywhere

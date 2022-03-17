@@ -3,6 +3,7 @@ module TTImp.Elab.Case
 import Core.CaseTree
 import Core.Context
 import Core.Coverage
+import Core.CompileExpr
 import Core.Env
 import Core.Normalise
 import Core.TT
@@ -162,7 +163,7 @@ caseBlock {vars} mode env scr scrtm scrty alts expected
                                              (const caseretty)
                                              splitOn)
 
-       addDef casen $ MkGlobalDef casefnty None
+       addDef casen $ MkGlobalDef casefnty None Nothing
        let caseRef : Term vars = Ref Func casen
        let applyEnv = applyTo caseRef env
        let appTm : Term vars

@@ -120,10 +120,10 @@ addRefs at ns (Eval x) = addRefs at ns x
 addRefs at ns (Escape x) = addRefs at ns x
 
 getDefRefs : Name -> GlobalDef -> SortedSet Name -> SortedSet Name
-getDefRefs at (MkGlobalDef type (PMDef _ _ _ cls)) ns = foldl union empty $ map (getClauseRefs at ns) cls
+getDefRefs at (MkGlobalDef type (PMDef _ _ _ cls) _) ns = foldl union empty $ map (getClauseRefs at ns) cls
   where getClauseRefs : Name -> SortedSet Name -> (vs ** (Env Term vs, Term vs, Term vs)) -> SortedSet Name
         getClauseRefs at ns (_ ** (_, _, rhs)) = addRefs at ns rhs
-getDefRefs at (MkGlobalDef type _) ns = addRefs at empty type
+getDefRefs at (MkGlobalDef type _ _) ns = addRefs at empty type
 
 -- Get the reducible names in a function to be partially evaluated. In practice,
 -- that's all the functions it refers to
