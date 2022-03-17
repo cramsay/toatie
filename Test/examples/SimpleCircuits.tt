@@ -42,6 +42,14 @@ pat b =>
 circMN : < Vect 2 Bit -> Bit >
 circMN = [| maybeNot |] 
 
+cGate : Bit -> Nat -> Bit -> Bit
+pat a, b => cGate a Z     b = b
+pat b, n => cGate O (S n) b = xor I b
+pat b, n => cGate I (S n) b = xor O b
+
+mycirc : Bit ->  Bit
+mycirc = \a => cGate O 1 a
+
 {- TODO
 
 Why does this compile?

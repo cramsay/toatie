@@ -128,6 +128,7 @@ mutual
     = do defs <- get Ctxt
          Just gdef <- lookupDef n defs
            | Nothing => throw $ GenericMsg $ "Name undefined in context: " ++ show n
+         compileDef n
          case definition gdef of
            (PMDef args _ treeCT _) => pure $ CRef n
            (DCon tag arity) =>  pure $ CCon n []
@@ -246,16 +247,16 @@ mutual
   toCDef n ty None
     = throw $ GenericMsg $ "Cannot compile a None to CDef: " ++ show n
 
-||| Given a name, look up an expression, and compile it to a CExp in the environment
-export
-compileDef : {auto c : Ref Ctxt Defs} -> Name -> Core ()
-compileDef n
-  = do defs <- get Ctxt
-       Just gdef <- lookupDef n defs
-         | Nothing => throw $ InternalError $ "Cannot compile unkonwn name: " ++ show n
+  ||| Given a name, look up an expression, and compile it to a CExp in the environment
+  export
+  compileDef : {auto c : Ref Ctxt Defs} -> Name -> Core ()
+  compileDef n
+    = do defs <- get Ctxt
+         Just gdef <- lookupDef n defs
+           | Nothing => throw $ InternalError $ "Cannot compile unkonwn name: " ++ show n
 
-       when (isJust $ compexpr gdef)
-            (pure ())
-       gdef <- extractionGlobalDef gdef
-       compexpr <- toCDef n (type gdef) (definition gdef)
-       setCompiled n compexpr
+         when (isJust $ compexpr gdef)
+              (pure ())
+         gdef <- extractionGlobalDef gdef
+         compexpr <- toCDef n (type gdef) (definition gdef)
+         setCompiled n compexpr

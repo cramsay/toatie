@@ -10,6 +10,7 @@ import Core.CaseTree
 import Core.Extraction
 import Core.Context
 import Compiler.CompileExpr
+import Compiler.Inline
 
 import TTImp.Elab.Term
 
@@ -104,7 +105,12 @@ repl = do coreLift $ putStr "> "
                  defs <- get Ctxt
                  extDefs <- extractCtxt defs
                  put Ctxt extDefs
-                 comp <- compileDef name
+                 compileAndInline [name]
+                 extDefs <- get Ctxt
+                 Just gdef <- lookupDef name extDefs
+                   | Nothing => coreLift $ putStrLn $ "Couldn't find context entry for " ++ show name
+                 let Just comp = compexpr gdef
+                       | Nothing => coreLift $ putStrLn $ "Couldn't find compiled expression for " ++ show name
                  coreLift $ putStrLn $ "Compiled to: " ++ show comp
                  put Ctxt defs
                  repl

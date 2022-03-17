@@ -99,6 +99,11 @@ Weaken CConAlt where
   weakenNs ns tm = insertNamesConAlt {outer=[]} ns tm
 
 mutual
+  export
+  embed : CExp args -> CExp (args ++ vars)
+  embed cexp = believe_me cexp
+
+mutual
   -- Shrink the scope of a compiled expression, replacing any variables not
   -- in the remaining set with Erased
   export
@@ -205,6 +210,61 @@ substs env tm = substEnv {outer=[]} env tm
 
 spacerFor : String -> String
 spacerFor s = replicate (length s) ' '
+
+resolveRef : {outer, done : _} ->
+             Bounds bound -> Name ->
+             Maybe (CExp (outer ++ (done ++ bound ++ vars)))
+resolveRef None _ = Nothing
+resolveRef {outer} {vars} {done} (Add {xs} new old bs) n
+  = if n == old
+       then rewrite appendAssociative outer done (new :: xs ++ vars) in
+            let MkNVar p = weakenNVar (outer ++ done) First in
+              Just (CLocal p)
+       else rewrite appendAssociative done [new] (xs ++ vars)
+            in resolveRef {outer=outer} {done=done++[new]} bs n
+
+mutual
+  export
+  mkLocals : {outer, bound : _} -> Bounds bound ->
+             CExp (outer ++ vars) ->
+             CExp (outer ++ (bound ++ vars))
+  mkLocals bs (CLocal p) = let MkNVar p' = addVars bs p in CLocal p'
+  mkLocals bs (CRef x) = maybe (CRef x) id (resolveRef {outer=outer} {done=[]} bs x)
+  mkLocals bs (CLam x ty sc)
+    = let sc' = mkLocals {outer=x::outer} bs sc
+          ty' = mkLocals bs ty
+      in CLam x ty' sc'
+  mkLocals bs (CPi x ty sc)
+    = let sc' = mkLocals {outer=x::outer} bs sc
+          ty' = mkLocals bs ty
+      in CPi x ty' sc'
+  mkLocals bs (CLet x val ty sc)
+    = let sc' = mkLocals {outer=x::outer} bs sc
+          ty' = mkLocals bs ty
+          val' = mkLocals bs val
+      in CLet x val' ty' sc'
+  mkLocals bs (CApp f args)
+    = CApp (mkLocals bs f) (map (mkLocals bs) args)
+  mkLocals bs (CCon x args) = CCon x (map (mkLocals bs) args)
+  mkLocals bs (CConCase scr alts def) = CConCase (mkLocals bs scr)
+                                                 (map (mkLocalsConAlt bs) alts)
+                                                 (map (mkLocals bs) def)
+  mkLocals bs (CPrj con field x) = CPrj con field (mkLocals bs x)
+  mkLocals bs CErased = CErased
+
+  mkLocalsConAlt : {outer, bound : _} -> Bounds bound ->
+                   CConAlt (outer ++ vars) ->
+                   CConAlt (outer ++ (bound ++ vars))
+  mkLocalsConAlt bs (MkConAlt x args tm)
+    = let sc' : CExp ((args ++ outer) ++ vars)
+              = rewrite sym (appendAssociative args outer vars) in tm
+      in MkConAlt x args (rewrite appendAssociative args outer (bound ++ vars) in
+                          mkLocals {outer=(args ++ outer)} bs sc')
+
+export
+refsToLocals : {bound : _} -> Bounds bound -> CExp vars -> CExp (bound ++ vars)
+refsToLocals None tm = tm
+refsToLocals bs y = mkLocals {outer=[]} bs y
 
 mutual
   showCExp : {vars : _} -> String -> CExp vars -> String
