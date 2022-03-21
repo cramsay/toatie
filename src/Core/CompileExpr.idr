@@ -267,6 +267,51 @@ refsToLocals None tm = tm
 refsToLocals bs y = mkLocals {outer=[]} bs y
 
 mutual
+
+  export
+  {vars : _} -> Eq (CExp vars) where
+     (CLocal {idx} p)   == (CLocal {idx=idx'} p') = idx == idx'
+     (CRef x)           == (CRef x') = x == x'
+     (CLam x ty sc)     == (CLam x' ty' sc')
+       = case nameEq x x' of
+           Nothing => False
+           Just Refl => ty == ty' && sc == sc'
+     (CPi x ty sc) == (CPi x' ty' sc')
+       = case nameEq x x' of
+           Nothing => False
+           Just Refl => ty == ty' && sc == sc'
+     (CLet x val ty sc) == (CLet x' val' ty' sc')
+       = case nameEq x x' of
+           Nothing => False
+           Just Refl => ty == ty' && sc == sc' && val == val'
+     (CApp f args) == (CApp f' args')
+       = f == f' && args == args'
+     (CCon x args) == (CCon x' args')
+       = x == x' && args == args'
+     (CPrj con field x) == (CPrj con' field' x')
+       = con == con' && field == field' && x == x'
+     CErased == CErased = True
+     (CConCase scr alts def) == (CConCase scr' alts' def')
+       = scr == scr' && alts == alts' && def == def'
+     _ == _ = False
+
+  export
+  {vars : _} -> Eq (CConAlt vars) where
+     (MkConAlt x args sc) == (MkConAlt x' args' sc')
+        = case namesEq args args' of
+            Nothing   => False
+            Just Refl => x == x' && sc == sc'
+
+  export
+  Eq CDef where
+    (MkFun args ty x) == (MkFun args' ty' x')
+      = case namesEq args args' of
+          Nothing => False
+          Just Refl => ty == ty' && x == x'
+    (MkCon tag arity) == (MkCon tag' arity') = tag  == tag'  && arity == arity'
+    _ == _ = False
+
+mutual
   showCExp : {vars : _} -> String -> CExp vars -> String
   showCExp indent (CLocal {idx} p) = indent ++ "(local " ++ show (nameAt idx p) ++ ")"
   showCExp indent (CRef x) = indent ++ "(ref " ++ show x ++ ")"

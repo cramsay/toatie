@@ -18,6 +18,8 @@ import Libraries.Data.LengthMatch
 NameSet : Type
 NameSet = SortedSet Name
 
+data Progress : Type where
+
 data EEnv : List Name -> List Name -> Type where
      Nil : EEnv free []
      (::) : CExp free -> EEnv free vars -> EEnv free (x :: vars)
@@ -93,6 +95,7 @@ mutual
 mutual
   evalLocal : {vars, free : _} ->
               {auto c : Ref Ctxt Defs} ->
+              {auto p : Ref Progress Bool} ->
               {auto l : Ref LVar Int} ->
               List Name -> Stack free ->
               EEnv free vars ->
@@ -108,6 +111,7 @@ mutual
 
   tryApply : {vars, free : _} ->
              {auto c : Ref Ctxt Defs} ->
+             {auto p : Ref Progress Bool} ->
              {auto l : Ref LVar Int} ->
              List Name -> Stack free -> EEnv free vars -> CDef ->
              Core (Maybe (CExp free))
@@ -123,6 +127,7 @@ mutual
 
   eval : {vars, free : _} ->
          {auto c : Ref Ctxt Defs} ->
+         {auto p : Ref Progress Bool} ->
          {auto l : Ref LVar Int} ->
          List Name -> EEnv free vars -> Stack free -> CExp (vars ++ free) ->
          Core (CExp free)
@@ -135,8 +140,10 @@ mutual
                | Nothing => pure (unload stk (CRef n))
          let arity = getArity def
          if (not (n `elem` rec))
-            then do ap <- tryApply (n :: rec) stk env def
-                    pure $ fromMaybe (unloadApp arity stk (CRef n)) ap
+            then do Just ap <- tryApply (n :: rec) stk env def
+                      | Nothing => pure $ unloadApp arity stk (CRef n)
+                    put Progress True
+                    pure ap
             else pure $ unloadApp arity stk (CRef n)
   eval rec env [] (CLam x ty sc)
     = do xn <- genName "lamv"
@@ -169,7 +176,8 @@ mutual
            _ => pure $ CPrj con field sc'
     where
     getIth : Nat -> List (CExp vs) -> Core (CExp vs)
-    getIth Z (arg::args) = pure arg
+    getIth Z (arg::args) = do put Progress True
+                              pure arg
     getIth (S n) (arg::args) = getIth n args
     getIth _ [] = throw $ InternalError $
                     "Projection term pointing beyond end of arg list: " ++
@@ -178,7 +186,9 @@ mutual
   eval rec env stk (CConCase scr alts def)
     = do scr' <- eval rec env [] scr
          let env' = update scr env scr'
-         Nothing <- pickAlt rec env' stk scr' alts def | Just val => pure val
+         Nothing <- pickAlt rec env' stk scr' alts def
+           | Just val => do put Progress True
+                            pure val
          def' <- traverseOpt (eval rec env' stk) def
          -- TODO Just before returning, we could apply all the case transformations (see CaseOpt.idr in Idris2)
          pure $ CConCase scr' !(traverse (evalAlt rec env' stk) alts) def'
@@ -206,6 +216,7 @@ mutual
 
   evalAlt : {vars, free : _} ->
             {auto c : Ref Ctxt Defs} ->
+            {auto p : Ref Progress Bool} ->
             {auto l : Ref LVar Int} ->
             List Name -> EEnv free vars -> Stack free -> CConAlt (vars ++ free) ->
             Core (CConAlt free)
@@ -217,6 +228,7 @@ mutual
 
   pickAlt : {vars, free : _} ->
             {auto c : Ref Ctxt Defs} ->
+            {auto p : Ref Progress Bool} ->
             {auto l : Ref LVar Int} ->
             List Name -> EEnv free vars -> Stack free ->
             CExp free -> List (CConAlt (vars ++ free)) ->
@@ -289,10 +301,10 @@ fixArity d = pure d
 
 getLams : {done : _} ->
           Int -> SubstCEnv done args -> CExp (done ++ args) ->
-          (args' ** (SubstCEnv args' args, CExp (args' ++ args)))
+          Core (args' ** (SubstCEnv args' args, CExp (args' ++ args)))
 getLams {done} i env (CLam x ty sc)
     = getLams {done = x :: done} (i + 1) (CRef (MN "ext" i) :: env) sc
-getLams {done} i env sc = (done ** (env, sc))
+getLams {done} i env sc = pure (done ** (env, sc))
 
 mkBounds : (xs : _) -> Bounds xs
 mkBounds [] = None
@@ -308,18 +320,19 @@ getNewArgs {done = x :: xs} (_ :: sub) = x :: getNewArgs sub
 -- Annoyingly, the indices will need fixing up because the order in the top
 -- level definition goes left to right (i.e. first argument has lowest index,
 -- not the highest, as you'd expect if they were all lambdas).
-mergeLambdas : (args : List Name) -> CExp args -> (args' ** CExp args')
+mergeLambdas : (args : List Name) -> CExp args -> Core (args' ** CExp args')
 mergeLambdas args (CLam x ty sc)
-    = let (args' ** (env, exp')) = getLams 0 [] (CLam x ty sc)
-          expNs = substs env exp'
-          newArgs = reverse $ getNewArgs env
-          expLocs = mkLocals {outer=args} {vars = []} (mkBounds newArgs)
-                             (rewrite appendNilRightNeutral args in expNs) in
-          (_ ** expLocs)
-mergeLambdas args exp = (args ** exp)
+    = do (args' ** (env, exp')) <- getLams 0 [] (CLam x ty sc)
+         let expNs = substs env exp'
+             newArgs = reverse $ getNewArgs env
+             expLocs = mkLocals {outer=args} {vars = []} (mkBounds newArgs)
+                        (rewrite appendNilRightNeutral args in expNs)
+         pure (_ ** expLocs)
+mergeLambdas args exp = pure (args ** exp)
 
 doEval : {args : _} ->
          {auto c : Ref Ctxt Defs} ->
+         {auto p : Ref Progress Bool} ->
          Name -> CExp args -> Core (CExp args)
 doEval n exp
     = do l <- newRef LVar (the Int 0)
@@ -329,6 +342,7 @@ doEval n exp
          pure exp'
 
 inline : {auto c : Ref Ctxt Defs} ->
+         {auto p : Ref Progress Bool} ->
          Name -> CDef -> Core CDef
 inline n (MkFun args ty def)
     = pure $ MkFun args ty !(doEval n def)
@@ -338,7 +352,7 @@ inline n d = pure d
 mergeLam : {auto c : Ref Ctxt Defs} ->
            CDef -> Core CDef
 mergeLam (MkFun args ty def)
-    = do let (args' ** exp') = mergeLambdas args def
+    = do (args' ** exp') <- mergeLambdas args def
          pure $ MkFun args' CErased exp' -- TODO merge types too!
 mergeLam d = pure d
 
@@ -372,6 +386,7 @@ getRefs _ = empty
 
 export
 inlineDef : {auto c : Ref Ctxt Defs} ->
+            {auto p : Ref Progress Bool} ->
             Name -> Core ()
 inlineDef n
     = do defs <- get Ctxt
@@ -403,21 +418,40 @@ mergeLamDef n
 
 export
 compileAndInline : {auto c : Ref Ctxt Defs} ->
-                      List Name ->
-                      Core ()
+                   List Name ->
+                   Core ()
 compileAndInline ns
     = do defs <- get Ctxt
          traverse_ compileDef ns
-         -- TODO Should I not transform until no progress is made?
-         transform 3 ns -- number of rounds to run transformations.
-                         -- This seems to be the point where not much useful
-                         -- happens any more.
+         -- TODO Should I not transform until no progress is made? And limit it by
+         -- a global inliner limit option, like clash
+         transform 128 ns
   where
+    getDefs : List Name -> Core (List (Maybe CDef))
+    getDefs = traverse (\c => do defs <- get Ctxt
+                                 mgdef <- lookupDef c defs
+                                 pure $ fromMaybe Nothing $ map compexpr mgdef)
     transform : Nat -> List Name -> Core ()
     transform Z cns = pure ()
     transform (S k) cns
-        = do traverse_ inlineDef cns
+        = do p <- newRef Progress False
+             traverse_ inlineDef cns
+             -- We assume that merging lambdas in definitions, and fixing their
+             -- arity, do not create any more opportunities for reduction
+             -- here... we only check if `inlineDef` has made progress
              traverse_ mergeLamDef cns
              --traverse_ caseLamDef cns
              traverse_ fixArityDef cns
+             -- Exit early if no progress was made
+             True <- get Progress
+               | False => pure ()
              transform k cns
+
+{-
+-- TODO Let's lay off the case statement optimisations in toCExp and implement them in something
+        like CaseOpt.idr instead. May be easier since we'll have already reduced con cases with a
+        matching scrutinee. If we remove our let binding code that exists already, what rules do:
+
+        1) The clash folk actually implement?
+        2) The idris2 codebase already implement?
+-}

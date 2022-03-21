@@ -212,8 +212,8 @@ pat w, xn, xsn, yn, ysn, c : Nat,
       |]
 
 uInc2 : {x,y : Nat} ->
-        < Unsigned 2 x > -> < Unsigned 2 y > ->
-           < Unsigned 3 ((plus x y)) >
-pat x, y, xs, ys => uInc2 {x} {y} xs ys = uAddCirc 2 {x} {y} {0} xs ys [| O |]
+        < Unsigned 127 x > -> < Unsigned 127 y > ->
+        < Unsigned 128 ((plus x y)) >
+pat x, y, xs, ys => uInc2 {x} {y} xs ys = uAddCirc 127 {x} {y} {0} xs ys [| O |]
 
 -- \ba => \bb => \bc => \bd => \a : Bit ba => \b : Bit bb => \c : Bit bc => \d : Bit bd => uAddCirc _ {_} {_} {_} [| UCons {_} {_} {_} (UCons {_} {_} {_} UNil a) b |] [| UCons {_} {_} {_} (UCons {_} {_} {_} UNil c) d |] [| O |]
