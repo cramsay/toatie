@@ -71,6 +71,15 @@ largest x (y :: ys)
          then largest y ys
          else largest x ys
 
+wrapWithLets : {vars:_} -> (scr : CExp vars) -> Name -> Nat -> (args : List Name) ->
+               (CExp (args++vars) -> CExp (vars))
+wrapWithLets scr con i (arg::args)
+  = let rec = wrapWithLets scr con (S i) args
+        here = CLet arg (CPrj con i $ weakenNs args $ scr) CErased
+    in rec . here
+wrapWithLets _ _ _ [] = id
+
+
 mutual
   used : {free : _} ->
          {idx : Nat} -> (0 p : IsVar n idx free) -> CExp free -> Int
@@ -169,7 +178,10 @@ mutual
          sc' <- eval rec (CRef xn :: env) [] sc
          val' <- eval rec env [] val
          ty'  <- eval rec env [] ty
-         pure $ CLet x val' ty' (refToLocal xn x sc')
+         case val' of
+           -- We'd just be rebinding the name of a local, so let's not
+           CLocal p => pure $ substs [CLocal p] (refToLocal xn x sc')
+           _        => pure $ CLet x val' ty' (refToLocal xn x sc')
   eval rec env stk (CApp f args) = eval rec env (!(traverse (eval rec env []) args) ++ stk) f
   eval rec env stk (CCon x args) = pure $ unload stk $ CCon x !(traverse (eval rec env []) args)
   eval rec env stk (CPrj con field sc)
@@ -196,8 +208,11 @@ mutual
            | Just val => do pure val
          def' <- traverseOpt (eval rec env' stk) def
          -- TODO Just before returning, we could apply all the case transformations (see CaseOpt.idr in Idris2)
-         let sc' = CConCase scr' !(traverse (evalAlt rec env' stk) alts) def'
-         pure $ sc' --wrapWithLams sc' prjs sc
+         alts' <- traverse (evalAlt rec env' stk) alts
+         let sc' = CConCase scr' alts' def'
+         pure sc'
+         --xn <- genName "cr"
+         --pure $ CLet xn sc' CErased (CLocal First) -- TODO work out types too
     where
       updateLoc : {idx, vs : _} ->
                   (0 p : IsVar x idx (vs ++ free)) ->
@@ -230,7 +245,14 @@ mutual
     = do (bs, env') <- extendLoc env args
          scEval <- eval rec env' stk
                    (rewrite sym (appendAssociative args vars free) in sc)
-         pure $ MkConAlt n args (refsToLocals bs scEval)
+         let args' = boundNames bs
+         let Just compat = areVarsCompatible (args++free) (args'++free)
+               | Nothing => throw $ InternalError $ "What? Generated wrong number of projected args for CConAlt"
+         pure $ MkConAlt n args' (renameVars compat $ refsToLocals bs scEval)
+    where
+      boundNames : Bounds args' -> List Name
+      boundNames None = []
+      boundNames (Add x y bs) = y :: boundNames bs
 
   pickAlt : {vars, free : _} ->
             {auto c : Ref Ctxt Defs} ->
@@ -339,16 +361,17 @@ mergeLambdas args exp = pure (args ** exp)
 doEval : {args : _} ->
          {auto c : Ref Ctxt Defs} ->
          {auto p : Ref InlineFuel Nat} ->
+         {auto l : Ref LVar Int} ->
          Name -> CExp args -> Core (CExp args)
 doEval n exp
-    = do l <- newRef LVar (the Int 0)
-         log "compiler.inline.eval" 10 (show n ++ ": " ++ show exp)
+    = do log "compiler.inline.eval" 10 (show n ++ ": " ++ show exp)
          exp' <- eval [] [] [] exp
          log "compiler.inline.eval" 10 ("Inlined: " ++ show exp')
          pure exp'
 
 inline : {auto c : Ref Ctxt Defs} ->
          {auto p : Ref InlineFuel Nat} ->
+         {auto l : Ref LVar Int} ->
          Name -> CDef -> Core CDef
 inline n (MkFun args ty def)
     = pure $ MkFun args ty !(doEval n def)
@@ -389,10 +412,169 @@ getRefs : CDef -> NameSet
 getRefs (MkFun args _ exp) = addRefs empty exp
 getRefs _ = empty
 
+mutual
+  liftLetsTm : {vars:_} ->
+               {auto l : Ref LVar Int} ->
+               CExp vars ->
+               Core (lvars **
+                      (CExp (lvars++vars) -> CExp vars
+                      -- ^ Block of let bindings without scope
+                      ,CExp (lvars++vars)))
+                      -- ^ Scope
+  liftLetsTm (CLocal p) = pure $ ([] ** (id, CLocal p))
+  liftLetsTm (CRef   x) = pure $ ([] ** (id, CRef x))
+  liftLetsTm (CLam x ty sc) = throw $ InternalError $ "Encountered lambda in liftLetsTm: " ++ show (CLam x ty sc)
+  liftLetsTm (CPi  x ty sc) = throw $ InternalError $ "Encountered pi binder in liftLetsTm: " ++ show (CPi x ty sc)
+  liftLetsTm (CLet x val ty sc)
+    = do (vallv ** (vallets,valsc)) <- liftLetsTm val
+         (sclv  ** (sclets ,scsc )) <- liftLetsTm $ insertNames {outer=[x]} vallv sc
+         let lets' : CExp ((sclv++(x::vallv))++vars) -> CExp vars
+                   = \newsc => vallets . CLet x valsc CErased . sclets $
+                        rewrite appendAssociative sclv (x::vallv) vars in newsc
+         let sc' : CExp ((sclv++(x::vallv))++vars)
+                 = rewrite sym (appendAssociative sclv (x::vallv) vars) in scsc
+         pure $ ((sclv++(x::vallv)) ** (lets',sc'))
+  liftLetsTm (CCon x args)
+    = do (lv ** (lets, args')) <- liftLetsArgs args
+         pure $ (lv ** (lets, CCon x args'))
+  liftLetsTm (CApp f args)
+    = do (lv ** (lets, args')) <- liftLetsArgs args
+         (flv ** (flets, fsc)) <- liftLetsTm $ weakenNs lv f
+         let lets' : CExp ((flv ++ lv) ++ vars) -> CExp vars
+                   = \newsc => lets . flets $ rewrite appendAssociative flv lv vars in newsc
+         let sc' : CExp ((flv ++ lv) ++ vars)
+                 = CApp (rewrite sym (appendAssociative flv lv vars) in fsc) $
+                   map (\a => rewrite sym (appendAssociative flv lv vars) in weakenNs flv a) args'
+         pure $ (flv++lv ** (lets', sc'))
+  liftLetsTm (CPrj con field x)
+    = do (lv ** (lets, x')) <- liftLetsTm x
+         pure $ (lv ** (lets, CPrj con field x'))
+  liftLetsTm CErased = pure ([] ** (id, CErased))
+  liftLetsTm (CConCase scr [alt] Nothing)
+    = do (scrlv ** (scrlets, scrsc)) <- liftLetsTm scr
+         (altlv ** (altlets, altsc)) <- liftLetsAlt scrsc $ weakenNs scrlv alt
+         case altsc of
+           CLocal p =>
+             pure (altlv ++ scrlv **
+                   (\newsc => scrlets . altlets $ rewrite appendAssociative altlv scrlv vars in newsc
+                   ,rewrite sym (appendAssociative altlv scrlv vars) in altsc
+                   )
+             )
+           _ =>
+             do xn <- genName "cr"
+                pure (xn::altlv ++ scrlv **
+                      (scrlets . altlets . rewrite appendAssociative altlv scrlv vars in
+                                           CLet xn (rewrite sym (appendAssociative altlv scrlv vars) in altsc) CErased
+                      , CLocal First --rewrite sym (appendAssociative altlv scrlv vars) in altsc
+                      )
+                     )
+  liftLetsTm (CConCase scr alts def)
+    = do (scrlv ** (scrlets, scrsc)) <- liftLetsTm scr
+         (altlv ** (altlets, alts')) <- liftLetsAlts scrsc $ map (weakenNs scrlv) alts
+         xn <- genName "cr"
+         let concase : CExp ((altlv++scrlv)++vars)
+                     = CConCase (rewrite sym (appendAssociative altlv scrlv vars) in weakenNs altlv scrsc)
+                                (rewrite sym (appendAssociative altlv scrlv vars) in alts')
+                                Nothing
+         Just (deflv ** (deflets, defsc)) <- traverseOpt (liftLetsTm . weakenNs scrlv) def
+           | Nothing => pure (xn :: altlv ++ scrlv **
+                              (scrlets . altlets . rewrite appendAssociative altlv scrlv vars in
+                                                   CLet xn concase CErased
+                          , CLocal First )
+                        )
+         -- TODO include default alt too!
+         pure (xn :: altlv ++ scrlv **
+                (scrlets . altlets . rewrite appendAssociative altlv scrlv vars in
+                                     CLet xn concase CErased
+                , CLocal First )
+              )
+
+  liftLetsArgs : {vars:_} ->
+                 {auto l : Ref LVar Int} ->
+                 List (CExp vars) ->
+                 Core (lvars **
+                       (CExp (lvars++vars) -> CExp vars
+                       -- ^ Block of let bindings without scope
+                       , List (CExp (lvars++vars))))
+                       -- ^ Arguments
+  liftLetsArgs [] = pure ([] ** (id, []))
+  liftLetsArgs (arg :: args)
+    = do (rlv ** (rlets, rargs)) <- liftLetsArgs args
+         (alv ** (alets, aarg)) <- liftLetsTm $ weakenNs rlv arg
+         let lets' : CExp ((alv ++ rlv) ++ vars) -> CExp vars
+                   = \newsc => rlets . alets $ rewrite appendAssociative alv rlv vars in newsc
+         let args' : List (CExp ((alv ++ rlv) ++ vars))
+                   = (rewrite sym (appendAssociative alv rlv vars) in aarg) ::
+                     map (\a => rewrite sym (appendAssociative alv rlv vars) in weakenNs alv a) rargs
+         pure (alv++rlv ** (lets',args'))
+
+  liftLetsAlts : {vars:_} ->
+                 {auto l : Ref LVar Int} ->
+                 CExp vars -> -- Scrutinee
+                 List (CConAlt vars) ->
+                 Core (lvars **
+                       (CExp (lvars++vars) -> CExp vars
+                       -- ^ Block of let bindings without scope
+                       , List (CConAlt (lvars++vars))))
+                       -- ^ Alternatives
+  liftLetsAlts _ [] = pure ([] ** (id, []))
+  liftLetsAlts scr ((MkConAlt conn args tm) :: alts)
+    = do (rlv ** (rlets, ralts)) <- liftLetsAlts (weakenNs args scr) $ map (weakenNs args) alts
+         (alv ** (alets, aalt)) <- liftLetsTm $ weakenNs rlv tm
+         let localLets : CExp (args ++ vars) -> CExp vars
+                       = wrapWithLets scr conn 0 args
+         let lets' : CExp ((alv ++ rlv ++ args) ++ vars) -> CExp vars
+                   = \newsc => localLets . rlets . alets $
+                        rewrite appendAssociative rlv args vars in
+                        rewrite appendAssociative alv (rlv++args) vars in
+                        newsc
+         let alt' : CConAlt ((alv ++ rlv ++ args) ++ vars)
+                  = let tm' : CExp ((alv ++ rlv ++  args) ++ vars)
+                            = rewrite sym (appendAssociative alv (rlv++args) vars) in
+                              rewrite sym (appendAssociative rlv args vars) in
+                              aalt
+                    in MkConAlt conn _ $ weakenNs args tm'
+         let alts' : List (CConAlt ((alv ++ rlv ++ args) ++ vars))
+                   = alt' :: map (\a=> rewrite sym (appendAssociative alv (rlv++args) vars) in
+                                       rewrite sym (appendAssociative rlv args vars) in
+                                       weakenNs alv a) ralts
+         pure (alv++rlv++args ** (lets',alts'))
+
+  -- Specialisation of liftLetsAlts for where we eliminate a single CConAlt
+  liftLetsAlt : {vars:_} ->
+                {auto l : Ref LVar Int} ->
+                CExp vars -> -- Scrutinee
+                CConAlt vars ->
+                Core (lvars **
+                      (CExp (lvars++vars) -> CExp vars
+                      -- ^ Block of let bindings without scope
+                      , CExp (lvars++vars)))
+                      -- ^ Alternatives
+  liftLetsAlt scr (MkConAlt conn args sc)
+    = do (alv ** (alets, asc)) <- liftLetsTm sc
+         let localLets : CExp (args++vars) -> CExp vars
+                       = wrapWithLets scr conn 0 args
+         let lets' : CExp ((alv++args)++vars) -> CExp vars
+                   = \newsc => localLets . alets $
+                        rewrite appendAssociative alv args vars in newsc
+         let sc' : CExp ((alv++args)++vars)
+                 = rewrite sym (appendAssociative alv args vars) in asc
+         pure $ (alv++args ** (lets',sc'))
+
+-- Lift all let bindings out into a single block at the top-level
+liftLets : {auto c : Ref Ctxt Defs} ->
+           {auto l : Ref LVar Int} ->
+           CDef -> Core CDef
+liftLets (MkFun args ty def)
+  = do (_**(lets, sc)) <- liftLetsTm def
+       pure $ MkFun args ty (lets sc)
+liftLets d = pure d
+
 
 export
 inlineDef : {auto c : Ref Ctxt Defs} ->
             {auto p : Ref InlineFuel Nat} ->
+            {auto l : Ref LVar Int} ->
             Name -> Core ()
 inlineDef n
     = do defs <- get Ctxt
@@ -423,6 +605,16 @@ mergeLamDef n
          setCompiled n !(mergeLam cexpr)
 
 export
+liftLetsDef : {auto c : Ref Ctxt Defs} ->
+              {auto l : Ref LVar Int} ->
+              Name -> Core ()
+liftLetsDef n
+    = do defs <- get Ctxt
+         Just def <- lookupDef n defs   | Nothing => pure ()
+         let Just cexpr = compexpr def  | Nothing => pure ()
+         setCompiled n !(liftLets cexpr)
+
+export
 compileAndInline : {auto c : Ref Ctxt Defs} ->
                    List Name ->
                    Core ()
@@ -441,10 +633,12 @@ compileAndInline ns
     transform Z cns = pure ()
     transform (S k) cns
         = do p <- newRef InlineFuel 1024
+             l <- newRef LVar (the Int 0)
              traverse_ inlineDef cns
              traverse_ mergeLamDef cns
              --traverse_ caseLamDef cns
              traverse_ fixArityDef cns
+             traverse_ liftLetsDef cns
 
 {-
 -- TODO Let's lay off the case statement optimisations in toCExp and implement them in something

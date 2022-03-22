@@ -266,6 +266,10 @@ refsToLocals : {bound : _} -> Bounds bound -> CExp vars -> CExp (bound ++ vars)
 refsToLocals None tm = tm
 refsToLocals bs y = mkLocals {outer=[]} bs y
 
+export
+renameVars : CompatibleVars xs ys -> CExp xs -> CExp ys
+renameVars compat tm = believe_me tm -- no names in term, so it's identity
+
 mutual
 
   export
@@ -323,7 +327,7 @@ mutual
               ]
   showCExp indent (CPi x ty sc) = indent ++ "Pi ..."
   showCExp indent (CLet x val ty sc)
-    = indent ++ "(let " ++ show x ++ " = " ++ show val ++ " in\n" ++ showCExp indent sc ++ ")"
+    = indent ++ "(let " ++ show x ++ " =\n" ++ showCExp ("     " ++ indent) val ++ " in\n" ++ showCExp indent sc ++ ")"
   showCExp indent (CApp f args)
     = unlines [ indent ++ "(" ++ show f ++ "["
               , unlines (map (showCExp (indent++"  ")) args) ++ indent ++ "])"
