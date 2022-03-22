@@ -192,15 +192,18 @@ mutual
   toCExpTree n (Case idx p scTy alts@((ConCase _ _ _ _) :: _))
     = do cases <- conCases n alts
          def <- getDefault n alts
-         let prjs = concat $ mapMaybe id (map getProjArgs cases)
+         --let prjs = concat $ mapMaybe id (map getProjArgs cases)
          case cases of
            [] => pure $ fromMaybe CErased def
+           {- The inliner should identify single cases and evaluate them
            [(MkConAlt x args sc)] => if isNothing def
                                         then pure $ wrapWithLets' (MkVar p) x 0 args sc
                                         else do let sc = (CConCase (CLocal p) cases def)
                                                 pure $ wrapWithLets (MkVar p) prjs sc
+           -}
            _ => do let sc = (CConCase (CLocal p) cases def)
-                   pure $ wrapWithLets (MkVar p) prjs sc
+                   pure $ sc
+                   --pure $ wrapWithLets (MkVar p) prjs sc
       where
         getProjArgs : CConAlt vars -> Maybe (List (Name, Name, Nat))
         getProjArgs (MkConAlt x args y) = Just $ map (\(a,i)=>(a, x, i)) (zip args [0..length args])
@@ -210,7 +213,7 @@ mutual
           = CLet arg (CPrj con i $ CLocal p) CErased $
               weaken (wrapWithLets (MkVar p) args tm)
         wrapWithLets _ _ tm = tm
-
+        {-
         wrapWithLets' : (scr : Var vars) -> Name -> Nat -> (args : List Name) -> (CExp (args++vars) -> CExp (vars))
         wrapWithLets' (MkVar p) con i (arg::args)
           = let --rec = wrapWithLets' {outer=outer++[arg]} (MkVar p) con (S i) args
@@ -219,6 +222,7 @@ mutual
                 here = CLet arg (CPrj con i $ weakenNs args $ CLocal p) CErased
             in rec . here
         wrapWithLets' _ _ _ [] = id
+        -}
   toCExpTree n (Case idx p scTy alts@((QuoteCase ty arg sc) :: _))
     = do sc' <- toCExpTree n sc
          let scNoType = shrinkCExp (DropCons SubRefl) sc'

@@ -18,7 +18,7 @@ import Libraries.Data.LengthMatch
 NameSet : Type
 NameSet = SortedSet Name
 
-data Progress : Type where
+data InlineFuel : Type where
 
 data EEnv : List Name -> List Name -> Type where
      Nil : EEnv free []
@@ -95,7 +95,7 @@ mutual
 mutual
   evalLocal : {vars, free : _} ->
               {auto c : Ref Ctxt Defs} ->
-              {auto p : Ref Progress Bool} ->
+              {auto p : Ref InlineFuel Nat} ->
               {auto l : Ref LVar Int} ->
               List Name -> Stack free ->
               EEnv free vars ->
@@ -111,7 +111,7 @@ mutual
 
   tryApply : {vars, free : _} ->
              {auto c : Ref Ctxt Defs} ->
-             {auto p : Ref Progress Bool} ->
+             {auto p : Ref InlineFuel Nat} ->
              {auto l : Ref LVar Int} ->
              List Name -> Stack free -> EEnv free vars -> CDef ->
              Core (Maybe (CExp free))
@@ -127,7 +127,7 @@ mutual
 
   eval : {vars, free : _} ->
          {auto c : Ref Ctxt Defs} ->
-         {auto p : Ref Progress Bool} ->
+         {auto p : Ref InlineFuel Nat} ->
          {auto l : Ref LVar Int} ->
          List Name -> EEnv free vars -> Stack free -> CExp (vars ++ free) ->
          Core (CExp free)
@@ -140,9 +140,16 @@ mutual
                | Nothing => pure (unload stk (CRef n))
          let arity = getArity def
          if (not (n `elem` rec))
-            then do Just ap <- tryApply (n :: rec) stk env def
+            then do S k <- get InlineFuel
+                      | Z => throw $ GenericMsg $ "Ran out of fuel when inlining: " ++ show n
+                    put InlineFuel k
+                    Just ap <- tryApply rec stk env def
+                    -- TODO we  _want_ to unroll recursive defs in general
+                    -- (inline case statements make mutually recursive defs)
+                    -- but will need to deal with this when "tying the knot"
+                    -- for synchronous logic
+                    --Just ap <- tryApply (n :: rec) stk env def
                       | Nothing => pure $ unloadApp arity stk (CRef n)
-                    put Progress True
                     pure ap
             else pure $ unloadApp arity stk (CRef n)
   eval rec env [] (CLam x ty sc)
@@ -176,8 +183,7 @@ mutual
            _ => pure $ CPrj con field sc'
     where
     getIth : Nat -> List (CExp vs) -> Core (CExp vs)
-    getIth Z (arg::args) = do put Progress True
-                              pure arg
+    getIth Z (arg::args) = pure arg
     getIth (S n) (arg::args) = getIth n args
     getIth _ [] = throw $ InternalError $
                     "Projection term pointing beyond end of arg list: " ++
@@ -187,11 +193,11 @@ mutual
     = do scr' <- eval rec env [] scr
          let env' = update scr env scr'
          Nothing <- pickAlt rec env' stk scr' alts def
-           | Just val => do put Progress True
-                            pure val
+           | Just val => do pure val
          def' <- traverseOpt (eval rec env' stk) def
          -- TODO Just before returning, we could apply all the case transformations (see CaseOpt.idr in Idris2)
-         pure $ CConCase scr' !(traverse (evalAlt rec env' stk) alts) def'
+         let sc' = CConCase scr' !(traverse (evalAlt rec env' stk) alts) def'
+         pure $ sc' --wrapWithLams sc' prjs sc
     where
       updateLoc : {idx, vs : _} ->
                   (0 p : IsVar x idx (vs ++ free)) ->
@@ -216,7 +222,7 @@ mutual
 
   evalAlt : {vars, free : _} ->
             {auto c : Ref Ctxt Defs} ->
-            {auto p : Ref Progress Bool} ->
+            {auto p : Ref InlineFuel Nat} ->
             {auto l : Ref LVar Int} ->
             List Name -> EEnv free vars -> Stack free -> CConAlt (vars ++ free) ->
             Core (CConAlt free)
@@ -228,7 +234,7 @@ mutual
 
   pickAlt : {vars, free : _} ->
             {auto c : Ref Ctxt Defs} ->
-            {auto p : Ref Progress Bool} ->
+            {auto p : Ref InlineFuel Nat} ->
             {auto l : Ref LVar Int} ->
             List Name -> EEnv free vars -> Stack free ->
             CExp free -> List (CConAlt (vars ++ free)) ->
@@ -332,7 +338,7 @@ mergeLambdas args exp = pure (args ** exp)
 
 doEval : {args : _} ->
          {auto c : Ref Ctxt Defs} ->
-         {auto p : Ref Progress Bool} ->
+         {auto p : Ref InlineFuel Nat} ->
          Name -> CExp args -> Core (CExp args)
 doEval n exp
     = do l <- newRef LVar (the Int 0)
@@ -342,7 +348,7 @@ doEval n exp
          pure exp'
 
 inline : {auto c : Ref Ctxt Defs} ->
-         {auto p : Ref Progress Bool} ->
+         {auto p : Ref InlineFuel Nat} ->
          Name -> CDef -> Core CDef
 inline n (MkFun args ty def)
     = pure $ MkFun args ty !(doEval n def)
@@ -386,7 +392,7 @@ getRefs _ = empty
 
 export
 inlineDef : {auto c : Ref Ctxt Defs} ->
-            {auto p : Ref Progress Bool} ->
+            {auto p : Ref InlineFuel Nat} ->
             Name -> Core ()
 inlineDef n
     = do defs <- get Ctxt
@@ -434,18 +440,11 @@ compileAndInline ns
     transform : Nat -> List Name -> Core ()
     transform Z cns = pure ()
     transform (S k) cns
-        = do p <- newRef Progress False
+        = do p <- newRef InlineFuel 1024
              traverse_ inlineDef cns
-             -- We assume that merging lambdas in definitions, and fixing their
-             -- arity, do not create any more opportunities for reduction
-             -- here... we only check if `inlineDef` has made progress
              traverse_ mergeLamDef cns
              --traverse_ caseLamDef cns
              traverse_ fixArityDef cns
-             -- Exit early if no progress was made
-             True <- get Progress
-               | False => pure ()
-             transform k cns
 
 {-
 -- TODO Let's lay off the case statement optimisations in toCExp and implement them in something
