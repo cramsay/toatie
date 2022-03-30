@@ -63,8 +63,8 @@ We'll work towards:
   - [X] Separating type constructors into `Parameter` types (value known at compile-time) and `Simple`
         types (value known only at circuit run-time; derivable bit width)
   - [X] Checking GADTs over `Simple` types for decidable sizes
-  - [ ] Deriving bit representations for GADTs over `Simple` types
-  - [ ] Conversion of Terms to something like Clash's ANF
+  - [X] Deriving bit representations for GADTs over `Simple` types
+  - [X] Conversion of Terms to something like Clash's ANF
   - [ ] Generating netlists from this ANF.
   - [ ] Encoding _synchronous_ logic
 
