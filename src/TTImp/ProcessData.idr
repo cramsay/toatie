@@ -55,6 +55,57 @@ getDConName (App _ f _) = getDConName f
 getDConName (Ref (DataCon _ _) n) = Just n
 getDConName tm = Nothing
 
+export
+typeForDataCon : {auto c : Ref Ctxt Defs} ->
+                 {auto u : Ref UST UState} ->
+                 Name -> (argTys : List (Term [])) -> Core (Term [])
+typeForDataCon n argTys
+  = do defs <- get Ctxt
+       Just conTy <- lookupDefType n defs
+         | Nothing => throw $ InternalError $ "Couldn't find data constructor in context: " ++ show n
+       expConTy <- impsToMetas [] conTy
+       retTy <- unifyArgTys [] expConTy argTys
+       let (tycon, retArgs) = getFnInfoArgs retTy
+       retArgs' <- traverse (\(i,a)=>pure (i, !(substSolvedMetaArgs a))) $
+                            filter ((==AExplicit) . fst) retArgs
+       pure $ apply tycon retArgs'
+  where
+  impsToMetas : {vars : _} -> Env Term vars -> Term vars -> Core (Term vars)
+  impsToMetas env (Bind x (Pi _ Implicit ty) sc)
+    = do nmeta <- genName "_dconarg"
+         meta <- newMeta env nmeta ty Hole
+         impsToMetas env $ subst meta sc
+  impsToMetas env (Bind x b@(Pi s Explicit ty) sc)
+    = pure $ Bind x b !(impsToMetas (b::env) sc)
+  impsToMetas _ tm = pure tm
+  -- TODO have a better look at erasure of implicits here
+
+  unifyArgTys : {vars : _} -> Env Term vars -> Term vars -> List (Term []) -> Core (Term vars)
+  unifyArgTys env fty [] = do solveConstraints InMatch
+                              pure fty
+  unifyArgTys env (Bind _ b sc) (aty::atys)
+    = do res <- unify InMatch env (binderType b) (rewrite sym (appendNilRightNeutral vars)
+                                                  in weakenNs vars aty)
+         unifyArgTys env (subst Erased sc) atys
+  unifyArgTys _ fty args = throw $ InternalError $ "Mismatched number of args for constructor unification: "
+                                     ++ show fty ++ " and " ++ show args
+
+  substSolvedMetaArgs : (ty : Term []) -> Core (Term [])
+  substSolvedMetaArgs (Meta n _)
+    = do -- check if this meta has been solved
+         defs <- get Ctxt
+         Just (MkGlobalDef _ (PMDef [] _ (STerm tm) _) _) <- lookupDef n defs
+           | _ => -- Wasn't solved
+                  pure Erased
+         substSolvedMetaArgs tm
+  substSolvedMetaArgs ty
+    = do let (tycon, retArgs) = getFnInfoArgs ty
+         retArgs' <- traverse (\(i,a)=>pure (i, !(substSolvedMetaArgs a))) $ filter ((==AExplicit) . fst) retArgs
+         -- Simplify any applications with an erased arg
+         if (any (\(_,a)=>a==Erased) retArgs')
+            then pure Erased
+            else pure $ apply tycon retArgs'
+
 -- Get a list of the data constructors which could have produced a given type,
 -- along with their specialised constructor types after unification with our
 -- given type

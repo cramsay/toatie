@@ -5,7 +5,11 @@ import Compiler.CompileExpr
 import Core.CompileExpr
 import Core.Context
 import Core.Hash
+import Core.Env
 import Core.TT
+import Core.UnifyState
+
+import TTImp.ProcessData
 
 import Data.Maybe
 import Data.List
@@ -41,7 +45,7 @@ unloadApp : Nat -> Stack vars -> CExp vars -> CExp vars
 unloadApp n args e = unload (drop n args) (CApp e (take n args))
 
 getArity : CDef -> Nat
-getArity (MkFun args _ _) = length args
+getArity (MkFun args _) = length args
 getArity (MkCon _ arity) = arity
 
 takeFromStack : EEnv free vars -> Stack free -> (args : List Name) ->
@@ -75,7 +79,7 @@ wrapWithLets : {vars:_} -> (scr : CExp vars) -> Name -> Nat -> (args : List Name
                (CExp (args++vars) -> CExp (vars))
 wrapWithLets scr con i (arg::args)
   = let rec = wrapWithLets scr con (S i) args
-        here = CLet arg (CPrj con i $ weakenNs args $ scr) CErased
+        here = CLet arg (CPrj con i $ weakenNs args $ scr) Erased
     in rec . here
 wrapWithLets _ _ _ [] = id
 
@@ -84,9 +88,8 @@ mutual
   used : {free : _} ->
          {idx : Nat} -> (0 p : IsVar n idx free) -> CExp free -> Int
   used p (CLocal {idx=pidx} x) = if idx == pidx then 1 else 0
-  used p (CLam _ ty sc) = used p ty + used (Later p) sc
-  used p (CPi  _ ty sc) = used p ty + used (Later p) sc
-  used p (CLet x val ty sc) = used p val + used p ty + used (Later p) sc
+  used p (CLam _ sc) = used (Later p) sc
+  used p (CLet x val ty sc) = used p val + used (Later p) sc
   used p (CApp f args) = foldr (+) (used p f) (map (used p) args)
   used p (CCon x args) = foldr (+) 0          (map (used p) args)
   used p (CConCase scr alts def) = used p scr +
@@ -124,7 +127,7 @@ mutual
              {auto l : Ref LVar Int} ->
              List Name -> Stack free -> EEnv free vars -> CDef ->
              Core (Maybe (CExp free))
-  tryApply {free} {vars} rec stk env (MkFun args ty exp)
+  tryApply {free} {vars} rec stk env (MkFun args exp)
       = do let Just (env', stk') = takeFromStack env stk args
                | Nothing => pure Nothing
            res <- eval rec env' stk'
@@ -161,27 +164,19 @@ mutual
                       | Nothing => pure $ unloadApp arity stk (CRef n)
                     pure ap
             else pure $ unloadApp arity stk (CRef n)
-  eval rec env [] (CLam x ty sc)
+  eval rec env [] (CLam x sc)
     = do xn <- genName "lamv"
          sc' <- eval rec (CRef xn :: env) [] sc
-         ty' <- eval rec env [] ty
-         pure $ CLam x ty' (refToLocal xn x sc')
-  eval rec env (e :: stk) (CLam x ty sc) = eval rec (e :: env) stk sc
-  eval rec env [] (CPi x ty sc)
-    = do xn <- genName "lamv"
-         sc' <- eval rec (CRef xn :: env) [] sc
-         ty' <- eval rec env [] ty
-         pure $ CPi x ty' (refToLocal xn x sc')
-  eval rec env (e :: stk) (CPi x ty sc) = eval rec (e :: env) stk sc
+         pure $ CLam x (refToLocal xn x sc')
+  eval rec env (e :: stk) (CLam x sc) = eval rec (e :: env) stk sc
   eval rec env stk (CLet x val ty sc)
     = do xn <- genName "lamv"
          sc' <- eval rec (CRef xn :: env) [] sc
          val' <- eval rec env [] val
-         ty'  <- eval rec env [] ty
          case val' of
            -- We'd just be rebinding the name of a local, so let's not
            CLocal p => pure $ substs [CLocal p] (refToLocal xn x sc')
-           _        => pure $ CLet x val' ty' (refToLocal xn x sc')
+           _        => pure $ CLet x val' ty (refToLocal xn x sc')
   eval rec env stk (CApp f args) = eval rec env (!(traverse (eval rec env []) args) ++ stk) f
   eval rec env stk (CCon x args) = pure $ unload stk $ CCon x !(traverse (eval rec env []) args)
   eval rec env stk (CPrj con field sc)
@@ -292,10 +287,8 @@ fixArityTm (CRef n) args
                           Just def => getArity def
                           _ => 0
          pure $ expandToArity arity (CApp (CRef n) []) args
-fixArityTm (CLam x ty sc) args
-    = pure $ expandToArity Z (CLam x ty !(fixArityTm sc [])) args
-fixArityTm (CPi  x ty sc) args
-    = pure $ expandToArity Z (CPi  x ty !(fixArityTm sc [])) args
+fixArityTm (CLam x sc) args
+    = pure $ expandToArity Z (CLam x !(fixArityTm sc [])) args
 fixArityTm (CLet x val ty sc) args
     = pure $ expandToArity Z
                  (CLet x !(fixArityTm val []) ty !(fixArityTm sc [])) args
@@ -324,13 +317,13 @@ fixArityExp tm = fixArityTm tm []
 
 fixArity : {auto c : Ref Ctxt Defs} ->
            CDef -> Core CDef
-fixArity (MkFun args ty exp) = pure $ MkFun args ty !(fixArityTm exp [])
+fixArity (MkFun args exp) = pure $ MkFun args !(fixArityTm exp [])
 fixArity d = pure d
 
 getLams : {done : _} ->
           Int -> SubstCEnv done args -> CExp (done ++ args) ->
           Core (args' ** (SubstCEnv args' args, CExp (args' ++ args)))
-getLams {done} i env (CLam x ty sc)
+getLams {done} i env (CLam x sc)
     = getLams {done = x :: done} (i + 1) (CRef (MN "ext" i) :: env) sc
 getLams {done} i env sc = pure (done ** (env, sc))
 
@@ -349,8 +342,8 @@ getNewArgs {done = x :: xs} (_ :: sub) = x :: getNewArgs sub
 -- level definition goes left to right (i.e. first argument has lowest index,
 -- not the highest, as you'd expect if they were all lambdas).
 mergeLambdas : (args : List Name) -> CExp args -> Core (args' ** CExp args')
-mergeLambdas args (CLam x ty sc)
-    = do (args' ** (env, exp')) <- getLams 0 [] (CLam x ty sc)
+mergeLambdas args (CLam x sc)
+    = do (args' ** (env, exp')) <- getLams 0 [] (CLam x sc)
          let expNs = substs env exp'
              newArgs = reverse $ getNewArgs env
              expLocs = mkLocals {outer=args} {vars = []} (mkBounds newArgs)
@@ -373,23 +366,22 @@ inline : {auto c : Ref Ctxt Defs} ->
          {auto p : Ref InlineFuel Nat} ->
          {auto l : Ref LVar Int} ->
          Name -> CDef -> Core CDef
-inline n (MkFun args ty def)
-    = pure $ MkFun args ty !(doEval n def)
+inline n (MkFun args def)
+    = pure $ MkFun args !(doEval n def)
 inline n d = pure d
 
 -- merge lambdas from expression into top level arguments
 mergeLam : {auto c : Ref Ctxt Defs} ->
            CDef -> Core CDef
-mergeLam (MkFun args ty def)
+mergeLam (MkFun args def)
     = do (args' ** exp') <- mergeLambdas args def
-         pure $ MkFun args' CErased exp' -- TODO merge types too!
+         pure $ MkFun args' exp'
 mergeLam d = pure d
 
 mutual
   addRefs : NameSet -> CExp vars -> NameSet
   addRefs ds (CRef n) = insert n ds
-  addRefs ds (CLam _ _ sc) = addRefs ds sc
-  addRefs ds (CPi  _ _ sc) = addRefs ds sc
+  addRefs ds (CLam _ sc) = addRefs ds sc
   addRefs ds (CLet _ val _ sc) = addRefs (addRefs ds val) sc
   addRefs ds (CApp f args) = addRefsArgs (addRefs ds f) args
   addRefs ds (CCon n args) = addRefsArgs (insert n ds) args
@@ -409,7 +401,7 @@ mutual
       = addRefsConAlts (addRefs ds sc) rest
 
 getRefs : CDef -> NameSet
-getRefs (MkFun args _ exp) = addRefs empty exp
+getRefs (MkFun args exp) = addRefs empty exp
 getRefs _ = empty
 
 mutual
@@ -423,13 +415,12 @@ mutual
                       -- ^ Scope
   liftLetsTm (CLocal p) = pure $ ([] ** (id, CLocal p))
   liftLetsTm (CRef   x) = pure $ ([] ** (id, CRef x))
-  liftLetsTm (CLam x ty sc) = throw $ InternalError $ "Encountered lambda in liftLetsTm: " ++ show (CLam x ty sc)
-  liftLetsTm (CPi  x ty sc) = throw $ InternalError $ "Encountered pi binder in liftLetsTm: " ++ show (CPi x ty sc)
+  liftLetsTm (CLam x sc) = throw $ InternalError $ "Encountered lambda in liftLetsTm: " ++ show (CLam x sc)
   liftLetsTm (CLet x val ty sc)
     = do (vallv ** (vallets,valsc)) <- liftLetsTm val
          (sclv  ** (sclets ,scsc )) <- liftLetsTm $ insertNames {outer=[x]} vallv sc
          let lets' : CExp ((sclv++(x::vallv))++vars) -> CExp vars
-                   = \newsc => vallets . CLet x valsc CErased . sclets $
+                   = \newsc => vallets . CLet x valsc Erased . sclets $
                         rewrite appendAssociative sclv (x::vallv) vars in newsc
          let sc' : CExp ((sclv++(x::vallv))++vars)
                  = rewrite sym (appendAssociative sclv (x::vallv) vars) in scsc
@@ -464,7 +455,7 @@ mutual
              do xn <- genName "cr"
                 pure (xn::altlv ++ scrlv **
                       (scrlets . altlets . rewrite appendAssociative altlv scrlv vars in
-                                           CLet xn (rewrite sym (appendAssociative altlv scrlv vars) in altsc) CErased
+                                           CLet xn (rewrite sym (appendAssociative altlv scrlv vars) in altsc) Erased
                       , CLocal First --rewrite sym (appendAssociative altlv scrlv vars) in altsc
                       )
                      )
@@ -479,13 +470,13 @@ mutual
          Just (deflv ** (deflets, defsc)) <- traverseOpt (liftLetsTm . weakenNs scrlv) def
            | Nothing => pure (xn :: altlv ++ scrlv **
                               (scrlets . altlets . rewrite appendAssociative altlv scrlv vars in
-                                                   CLet xn concase CErased
+                                                   CLet xn concase Erased
                           , CLocal First )
                         )
          -- TODO include default alt too!
          pure (xn :: altlv ++ scrlv **
                 (scrlets . altlets . rewrite appendAssociative altlv scrlv vars in
-                                     CLet xn concase CErased
+                                     CLet xn concase Erased
                 , CLocal First )
               )
 
@@ -565,11 +556,104 @@ mutual
 liftLets : {auto c : Ref Ctxt Defs} ->
            {auto l : Ref LVar Int} ->
            CDef -> Core CDef
-liftLets (MkFun args ty def)
+liftLets (MkFun args def)
   = do (_**(lets, sc)) <- liftLetsTm def
-       pure $ MkFun args ty (lets sc)
+       pure $ MkFun args (lets sc)
 liftLets d = pure d
 
+typeOfLocal : List (Term []) -> Nat -> Core (Term [])
+typeOfLocal (ty::tys) Z = pure ty
+typeOfLocal (ty::tys) (S k) = typeOfLocal tys k
+typeOfLocal [] _ = throw $ InternalError $ "We messed up indexing of the types in our environment... sorry"
+
+mutual
+  typeOfCCon : {vars:_} -> {auto c : Ref Ctxt Defs} -> List (Term []) -> Name -> (List (CExp vars)) -> Core (Term [])
+  typeOfCCon tys n args
+    = do u <- newRef UST initUState
+         argTys <- traverse (typeOfConcrete tys) args
+         typeForDataCon n argTys
+
+  typeOfConcrete : {vars : _} -> {auto c : Ref Ctxt Defs} -> List (Term []) -> CExp vars -> Core (Term [])
+  typeOfConcrete tys (CLocal {idx} p) = typeOfLocal tys idx
+  typeOfConcrete tys (CCon n args) = typeOfCCon tys n args
+  typeOfConcrete _ tm = throw $ InternalError $ "Can't identify type for non concrete term: " ++ show tm
+
+typeOfAlt : {vars : _} -> {auto c : Ref Ctxt Defs} -> List (Term []) -> CConAlt vars -> Core (Term [])
+typeOfAlt tys (MkConAlt _ args sc) = typeOfConcrete (map (const Erased) args ++ tys) sc
+
+typeOfPrj : {auto c : Ref Ctxt Defs} -> List (Term []) -> Name -> Nat -> Term [] -> Core (Term [])
+typeOfPrj tys conn field Erased = pure Erased -- TODO Remove
+typeOfPrj tys conn field ty
+  = do u <- newRef UST initUState
+       opts <- dataConsForType [] ty
+       let Just conTy = lookup conn opts
+             | Nothing => throw $ InternalError $ "Couldn't find valid constructor (" ++
+                            show conn ++ ") for projection of type " ++ show ty
+       pure $ pickField field conTy
+  where pickField : Nat -> Term [] -> Term []
+        pickField Z     (Bind _ (Pi _ Explicit ty) sc) = ty
+        pickField (S n) (Bind _ (Pi _ Explicit ty) sc) = pickField n (subst Erased sc)
+        pickField n     (Bind _ (Pi _ Implicit ty) sc) = pickField n (subst Erased sc)
+        pickField _ _ = Erased
+
+mutual
+  annotateTyTm : {vars : _} -> {auto c : Ref Ctxt Defs} ->
+                 List (Term []) -> CExp vars -> Core (CExp vars)
+  annotateTyTm tys (CLet x (CLocal {idx} p) ty sc)
+    = do ty' <- typeOfLocal tys idx
+         sc' <- annotateTyTm (ty'::tys) sc
+         pure $ CLet x (CLocal p) ty' sc'
+  annotateTyTm tys (CLet x (CCon n args) ty sc)
+    = do -- The args of CCon could be locals _or_ concrete values...
+         -- Probably easiest if we first let-lift any constants
+         -- to their own local binding or just suck it up. Not sure on this!
+         ty' <- typeOfCCon tys n args
+         sc' <- annotateTyTm (ty'::tys) sc
+         pure $ CLet x (CCon n args) ty' sc'
+  annotateTyTm tys (CLet x (CConCase (CLocal {idx} p) alts def) ty sc)
+    = do scrTy <- typeOfLocal tys idx
+         -- TODO Probably need to tag type of scrutinee?
+         (aTy::aTys) <- traverse (typeOfAlt tys) alts
+           | [] => throw $ InternalError $ "ConCase didn't have any alternatives while annotating types: " ++ show x
+         let ty' = foldr eraseMismatch aTy aTys
+         sc' <- annotateTyTm (ty'::tys) sc
+         pure $ CLet x (CConCase (CLocal {idx} p) alts def) ty' sc'
+    where
+    eraseMismatch : Term [] -> Term [] -> Term []
+    eraseMismatch a b
+      = let (fn , args ) = getFnInfoArgs a
+            (fn', args') = getFnInfoArgs b
+            matchedArgs = map (\(x,y) => if x==y then x else (fst x, Erased)) $ zip args args'
+        in apply fn matchedArgs
+  annotateTyTm tys (CLet x (CPrj con field (CLocal {idx} p)) ty sc)
+    = do innerty <- typeOfLocal tys idx
+         ty' <- typeOfPrj tys con field innerty
+         sc' <- annotateTyTm (ty'::tys) sc
+         pure $ CLet x (CPrj con field (CLocal {idx} p)) ty' sc'
+  annotateTyTm tys tm@(CLet x val ty sc)
+    = throw $ InternalError $ "Value of let bound var " ++ show x ++
+              " is not in normal form: " ++ show tm
+  annotateTyTm tys tm = pure tm
+
+closedQuoteType : Term [] -> Core (List (Term []),Term[])
+                          --       ^ Arg types    ^ Ret type
+closedQuoteType (Bind _ _ sc) = closedQuoteType $ subst Erased sc
+closedQuoteType (TCode ty) = getTys [] ty
+  where
+  getTys : List (Term []) -> Term [] -> Core (List (Term []), Term [])
+  getTys args (Bind _ (Pi _ _ ty) sc) = getTys (ty::args) (subst Erased sc)
+  getTys args tm                      = pure (args, tm)
+closedQuoteType ty = throw $ InternalError $ "Expected scope to be a quoted function but got: " ++ show ty
+
+-- Annotate all let binding with their type
+annotateTy : {auto c : Ref Ctxt Defs} ->
+             Term [] ->
+             CDef -> Core CDef
+annotateTy ty (MkFun args def)
+  = do (argTys, retTy) <- closedQuoteType ty
+       def' <- annotateTyTm argTys def
+       pure $ MkFun args def'
+annotateTy _ d = pure d
 
 export
 inlineDef : {auto c : Ref Ctxt Defs} ->
@@ -615,6 +699,15 @@ liftLetsDef n
          setCompiled n !(liftLets cexpr)
 
 export
+annotateTyDef : {auto c : Ref Ctxt Defs} ->
+              Name -> Core ()
+annotateTyDef n
+    = do defs <- get Ctxt
+         Just def <- lookupDef n defs   | Nothing => pure ()
+         let Just cexpr = compexpr def  | Nothing => pure ()
+         setCompiled n !(annotateTy (type def) cexpr)
+
+export
 compileAndInline : {auto c : Ref Ctxt Defs} ->
                    List Name ->
                    Core ()
@@ -639,6 +732,7 @@ compileAndInline ns
              --traverse_ caseLamDef cns
              traverse_ fixArityDef cns
              traverse_ liftLetsDef cns
+             traverse_ annotateTyDef cns
 
 {-
 -- TODO Let's lay off the case statement optimisations in toCExp and implement them in something

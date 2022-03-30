@@ -17,11 +17,9 @@ mutual
        CLocal : {idx : Nat} ->  (0 p : IsVar x idx vars) -> CExp vars
        CRef : Name -> CExp vars
        -- Lambda expression
-       CLam :  (x : Name) -> (ty : CExp vars) -> (sc : CExp (x :: vars)) -> CExp vars
-       -- Pi expression
-       CPi  :  (x : Name) -> (ty : CExp vars) -> (sc : CExp (x :: vars)) -> CExp vars
+       CLam :  (x : Name) -> (sc : CExp (x :: vars)) -> CExp vars
        -- Let bindings
-       CLet :  (x : Name) -> (val : CExp vars) -> (ty : CExp vars) ->
+       CLet :  (x : Name) -> (val : CExp vars) -> (ty : Term []) ->
                (sc : CExp (x :: vars)) -> CExp vars
        -- Application of a defined function. The length of the argument list is
        -- exactly the same length as expected by its definition (so saturate with
@@ -47,7 +45,7 @@ mutual
 public export
 data CDef : Type where
   -- Normal function defnition
-  MkFun : (args : List Name) -> (ty : CExp []) -> CExp args -> CDef
+  MkFun : (args : List Name) -> CExp args -> CDef
   -- Constructor
   MkCon : (tag : Maybe Int) -> (arity : Nat) -> CDef
 
@@ -59,19 +57,13 @@ mutual
     = let MkNVar var' = insertNVarNames idx p
       in CLocal var'
   insertNames ns (CRef n) = CRef n
-  insertNames ns (CLam x ty sc)
+  insertNames ns (CLam x sc)
     = let sc' = insertNames {outer=x :: outer} ns sc
-          ty' = insertNames ns ty
-      in CLam x ty' sc'
-  insertNames ns (CPi  x ty sc)
-    = let sc' = insertNames {outer=x :: outer} ns sc
-          ty' = insertNames ns ty
-      in CPi  x ty' sc'
+      in CLam x sc'
   insertNames ns (CLet x val ty sc)
     = let sc' = insertNames {outer=x :: outer} ns sc
-          ty' = insertNames ns ty
           val' = insertNames ns val
-      in CLet x val' ty' sc'
+      in CLet x val' ty sc'
   insertNames ns (CApp f args) = CApp (insertNames ns f) (map (insertNames ns) args)
   insertNames ns (CCon x args) = CCon x $ map (insertNames ns) args
   insertNames ns (CConCase scr alts def)
@@ -113,19 +105,13 @@ mutual
         Nothing => CErased
         Just (MkVar p') => CLocal p'
   shrinkCExp sub (CRef x) = CRef x
-  shrinkCExp sub (CLam x ty sc)
+  shrinkCExp sub (CLam x sc)
     = let sc' = shrinkCExp (KeepCons sub) sc
-          ty' = shrinkCExp sub ty
-      in CLam x ty' sc'
-  shrinkCExp sub (CPi x ty sc)
-    = let sc' = shrinkCExp (KeepCons sub) sc
-          ty' = shrinkCExp sub ty
-      in CPi x ty' sc'
+      in CLam x sc'
   shrinkCExp sub (CLet x val ty sc)
     = let sc' = shrinkCExp (KeepCons sub) sc
-          ty' = shrinkCExp sub ty
           val' = shrinkCExp sub val
-      in CLet x val' ty' sc'
+      in CLet x val' ty sc'
   shrinkCExp sub (CApp f args)
     = CApp (shrinkCExp sub f) (map (shrinkCExp sub) args)
   shrinkCExp sub (CCon x args)
@@ -171,19 +157,13 @@ mutual
              CExp (outer ++ vars)
   substEnv env (CLocal p) = find (MkVar p) env
   substEnv env (CRef x) = CRef x
-  substEnv env (CLam x ty sc)
+  substEnv env (CLam x sc)
     = let sc' = substEnv {outer=x::outer} env sc
-          ty' = substEnv env ty
-      in CLam x ty' sc'
-  substEnv env (CPi x ty sc)
-    = let sc' = substEnv {outer=x::outer} env sc
-          ty' = substEnv env ty
-      in CPi x ty' sc'
+      in CLam x sc'
   substEnv env (CLet x val ty sc)
     = let sc' = substEnv {outer=x::outer} env sc
-          ty' = substEnv env ty
           val' = substEnv env val
-      in CLet x val' ty' sc'
+      in CLet x val' ty sc'
   substEnv env (CApp f args) = CApp (substEnv env f) (map (substEnv env) args)
   substEnv env (CCon x args) = CCon x (map (substEnv env) args)
   substEnv env (CConCase scr alts def)
@@ -230,19 +210,13 @@ mutual
              CExp (outer ++ (bound ++ vars))
   mkLocals bs (CLocal p) = let MkNVar p' = addVars bs p in CLocal p'
   mkLocals bs (CRef x) = maybe (CRef x) id (resolveRef {outer=outer} {done=[]} bs x)
-  mkLocals bs (CLam x ty sc)
+  mkLocals bs (CLam x sc)
     = let sc' = mkLocals {outer=x::outer} bs sc
-          ty' = mkLocals bs ty
-      in CLam x ty' sc'
-  mkLocals bs (CPi x ty sc)
-    = let sc' = mkLocals {outer=x::outer} bs sc
-          ty' = mkLocals bs ty
-      in CPi x ty' sc'
+      in CLam x sc'
   mkLocals bs (CLet x val ty sc)
     = let sc' = mkLocals {outer=x::outer} bs sc
-          ty' = mkLocals bs ty
           val' = mkLocals bs val
-      in CLet x val' ty' sc'
+      in CLet x val' ty sc'
   mkLocals bs (CApp f args)
     = CApp (mkLocals bs f) (map (mkLocals bs) args)
   mkLocals bs (CCon x args) = CCon x (map (mkLocals bs) args)
@@ -276,14 +250,10 @@ mutual
   {vars : _} -> Eq (CExp vars) where
      (CLocal {idx} p)   == (CLocal {idx=idx'} p') = idx == idx'
      (CRef x)           == (CRef x') = x == x'
-     (CLam x ty sc)     == (CLam x' ty' sc')
+     (CLam x sc)     == (CLam x' sc')
        = case nameEq x x' of
            Nothing => False
-           Just Refl => ty == ty' && sc == sc'
-     (CPi x ty sc) == (CPi x' ty' sc')
-       = case nameEq x x' of
-           Nothing => False
-           Just Refl => ty == ty' && sc == sc'
+           Just Refl => sc == sc'
      (CLet x val ty sc) == (CLet x' val' ty' sc')
        = case nameEq x x' of
            Nothing => False
@@ -308,10 +278,10 @@ mutual
 
   export
   Eq CDef where
-    (MkFun args ty x) == (MkFun args' ty' x')
+    (MkFun args x) == (MkFun args' x')
       = case namesEq args args' of
           Nothing => False
-          Just Refl => ty == ty' && x == x'
+          Just Refl => x == x'
     (MkCon tag arity) == (MkCon tag' arity') = tag  == tag'  && arity == arity'
     _ == _ = False
 
@@ -321,13 +291,12 @@ mutual
   showCExp indent (CRef x) = indent ++ "(ref " ++ show x ++ ")"
   showCExp indent CErased = indent ++ "erased"
   showCExp indent (CPrj c f tm) = indent ++ "prj^" ++ show c ++ "_" ++ show f ++ " " ++ show tm
-  showCExp indent (CLam x ty sc)
+  showCExp indent (CLam x sc)
     = unlines [ indent ++ "(\\" ++ show x ++ " =>"
               , showCExp (indent ++ "  ") sc ++ indent ++ ")"
               ]
-  showCExp indent (CPi x ty sc) = indent ++ "Pi ..."
   showCExp indent (CLet x val ty sc)
-    = indent ++ "(let " ++ show x ++ " =\n" ++ showCExp ("     " ++ indent) val ++ " in\n" ++ showCExp indent sc ++ ")"
+    = indent ++ "(let " ++ show x ++ " : " ++ show ty ++ " =\n" ++ showCExp ("     " ++ indent) val ++ " in\n" ++ showCExp indent sc ++ ")"
   showCExp indent (CApp f args)
     = unlines [ indent ++ "(" ++ show f ++ "["
               , unlines (map (showCExp (indent++"  ")) args) ++ indent ++ "])"
@@ -352,13 +321,6 @@ mutual
   showCExp indent CErased = indent ++ "erased"
   showCExp indent (CLam x ty sc)
     = let intro = "\\" ++ show x ++ " : "
-      in unlines [ indent ++ intro
-                 , showCExp (spacerFor intro ++ indent) ty
-                 , indent ++  " => "
-                 , showCExp (spacerFor " => " ++ indent) sc
-                 ]
-  showCExp indent (CPi x ty sc)
-    = let intro = "\\pi " ++ show x ++ " : "
       in unlines [ indent ++ intro
                  , showCExp (spacerFor intro ++ indent) ty
                  , indent ++  " => "
@@ -399,5 +361,5 @@ mutual
 
   export
   Show CDef where
-    show (MkFun args ty x) = "func with (" ++ show args ++ ") : " ++ show ty ++ " =\n" ++ show x
+    show (MkFun args x) = "func with (" ++ show args ++ ") : =\n" ++ show x
     show (MkCon tag arity) = "con " ++ show tag ++ " [" ++ show arity ++ " args]"

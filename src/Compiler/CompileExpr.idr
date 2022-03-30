@@ -44,7 +44,6 @@ etaExpand ni 0 exp args = mkApp exp (map mkLocal $ reverse args)
   mkApp tm args' = CApp tm args'
 etaExpand ni (S k) exp args
   = CLam (MN "eta" ni)
-         CErased --TODO do we ever need type of eta-expanded arg?
          (etaExpand (ni+1) k (weaken exp) (MkVar First :: map weakenVar args))
 
 export
@@ -112,11 +111,9 @@ mutual
   toCExpTm n (Eval x) = toCExp n x
   toCExpTm n (Escape x) = toCExp n x
   toCExpTm n (Bind x (Lam _ _ ty) scope)
-    = pure $ CLam x !(toCExp n ty) !(toCExp n scope)
-  toCExpTm n (Bind x (Pi _ _ ty) scope)
-    = pure $ CPi x !(toCExp n ty) !(toCExp n scope)
-  toCExpTm n (Bind x (Let _ val ty) scope)
-    = pure $ CLet x !(toCExp n val) !(toCExp n ty) !(toCExp n scope)
+    = pure $ CLam x !(toCExp n scope)
+  toCExpTm n (Bind x (Let _ val _) scope)
+    = pure $ CLet x !(toCExp n val) Erased !(toCExp n scope)
   toCExpTm n (Bind x _ scope) = pure CErased -- Ignore pat vars, etc.
   toCExpTm n (Ref nt nm) = toCExpRef nm
 
@@ -209,8 +206,7 @@ mutual
     = do let erased = erasedArgs ty
          let (args' ** p) = mkSub 0  args erased
          comptree <- toCExpTree n treeCT
-         ty' <- toCExp n ty
-         pure $ MkFun args' ty' (shrinkCExp p comptree)
+         pure $ MkFun args' (shrinkCExp p comptree)
   toCDef n ty (DCon tag _)
     = do let arity = extractionArity ty
          pure $ MkCon (Just tag) arity
