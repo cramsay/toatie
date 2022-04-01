@@ -11,6 +11,7 @@ import Core.Extraction
 import Core.Context
 import Compiler.CompileExpr
 import Compiler.Inline
+import Compiler.Netlist
 
 import TTImp.Elab.Term
 
@@ -46,11 +47,13 @@ data ReplCmd : Type where
   RC_BitRepTy : ReplCmd
   RC_BitRepTm : ReplCmd
   RC_CompileDef : ReplCmd
+  RC_Netlist : ReplCmd
 
 parseReplCmd : String -> Maybe ReplCmd
 parseReplCmd ":BitRepTy" = Just RC_BitRepTy
 parseReplCmd ":BitRepTm" = Just RC_BitRepTm
 parseReplCmd ":CompileDef"   = Just RC_CompileDef
+parseReplCmd ":Netlist" = Just RC_Netlist
 parseReplCmd _ = Nothing
 
 repl : {auto c : Ref Ctxt Defs} ->
@@ -112,6 +115,23 @@ repl = do coreLift $ putStr "> "
                  let Just comp = compexpr gdef
                        | Nothing => coreLift $ putStrLn $ "Couldn't find compiled expression for " ++ show name
                  coreLift $ putStrLn $ "Compiled to: " ++ show comp
+                 put Ctxt defs
+                 repl
+
+            Just RC_Netlist =>
+              do let Right (IVar name) = runParser Nothing inp' (expr "(input)" init)
+                       | _ => do coreLift $ printLn "Couldn't parse input as a name"
+                 defs <- get Ctxt
+                 extDefs <- extractCtxt defs
+                 put Ctxt extDefs
+                 compileAndInline [name]
+                 extDefs <- get Ctxt
+                 Just gdef <- lookupDef name extDefs
+                   | Nothing => coreLift $ putStrLn $ "Couldn't find context entry for " ++ show name
+                 let Just comp = compexpr gdef
+                       | Nothing => coreLift $ putStrLn $ "Couldn't find compiled expression for " ++ show name
+                 nl <- genNetlist name
+                 coreLift $ putStrLn $ "Compiled to: " ++ show nl
                  put Ctxt defs
                  repl
 

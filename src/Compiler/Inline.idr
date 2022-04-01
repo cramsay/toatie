@@ -426,8 +426,13 @@ mutual
                  = rewrite sym (appendAssociative sclv (x::vallv) vars) in scsc
          pure $ ((sclv++(x::vallv)) ** (lets',sc'))
   liftLetsTm (CCon x args)
-    = do (lv ** (lets, args')) <- liftLetsArgs args
+    = do --args' <- traverse abstractArg args
+         (lv ** (lets, args')) <- liftLetsArgs args
          pure $ (lv ** (lets, CCon x args'))
+    where
+    abstractArg : CExp vars -> Core (CExp vars)
+    abstractArg (CLocal p) = pure $ CLocal p
+    abstractArg tm = pure $ CLet !(genName "_conarg") tm Erased (CLocal First)
   liftLetsTm (CApp f args)
     = do (lv ** (lets, args')) <- liftLetsArgs args
          (flv ** (flets, fsc)) <- liftLetsTm $ weakenNs lv f
@@ -561,6 +566,7 @@ liftLets (MkFun args def)
        pure $ MkFun args (lets sc)
 liftLets d = pure d
 
+export
 typeOfLocal : List (Term []) -> Nat -> Core (Term [])
 typeOfLocal (ty::tys) Z = pure ty
 typeOfLocal (ty::tys) (S k) = typeOfLocal tys k
@@ -635,6 +641,7 @@ mutual
               " is not in normal form: " ++ show tm
   annotateTyTm tys tm = pure tm
 
+export
 closedQuoteType : Term [] -> Core (List (Term []),Term[])
                           --       ^ Arg types    ^ Ret type
 closedQuoteType (Bind _ _ sc) = closedQuoteType $ subst Erased sc

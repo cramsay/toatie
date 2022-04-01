@@ -257,6 +257,92 @@ decomposeDCon env tm ty
            pure $ argT :: restT
     decomposeArgs env tm ty = do throw $ InternalError $ "Failed to convert DCon args into their bit representation: " ++ show tm ++ " : " ++ show ty
 
+export
+getTagPos : {auto c : Ref Ctxt Defs} ->
+              {auto u : Ref UST UState} ->
+              {vars : _} ->
+              Env Term vars -> (ty : Term vars) -> Core (Nat, Nat)
+getTagPos env ty
+  = do dcons <- dataConsForType env ty
+       fieldsWidth <- tyFieldWidth env ty
+       tagWidth <- tyTagWidth env ty
+       pure ((plus fieldsWidth tagWidth) `minus` 1, fieldsWidth)
+
+export
+getConsPadding : {auto c : Ref Ctxt Defs} ->
+                {auto u : Ref UST UState} ->
+                {vars : _} ->
+                Env Term vars -> (ty : Term vars) -> Name -> Core Nat
+getConsPadding env ty conn
+  = do dcons <- dataConsForType env ty
+       fieldsWidth <- tyFieldWidth env ty
+       let [(_,dconty)] = filter (\(dn,dty) => dn == conn) dcons
+             | _ => throw $ InternalError $ "Couldn't find expected data con name in list of valid constructors: " ++ show conn ++ " in " ++ show dcons
+       let weakDconTy = rewrite sym (appendNilRightNeutral vars) in weakenNs vars dconty
+       thisWidth <- decomposeArgs env weakDconTy
+       pure $ fieldsWidth `minus` thisWidth
+  where
+    decomposeArgs : {vars' : _} -> Env Term vars' -> (ty : Term vars') -> Core Nat
+    decomposeArgs env (Bind n b@(Pi _ Implicit _) sc)
+      = decomposeArgs (b :: env) sc
+    decomposeArgs env (Bind n b@(Pi _ Explicit ty) sc)
+      = do fwidth <- tyFieldWidth env ty
+           twidth <- tyTagWidth env ty
+           let width = fwidth  `plus` twidth
+           pure $ plus width !(decomposeArgs (b::env) sc)
+    decomposeArgs env ty = pure 0
+
+export
+getFieldPos : {auto c : Ref Ctxt Defs} ->
+              {auto u : Ref UST UState} ->
+              {vars : _} ->
+              Env Term vars -> (ty : Term vars) -> Name -> Nat -> Core (Maybe (Nat, Nat))
+getFieldPos env ty conn field
+  = do dcons <- dataConsForType env ty
+       fieldsWidth <- tyFieldWidth env ty
+       let [(_,dconty)] = filter (\(dn,dty) => dn == conn) dcons
+             | _ => throw $ InternalError $ "Couldn't find expected data con name in list of valid constructors: " ++ show conn ++ " in " ++ show dcons
+       let weakDconTy = rewrite sym (appendNilRightNeutral vars) in weakenNs vars dconty
+       coreLift $ putStrLn $ "GETFIELDPOS FOR TYPE: " ++ show dconty
+       decomposeArgs field (fieldsWidth `minus` 1) env weakDconTy
+  where
+    decomposeArgs : {vars' : _} -> Nat -> Nat -> Env Term vars' -> (ty : Term vars') -> Core (Maybe (Nat, Nat))
+    decomposeArgs field i env (Bind n b@(Pi _ Implicit _) sc)
+      = decomposeArgs field i (b :: env) sc
+    decomposeArgs Z i env (Bind n b@(Pi _ Explicit ty) sc)
+      = do fwidth <- tyFieldWidth env ty
+           twidth <- tyTagWidth env ty
+           let width = fwidth `plus` twidth
+           case width of
+             Z => pure Nothing
+             _ => pure $ Just (i, i `minus` (width `minus` 1))
+    decomposeArgs (S field) i env (Bind n b@(Pi _ Explicit ty) sc)
+      = do fwidth <- tyFieldWidth env ty
+           twidth <- tyTagWidth env ty
+           let width = fwidth `plus` twidth
+           decomposeArgs field (i `minus` width) (b::env) sc
+    decomposeArgs field i env ty = do throw $ InternalError $ "Failed to find field " ++ show field ++ " into constructor's type: " ++ show ty
+
+export
+getFieldType : {auto c : Ref Ctxt Defs} ->
+               {auto u : Ref UST UState} ->
+               {vars : _} ->
+               Env Term vars -> (ty : Term vars) -> Name -> Nat -> Core (Term [])
+getFieldType env ty conn field
+  = do dcons <- dataConsForType env ty
+       let [(_,dconty)] = filter (\(dn,dty) => dn == conn) dcons
+             | _ => throw $ InternalError $ "Couldn't find expected data con name in list of valid constructors: " ++ show conn ++ " in " ++ show dcons
+       decomposeArgs field dconty
+  where
+    decomposeArgs : Nat -> (ty : Term []) -> Core (Term [])
+    decomposeArgs field (Bind n b@(Pi _ Implicit _) sc)
+      = decomposeArgs field $ subst Erased sc
+    decomposeArgs Z (Bind n b@(Pi _ Explicit ty) sc)
+      = pure ty
+    decomposeArgs (S field) (Bind n b@(Pi _ Explicit ty) sc)
+      = decomposeArgs field $ subst Erased sc
+    decomposeArgs field ty = do throw $ InternalError $ "Failed to find field " ++ show field ++ " into constructor's type: " ++ show ty
+
 
 -- Equal for the purposes of size change means, ignoring as patterns, all
 -- non-metavariable positions are equal

@@ -212,11 +212,11 @@ pat w, xn, xsn, yn, ysn, c : Nat,
       |]
 
 addExample : {x,y : Nat} ->
-             < Unsigned 2 x -> Unsigned 2 y ->
-               Unsigned 3 ((plus x y))
+             < Unsigned 1 x -> Unsigned 1 y ->
+               Unsigned 2 ((plus x y))
              >
 pat x, y =>
   addExample {x} {y}
     = [| \xs => \ys =>
-         ~(uAddCirc 2 {x} {y} {0} [|xs|] [|ys|] [| O |])
+         ~(uAddCirc 1 {x} {y} {0} [|xs|] [|ys|] [| O |])
       |]
