@@ -65,7 +65,7 @@ We'll work towards:
   - [X] Checking GADTs over `Simple` types for decidable sizes
   - [X] Deriving bit representations for GADTs over `Simple` types
   - [X] Conversion of Terms to something like Clash's ANF
-  - [ ] Generating netlists from this ANF.
+  - [X] Generating netlists from this ANF.
   - [ ] Encoding _synchronous_ logic
 
 ##

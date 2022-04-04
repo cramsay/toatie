@@ -25,6 +25,7 @@ import Utils.Bits
 import Parser.Source
 
 import System
+import System.File
 import Data.List
 import Data.List1
 import Data.Maybe
@@ -34,14 +35,32 @@ import Data.String
 -- Command line options
 data FOpt : Type where
   FTypeCheckOnly : FOpt
+  FNetlist : String -> FOpt
+  FOutDir : String -> FOpt
 
 Eq FOpt where
   FTypeCheckOnly == FTypeCheckOnly = True
+  FNetlist n == FNetlist n' = n==n'
+  _ == _ = False
 
 parseFOpt : String -> IO FOpt
 parseFOpt "-fTypeCheckOnly" = pure FTypeCheckOnly
-parseFOpt s = do putStrLn $ "Unrecognised option: " ++ s
+parseFOpt s = do let False = isPrefixOf "-fNetlist=" s
+                       | True => pure $ FNetlist (strSubstr 10 (strLength s) s)
+                 let False = isPrefixOf "-fOutDir=" s
+                       | True => pure $ FOutDir  (strSubstr 9  (strLength s) s)
+                 putStrLn $ "Unrecognised option: " ++ s
                  exitFailure
+
+containsFNetlist : List FOpt -> Maybe String
+containsFNetlist ((FNetlist n)::os) = Just n
+containsFNetlist (o::os) = containsFNetlist os
+containsFNetlist [] = Nothing
+
+containsFOutDir : List FOpt -> Maybe String
+containsFOutDir ((FOutDir n)::os) = Just n
+containsFOutDir (o::os) = containsFOutDir os
+containsFOutDir [] = Nothing
 
 data ReplCmd : Type where
   RC_BitRepTy : ReplCmd
@@ -161,6 +180,18 @@ runMain fopts fname decls
          let dirs = defaultModulePaths fname
          traverse_ (processDecl dirs) decls
          checkUndefineds
+
+         let Nothing = containsFNetlist fopts
+               | Just funname =>
+                   do defs <- get Ctxt
+                      extDefs <- extractCtxt defs
+                      compileAndInline [UN funname]
+                      nl <- genNetlist $ UN funname
+                      let outfile = fromMaybe "" (containsFOutDir fopts) ++ "/" ++ funname ++ ".vhd"
+                      res <- coreLift $ writeFile outfile (show nl)
+                      case res of
+                        Left err => throw $ GenericMsg $ "Failed to write netlist file: " ++ show err
+                        Right () => coreLift $ putStrLn $ "Compiled netlist for " ++ show funname
 
          when (not $ FTypeCheckOnly `elem` fopts)
                repl

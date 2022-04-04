@@ -17,78 +17,6 @@ simple BitPair : Nat -> Nat -> Nat -> Type where
               } ->
               Bit a -> Bit b -> BitPair c x y
 
--- AND gates
-
-and : Nat -> Nat -> Nat
-pat x, y =>
-  and (S x) (S y) = 1
-pat y =>
-  and Z y = 0
-pat x =>
-  and x Z = 0
-
--- Need a nudge to show that `and x 0` is always zero? Can maybe improve case
--- tree behaviour for compile time vs run time? Think the nesting of cases is
--- the culprit here... need to match on x before looking at y.
---
--- The need for these here could probably be deferred just by case splitting on
--- all four possible input combinations, but it's bound to come up at some point!
-
-prfAndZeroRight : (x : Nat) -> Equal Nat 0 (and x 0)
-prfAndZeroRight Z = Refl {_} {_}
-pat x =>
-  prfAndZeroRight (S x) = Refl {_} {_}
-
-andGate : {x,y : Nat} -> Bit x -> Bit y -> Bit (and x y)
-andGate {_} {_} I I = I
-pat y, b =>
-  andGate {_} {y} O b = O
-pat x, a =>
-  andGate {x} {_} a O
-    = let ans = O in
-      eqInd2 {_} {_} {_} {prfAndZeroRight x} {_} ans
-
--- OR gates
-
-or : Nat -> Nat -> Nat
-or Z Z = 0
-pat x, y =>
-  or (S x) y = 1
-pat x, y =>
-  or x (S y) = 1
-
-prfOrOneRight : (x : Nat) -> Equal Nat 1 (or x 1)
-prfOrOneRight Z = Refl {_} {_}
-pat x =>
-  prfOrOneRight (S x) = Refl {_} {_}
-
-orGate : {x,y : Nat} -> Bit x -> Bit y -> Bit (or x y)
-orGate {Z} {Z} O O = O
-pat y, b =>
-  orGate {_} {y} I b = I
-pat x, a =>
-  orGate {x} {_} a I =
-    let ans = I in
-    eqInd2 {_} {_} {_} {prfOrOneRight x} {_} ans
-
-
--- XOR gates
-
-xor : Nat -> Nat -> Nat
-xor Z       Z     = 0
-pat x =>
-  xor (S x) Z     = 1
-pat y =>
-  xor Z     (S y) = 1
-pat x, y =>
-  xor (S x) (S y) = 0
-
-xorGate : {x,y : Nat} -> Bit x -> Bit y -> Bit (xor x y)
-xorGate {_} {_} O O = O
-xorGate {_} {_} O I = I
-xorGate {_} {_} I O = I
-xorGate {_} {_} I I = O
-
 addBit : {c,x,y : Nat} -> Bit c -> Bit x -> Bit y -> BitPair c x y
 addBit {_} {_} {_} O O O = MkBitPair {0} {0} {0} {0} {0} {Refl {Nat} {0}} O O
 addBit {_} {_} {_} O O I = MkBitPair {0} {1} {0} {0} {1} {Refl {Nat} {1}} O I
@@ -107,19 +35,8 @@ simple Unsigned : Nat -> Nat -> Type where
           Unsigned width val -> Bit b ->
           Unsigned (S width) (plus b (double val))
 
-u1_1 : Unsigned 1 1
-u1_1 = UCons {_} {_} {_} UNil I
-
-u1_0 : Unsigned 1 0
-u1_0 = UCons {_} {_} {_} UNil O
-
-u2_3 : Unsigned 2 3
-u2_3 = UCons {_} {_} {_} u1_1 I
-
-u2_1 : Unsigned 2 1
-u2_1 = UCons {_} {_} {_} u1_0 I
-
-prfUAdd : (c, xb, yb, a, b, xsb, ysb : Nat) ->
+-- Helper proof for our adder's natural number encoding
+prfAdderOK : (c, xb, yb, a, b, xsb, ysb : Nat) ->
           (prf : Equal Nat (plus b (double a)) (plus c (plus xb yb)) ) ->
           (Equal Nat
            (plus b (double (plus a (plus xsb ysb))))
@@ -128,7 +45,7 @@ prfUAdd : (c, xb, yb, a, b, xsb, ysb : Nat) ->
 pat c, xb, yb, a, b, xsb, ysb,
     prf : (Equal Nat (plus b (double a))
                      (plus c (plus xb yb))) =>
-  prfUAdd c xb yb a b xsb ysb prf
+  prfAdderOK c xb yb a b xsb ysb prf
     = let h0 = Refl {_} {plus b (double (plus a (plus xsb ysb)))}
           h1 = eqInd2 {_} {_} {_}
                       {doubleAssociative a (plus xsb ysb)}
@@ -162,41 +79,19 @@ pat c, xb, yb, a, b, xsb, ysb,
                       } h5
       in h6
 
--- Unsigned binary addition (without staging)
-uAdd : {w,x,y,c : Nat} ->
-       Unsigned w x -> Unsigned w y -> Bit c ->
-       Unsigned (S w) (plus c (plus x y))
-
-pat c, cin =>
-  uAdd {0} {0} {0} {c} UNil UNil cin
-    = UCons {_} {0} {c} UNil cin
-
-pat w, xn, xsn, yn, ysn, c, cin, xb, yb,
-    xbs : Unsigned w xsn, ybs : Unsigned w ysn =>
-  uAdd {S w} {_} {_} {c} (UCons {w} {xsn} {xn} xbs xb) (UCons {w} {ysn} {yn} ybs yb) cin
-    = case (addBit {_} {_} {_} cin xb yb) of
-        pat a, b : Nat, cin' : Bit a, lsb : Bit b,
-            prf : Equal Nat (plus b (double a)) (plus c (plus xn yn))
-        => (MkBitPair {a} {b} {c} {xn} {yn} {prf} cin' lsb) ==>
-             let rec = uAdd {_} {_} {_} {_} xbs ybs cin'
-                 ans = UCons {_} {_} {_} rec lsb
-             in eqInd2 {_} {_} {_}
-                       {prfUAdd c xn yn a b xsn ysn prf}
-                       {_} ans
-
--- -- Unsigned binary addition (with staging)
-uAddCirc : (w : Nat) -> {x,y,c : Nat} ->
+-- Unsigned binary addition (with staging)
+adderN : (w : Nat) -> {x,y,c : Nat} ->
            < Unsigned w x > -> < Unsigned w y > -> < Bit c > ->
            < Unsigned (S w) (plus c (plus x y)) >
 
 pat c : Nat, cin : <Bit c>, xs : <Unsigned 0 0>, ys : <Unsigned 0 0> =>
-  uAddCirc 0 {0} {0} {c} [|UNil|] [|UNil|] cin
+  adderN 0 {0} {0} {c} [|UNil|] [|UNil|] cin
     = [| UCons {_} {0} {c} UNil ~cin |]
 
 pat w, xn, xsn, yn, ysn, c : Nat,
     cin : <Bit c>, xb : Bit xn, yb : Bit yn,
     xbs : Unsigned w xsn, ybs : Unsigned w ysn =>
-  uAddCirc (S w) {_} {_} {c} [| UCons {w} {xsn} {xn} xbs xb |]
+  adderN (S w) {_} {_} {c} [| UCons {w} {xsn} {xn} xbs xb |]
                              [| UCons {w} {ysn} {yn} ybs yb |] cin
     = [| case (addBit {_} {_} {_} ~cin xb yb) of
 
@@ -204,19 +99,20 @@ pat w, xn, xsn, yn, ysn, c : Nat,
                prf : Equal Nat (plus b (double a)) (plus c (plus xn yn))
            => (MkBitPair {a} {b} {c} {xn} {yn} {prf} cin' lsb) ==>
 
-                let rec = ~(uAddCirc _ {_} {_} {_} [|xbs|] [|ybs|] [|cin'|])
+                let rec = ~(adderN _ {_} {_} {_} [|xbs|] [|ybs|] [|cin'|])
                     ans = UCons {_} {_} {_} rec lsb
                 in eqInd2 {_} {_} {_}
-                          {prfUAdd c xn yn a b xsn ysn prf}
+                          {prfAdderOK c xn yn a b xsn ysn prf}
                           {_} ans
       |]
 
-addExample : {x,y : Nat} ->
-             < Unsigned 3 x -> Unsigned 3 y ->
-               Unsigned 4 ((plus x y))
+-- Top-level adder specialised for 5-bit inputs
+adder : {x,y : Nat} ->
+             < Unsigned 5 x -> Unsigned 5 y ->
+               Unsigned 6 ((plus x y))
              >
 pat x, y =>
-  addExample {x} {y}
+  adder {x} {y}
     = [| \xs => \ys =>
-         ~(uAddCirc 3 {x} {y} {0} [|xs|] [|ys|] [| O |])
+         ~(adderN 5 {x} {y} {0} [|xs|] [|ys|] [| O |])
       |]

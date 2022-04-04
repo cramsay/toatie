@@ -303,7 +303,6 @@ getFieldPos env ty conn field
        let [(_,dconty)] = filter (\(dn,dty) => dn == conn) dcons
              | _ => throw $ InternalError $ "Couldn't find expected data con name in list of valid constructors: " ++ show conn ++ " in " ++ show dcons
        let weakDconTy = rewrite sym (appendNilRightNeutral vars) in weakenNs vars dconty
-       coreLift $ putStrLn $ "GETFIELDPOS FOR TYPE: " ++ show dconty
        decomposeArgs field (fieldsWidth `minus` 1) env weakDconTy
   where
     decomposeArgs : {vars' : _} -> Nat -> Nat -> Env Term vars' -> (ty : Term vars') -> Core (Maybe (Nat, Nat))

@@ -46,6 +46,8 @@
           buildInputs = [
             (idris.packages.${system}.idris2)
             (idris.packages.${system}.emacs-with-idris)
+            pkgs.ghdl
+            pkgs.gtkwave
           ];
         };
 

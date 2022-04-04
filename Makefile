@@ -19,3 +19,4 @@ install: $(bin)
 
 clean:
 	rm -r build
+	make -C Test -k clean
