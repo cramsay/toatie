@@ -167,7 +167,7 @@ getCons defs (NTCon tn _ _ _ _)
            (DCon t arity, ty) =>
               pure (Just (!(nf defs [] ty), cn, t, arity))
            _ => pure Nothing
-getCons defs _ = pure []
+getCons defs nty = pure []
 
 emptyRHS : CaseTree vars -> CaseTree vars
 emptyRHS (Case idx el sc alts) = Case idx el sc (map emptyRHSalt alts)
@@ -205,7 +205,6 @@ getMissingAlts defs (NType) alts
            else pure [DefaultCase (Unmatched "Coverage check")]
 getMissingAlts defs nfty alts
     = do allCons <- getCons defs nfty
-         --coreLift $ putStrLn $ "Got cons for " ++ show nfty ++ " = " ++ show allCons
          pure (filter (noneOf alts)
                  (map (mkAlt (Unmatched "Coverage check") . snd) allCons))
   where
@@ -390,8 +389,7 @@ getMissing n ctree
   = do defs <- get Ctxt
        let psIn = map (Ref Bound) vars
        patss <- buildArgs defs [] [] psIn ctree
-       --let patss = map (map (\a=>(AImplicit, a))) patss --TODO Should I be propagating the appinfo all the way properly?
-       traverse (applyInferInfo defs (Ref Func n)) patss
+       traverse (applyInferInfo defs (Ref Func n)) (nub patss)
 
 
 -- Does the second term match against the first?
@@ -408,6 +406,8 @@ match (Eval tm)  (Eval tm')  = match tm tm'
 match (Escape tm) (Escape tm') = match tm tm'
 match (Erased) _ = True
 match _ (Erased) = True
+match (Meta _ _) _ = True
+match _ (Meta _ _) = True
 match (TType) (TType) = True
 match _ _ = False
 
@@ -446,5 +446,5 @@ checkMatched cs ulhs
     = pure $ Just ulhs
   tryClauses (MkClause env lhs _ :: cs) ulhs
   = if !(clauseMatches env lhs ulhs)
-       then pure Nothing -- something matches, discared it
+       then pure Nothing -- something matches, discard it
        else tryClauses cs ulhs

@@ -5,6 +5,9 @@ import Data.Nat
 data Equal : (A : Type) -> (a : A) -> (b : A) -> Type where
   Refl : {A : Type} -> {x : A} -> Equal A x x
 
+data Void : Type where
+  {} -- Empty type! Just syntax for an empty block of constructors
+
 -- Let's play with some example of definitional equality.
 
 twoPlusTwoEqFour : Equal Nat (plus 2 2) 4

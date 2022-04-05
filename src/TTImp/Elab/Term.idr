@@ -444,6 +444,7 @@ TTImp.Elab.Check.elabTerm {vars} mode env tm ty
        hs <- getHoles
        restoreHoles (union hs oldhs)
 
+       put UST ust
        pure (chktm, chkty)
 
 TTImp.Elab.Check.check = checkTerm

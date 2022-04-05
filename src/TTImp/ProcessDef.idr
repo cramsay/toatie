@@ -492,7 +492,7 @@ mkRunTime n
     toErased (vars ** (env, lhs, rhs))
       = do let lhs' = eraseImps env lhs
            --let specs = map (\v => (v, 250)) vars
-           rhs <- applySpecialise env Nothing rhs
+           --rhs <- applySpecialise env Nothing rhs
            let rhs' = eraseImps env rhs
            -- TODO might want to do some transforms here too?
            pure $ (vars ** (env, lhs', rhs'))
@@ -520,11 +520,13 @@ processDef n clauses
 
          -- Update the definition with the compiled tree
          let pats = map toPats (rights chkcs)
-         updateDef n (record { definition = PMDef cargs tree_ct tree_ct pats})
+         updateDef n (record { definition = None })
 
          -- check coverage
          IsCovering <- checkCoverage n (type gdef) chkcs
            | cov => throw $ GenericMsg (show cov)
+
+         updateDef n (record { definition = PMDef cargs tree_ct tree_ct pats})
 
          -- check final case tree for ambiguous matching on implicit args
          defs <- get Ctxt
@@ -588,16 +590,19 @@ processDef n clauses
          handleUnify
            (do ctxt <- get Ctxt
                log "checkimpossible" 10 ("About to unelab term: " ++ show tm)
+               log "checkimpossible" 10 ("to ttimp: " ++ show itm)
                (lhstm, _) <- elabTerm InLHS [] itm Nothing
-               let lhstm = tm
+               --let lhstm = tm
                defs <- get Ctxt
-               lhs <- normalise defs [] lhstm
+               --lhs <- normalise defs [] lhstm
+               let lhs = lhstm
                log "checkimpossible" 10 ("Checking for empty pats: " ++ show lhs)
                if !(hasEmptyPat defs [] lhs)
                  then do put Ctxt ctxt
                          pure Nothing
                  else do empty <- clearDefs ctxt
                          rtm <- normalise empty [] lhs --TODO Maybe I need closeEnv here to strip patvar bindings?
+                         let rtm = lhs
                          put Ctxt ctxt
                          pure (Just rtm)
            )

@@ -1,0 +1,295 @@
+-- A representation of integer numbers
+
+import Data.Nat
+import Proofs
+
+-- An integer is either a positive `Nat` or the negated successor of a `Nat`
+data ZZ : Type where
+  Pos : Nat -> ZZ
+  NegS : Nat -> ZZ
+
+-- Take the absolute value of a `ZZ`
+absZ : ZZ -> Nat
+pat n =>
+  absZ (Pos n) = n
+pat n =>
+  absZ (NegS n) = S n
+
+-- Take the negation of a `Nat`
+negNat : Nat -> ZZ
+negNat Z = Pos Z
+pat n =>
+  negNat (S n) = NegS n
+
+-- Take the negation of a `ZZ`
+negateZ : ZZ -> ZZ
+negateZ (Pos Z) = Pos Z
+pat n =>
+  negateZ (Pos (S n)) = NegS n
+pat n =>
+  negateZ (NegS n) = Pos (S n)
+
+-- Construct a `ZZ` as the difference of two `Nat`s
+minusNatZ : Nat -> Nat -> ZZ
+pat n =>
+  minusNatZ n Z = Pos n
+pat m =>
+  minusNatZ Z (S m) = NegS m
+pat n, m =>
+  minusNatZ (S n) (S m) = minusNatZ n m
+
+-- Add two `ZZ`s
+plusZ : ZZ -> ZZ -> ZZ
+pat n, m =>
+  plusZ (Pos  n) (Pos  m) = Pos (plus n m)
+pat n, m =>
+  plusZ (NegS n) (NegS m) = NegS (S (plus n m))
+pat n, m =>
+  plusZ (Pos  n) (NegS m) = minusNatZ n (S m)
+pat n, m =>
+  plusZ (NegS n) (Pos  m) = minusNatZ m (S n)
+
+-- Subtract two `ZZ`s
+subZ : ZZ -> ZZ -> ZZ
+pat n, m =>
+  subZ n m = plusZ n (negateZ m)
+
+-- Multiply two `ZZ`s
+multZ : ZZ -> ZZ -> ZZ
+pat n, m =>
+  multZ (Pos  n) (Pos  m) = Pos (mul n m)
+pat n, m =>
+  multZ (NegS n) (NegS m) = Pos (mul (S n) (S m))
+pat n, m =>
+  multZ (Pos  n) (NegS m) = negNat (mul n (S m))
+pat n, m =>
+  multZ (NegS n) (Pos  m) = negNat (mul (S n) m)
+
+
+{- Proof of properties of `plusZ` -}
+
+plusZeroLeftNeutralZ : (right : ZZ) -> Equal ZZ (plusZ (Pos Z) right) right
+pat n =>
+  plusZeroLeftNeutralZ (Pos n) = Refl {_} {_}
+pat n =>
+  plusZeroLeftNeutralZ (NegS n) = Refl {_} {_}
+
+plusZeroRightNeutralZ : (left : ZZ) -> Equal ZZ (plusZ left (Pos Z)) left
+pat n =>
+  plusZeroRightNeutralZ (Pos n) = eqCong {_} {_} {Pos} {_} {_} (plusZeroRightNeutral n)
+pat n =>
+  plusZeroRightNeutralZ (NegS n) = Refl {_} {_}
+
+doubleNegElim : (x : ZZ) -> Equal ZZ (negateZ (negateZ x)) x
+doubleNegElim (Pos Z) = Refl {_} {_}
+pat n =>
+  doubleNegElim (Pos (S n)) = Refl {_} {_}
+pat n => 
+  doubleNegElim (NegS n) = Refl {_} {_}
+
+plusCommutativeZ : (left : ZZ) -> (right : ZZ) -> Equal ZZ (plusZ left right) (plusZ right left)
+pat n, m =>
+  plusCommutativeZ (Pos n) (Pos m) = eqCong {_} {_} {Pos} {_} {_} (plusCommutative n m)
+pat n, m =>
+  plusCommutativeZ (Pos n) (NegS m) = Refl {_} {_}
+pat n, m =>
+  plusCommutativeZ (NegS n) (Pos m) = Refl {_} {_}
+pat n, m =>
+  plusCommutativeZ (NegS n) (NegS m)
+    = eqCong {_} {_} {NegS} {_} {_} (
+       eqCong {_} {_} {S} {_} {_} (plusCommutative n m)
+      )
+                                         
+-- We're going to put in quite a bit of work below to show the associativity of `plusZ`
+-- bare with us...
+
+minusNatZAntiCommutative : (j, k : Nat) -> Equal ZZ (negateZ (minusNatZ j k)) (minusNatZ k j)
+minusNatZAntiCommutative Z Z = Refl {_} {_}
+pat k =>
+  minusNatZAntiCommutative Z (S k) = Refl {_} {_}
+pat j =>
+  minusNatZAntiCommutative (S j) Z = Refl {_} {_}
+pat j, k =>
+  minusNatZAntiCommutative (S j) (S k) = minusNatZAntiCommutative j k
+
+negateDistributesPlus : (a, b : ZZ) -> Equal ZZ (negateZ (plusZ a b)) (plusZ (negateZ a) (negateZ b))
+pat b =>
+  negateDistributesPlus (Pos Z) b = eqInd _ {_} {_} (eqSym {_} {_} {_} (plusZeroLeftNeutralZ b)) {\x=> Equal ZZ (negateZ x) (plusZ (negateZ (Pos 0)) (negateZ b)) } (
+                                      eqInd _ {_} {_} (plusZeroLeftNeutralZ (negateZ b)) {\x=> Equal ZZ x (plusZ (negateZ (Pos 0)) (negateZ b))}
+                                        (Refl {_} {plusZ (negateZ (Pos 0)) (negateZ b)})
+                                    )
+pat k =>
+  negateDistributesPlus (Pos (S k)) (Pos Z) = eqInd _ {_} {_} (plusZeroRightNeutral k)
+                                                {\x => Equal ZZ (NegS (plus k 0)) (NegS x)}
+                                                (Refl {_} {_})
+pat k, j =>
+  negateDistributesPlus (Pos (S k)) (Pos (S j))
+    = eqInd _ {_} {_} (eqSym {_} {_} {_} (plusSuccRightSucc k j))
+                      {\x => Equal ZZ (NegS (plus k (S j))) (NegS x)}
+                      (Refl {ZZ} {NegS (plus k (S j))})
+pat k, j =>
+  negateDistributesPlus (Pos (S k)) (NegS j) = minusNatZAntiCommutative k j
+pat k =>
+  negateDistributesPlus (NegS k) (Pos Z)
+    = eqInd _ {_} {_} (plusZeroRightNeutral k)
+                      {\x => Equal ZZ (Pos (S x)) (Pos (S (plus k 0)))}
+                      (Refl {_} {_})
+pat k, j =>
+  negateDistributesPlus (NegS k) (Pos (S j)) = minusNatZAntiCommutative j k
+pat k, j =>
+  negateDistributesPlus (NegS k) (NegS j)
+    = eqInd _ {_} {_} (plusSuccRightSucc k j)
+                      {\x => Equal ZZ (Pos (S (S (plus k j)))) (Pos (S (x)))}
+                      (Refl {_} {_})
+
+lemmaMinusSucc : (k, j, i : Nat) -> Equal ZZ (plusZ (minusNatZ k (S j)) (Pos i))
+                                             (plusZ (minusNatZ k (S (S j))) (Pos (S i)))
+pat j, i =>
+  lemmaMinusSucc Z j i = Refl {_} {_}
+pat i  =>
+  lemmaMinusSucc (S Z) Z i = Refl {_} {_}
+pat k, i =>
+  lemmaMinusSucc (S (S k)) Z i
+    = eqInd _ {_} {_} (plusSuccRightSucc k i)
+                      {\x:Nat => Equal ZZ (Pos (S (plus k i))) (Pos x)}
+                      (Refl {_} {_})
+pat k, j, i =>
+  lemmaMinusSucc (S k) (S j) i = lemmaMinusSucc k j i
+
+lemmaAssocNegation : (k : Nat) -> (c, r : ZZ) ->
+                     Equal ZZ (plusZ (Pos (S k)) (plusZ c r))
+                              (plusZ (plusZ (Pos (S k)) c) r) ->
+                     Equal ZZ (plusZ (NegS k) (plusZ (negateZ c) (negateZ r)))
+                              (plusZ (plusZ (NegS k) (negateZ c)) (negateZ r))
+pat k, c, r, prf =>
+  lemmaAssocNegation k c r prf
+    = let h1 = eqCong {_} {_} {negateZ} {_} {_} prf  
+          h2 = eqInd _ {_} {_} (negateDistributesPlus (plusZ (Pos (S k)) c) r)
+                               {\x => Equal ZZ (negateZ (plusZ (Pos (S k)) (plusZ c r))) x}
+                               h1
+          h3 = eqInd _ {_} {_} (negateDistributesPlus (Pos (S k)) c)
+                               {\x => Equal ZZ (negateZ (plusZ (Pos (S k)) (plusZ c r)))
+                                               (plusZ x (negateZ r))}
+                               h2
+          h4 = eqInd _ {_} {_} (negateDistributesPlus (Pos (S k)) (plusZ c r))
+                               {\x => Equal ZZ x
+                                               (plusZ (plusZ (NegS k) (negateZ c)) (negateZ r))}
+                               h3
+          h5 = eqInd _ {_} {_} (negateDistributesPlus c r)
+                               {\x => Equal ZZ (plusZ (NegS k) x)
+                                               (plusZ (plusZ (NegS k) (negateZ c)) (negateZ r))}
+                               h4
+      in h5
+
+lemmaAssocPos : (k : Nat) -> (c, r : ZZ) -> Equal ZZ (plusZ (Pos k) (plusZ c r))
+                                                     (plusZ (plusZ (Pos k) c) r)
+pat k, j, i =>
+  lemmaAssocPos k     (Pos j)      (Pos i) 
+    = eqCong {_} {_} {Pos} {_} {_} (plusAssociative k j i)
+pat k, i =>
+  lemmaAssocPos k     (Pos Z)      (NegS i) 
+    = eqInd _ {_} {_} (plusZeroRightNeutral k)
+                      {\x => Equal ZZ (minusNatZ x (S i))
+                                      (minusNatZ (plus k 0) (S i))}
+                      (Refl {_} {_})
+pat k, j =>
+  lemmaAssocPos k     (Pos (S j))  (NegS Z) 
+    = eqInd _ {_} {_} (eqSym {_} {_} {_} (plusSuccRightSucc k j))
+                      {\x => Equal ZZ (minusNatZ x 1) (minusNatZ (plus k (S j)) 1)}
+                      (Refl {_} {_})
+pat k, j, i =>
+  lemmaAssocPos k     (Pos (S j))  (NegS (S i)) 
+    = let 
+          h0 = Refl {ZZ} {minusNatZ (plus k (S j)) (S (S i))}
+          h1 : Equal ZZ (minusNatZ (plus k j) (S i))
+                        (minusNatZ (plus k (S j)) (S (S i)))
+             = eqInd _ {_} {_} (eqSym {_} {_} {_} (plusSuccRightSucc k j))
+                                {\x => Equal ZZ (minusNatZ x (S (S i)))
+                                                (minusNatZ (plus k (S j)) (S (S i)))}
+                                h0
+          ind = lemmaAssocPos k (Pos j) (NegS i)
+          h2  = eqInd _ {_} {_} (eqSym {_} {_} {_} ind)
+                                {\x => Equal ZZ x (minusNatZ (plus k (S j)) (S (S i)))}
+                                h1
+      in h2
+pat k, j =>
+  lemmaAssocPos k     (NegS j)     (Pos Z) 
+    = eqInd _ {_} {_} (plusZeroRightNeutralZ (minusNatZ k (S j)))
+                      {\x => Equal ZZ x (plusZ (minusNatZ k (S j)) (Pos 0))}
+                      (Refl {_} {_})
+pat i =>
+  lemmaAssocPos Z     (NegS Z)     (Pos (S i)) 
+    = Refl {_} {_}
+pat k, i =>
+  lemmaAssocPos (S k) (NegS Z)     (Pos (S i)) 
+    = eqInd _ {_} {_} (plusSuccRightSucc k i)
+                      {\x => Equal ZZ (Pos (S (plus k i))) (Pos x) }
+                      (Refl {_} {_})
+pat k, j, i =>
+  lemmaAssocPos k     (NegS (S j)) (Pos (S i)) 
+    = let h0 = eqSym {_} {_} {_} (lemmaAssocPos k (NegS j) (Pos i))
+          h1 = lemmaMinusSucc k j i
+          h2 = eqInd _ {_} {_} h0
+                               {\x => Equal ZZ x (plusZ (minusNatZ k (S (S j))) (Pos (S i)))}
+                               h1
+      in h2
+pat j, i =>
+  lemmaAssocPos Z     (NegS j)     (NegS i) 
+    = Refl {_} {_}
+pat k, i =>
+  lemmaAssocPos (S k) (NegS Z)     (NegS i) 
+    = Refl {_} {_}
+pat k, j, i =>
+  lemmaAssocPos (S k) (NegS (S j)) (NegS i) 
+    = lemmaAssocPos k (NegS j) (NegS i)
+
+plusAssociativeZ : (l, c, r : ZZ) -> Equal ZZ (plusZ l (plusZ c r))
+                                              (plusZ (plusZ l c) r)
+pat k, c, r =>
+  plusAssociativeZ (Pos k) c r = lemmaAssocPos k c r
+pat k, c, r =>
+  plusAssociativeZ (NegS k) c r
+    = let h1 = lemmaAssocNegation k (negateZ c) (negateZ r) (lemmaAssocPos (S k) (negateZ c) (negateZ r))
+          h2 = eqInd _ {_} {_} (doubleNegElim c)
+                               {\x => Equal ZZ (plusZ (NegS k) (plusZ x (negateZ (negateZ r))))
+                                               (plusZ (plusZ (NegS k) x) (negateZ (negateZ r)))}
+                               h1
+          h3 = eqInd _ {_} {_} (doubleNegElim r)
+                               {\x => Equal ZZ (plusZ (NegS k) (plusZ c x))
+                                               (plusZ (plusZ (NegS k) c) x)}
+                               h2
+      in h3
+
+{- Proof of properties of subtraction -}
+
+lemmaMinusSymZero : (k : Nat) -> Equal ZZ (minusNatZ k k) (Pos 0)
+lemmaMinusSymZero Z = Refl {_} {_}
+pat k =>
+  lemmaMinusSymZero (S k) = lemmaMinusSymZero k
+
+plusNegateInverseLZ : (a : ZZ) -> Equal ZZ (plusZ a (negateZ a)) (Pos 0)
+plusNegateInverseLZ (Pos Z) = Refl {_} {_}
+pat k =>
+  plusNegateInverseLZ (Pos (S k)) = lemmaMinusSymZero k
+pat k =>
+  plusNegateInverseLZ (NegS k) = lemmaMinusSymZero k
+
+plusNegateInverseRZ : (a : ZZ) -> Equal ZZ (plusZ (negateZ a) a) (Pos 0)
+plusNegateInverseRZ (Pos Z) = Refl {_} {_}
+pat k =>
+  plusNegateInverseRZ (Pos (S k)) = lemmaMinusSymZero k
+pat k =>
+  plusNegateInverseRZ (NegS k) = lemmaMinusSymZero k
+
+{- Proof of properties of multiplication -}
+
+multZeroLeftZeroZ : (right : ZZ) -> Equal ZZ (multZ (Pos Z) right) (Pos Z)
+pat k => multZeroLeftZeroZ (Pos  k) = Refl {_} {_}
+pat k => multZeroLeftZeroZ (NegS k) = Refl {_} {_}
+
+{- Need proofs on multiplication of Nats to continue here...
+
+multZeroRightZeroZ : (left : ZZ) -> Equal ZZ (multZ left (Pos Z)) (Pos Z)
+pat k => multZeroRightZeroZ (Pos  k) = eqCong {_} {_} {Pos} {_} {_} (multZeroRightZero k)
+pat k => multZeroRightZeroZ (NegS k) = _
+-}
