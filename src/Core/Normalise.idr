@@ -66,8 +66,10 @@ parameters (defs : Defs)
         = evalMeta env name (map (MkClosure locs env) args) stk
     eval env locs (Bind x (Lam s _ ty) scope) (thunk :: stk)
         = eval env (snd thunk :: locs) scope stk
-    eval env locs (Bind x (Let s tm ty) scope) stk
-        = eval env (MkClosure locs env tm :: locs) scope stk
+    eval env locs (Bind x b@(Let s tm ty) scope) stk
+        = --do let b' = map (MkClosure locs env) b
+          --   pure $ NBind x b' (\defs', arg => evalTop defs' env (arg :: locs) scope stk)
+          eval env (MkClosure locs env tm :: locs) scope stk
     eval env locs (Bind x b scope) stk
         = do let b' = map (MkClosure locs env) b
              pure $ NBind x b'
@@ -114,7 +116,9 @@ parameters (defs : Defs)
     -- If it's one of the free variables, we are done
     -- (Idris 2 has Let bindings, which we'd need to check and evaluate here)
     evalLocal {vars = []} env idx prf stk locs
-        = pure $ NApp (NLocal idx prf) stk
+        = case getBinder prf env of
+                 Let _ val _ => eval env [] val stk
+                 _           => pure $ NApp (NLocal idx prf) stk
     evalLocal env Z First stk (x :: locs)
         = evalLocClosure env stk x
     evalLocal {vars = x :: xs} {free}

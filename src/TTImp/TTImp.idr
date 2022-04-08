@@ -1,6 +1,7 @@
 module TTImp.TTImp
 
 import Core.TT
+import Core.Context
 
 mutual
   public export
@@ -83,6 +84,34 @@ toTTImp (Eval   tm) = Just $ IEval   !(toTTImp tm)
 toTTImp (Escape tm) = Just $ IEscape !(toTTImp tm)
 toTTImp TType  = Just IType
 toTTImp Erased = Just Implicit -- Nothing
+
+export
+toTTImpClosed : {vars : _} -> {auto c : Ref Ctxt Defs} -> Term vars -> Core RawImp
+toTTImpClosed (Local idx p) = pure $ IVar (nameAt idx p)
+toTTImpClosed (Ref   _   n) = if !(goodName n)
+                                 then pure $ IVar n
+                                 else pure Implicit
+  where
+  goodName : Name -> Core Bool
+  goodName n = do let False = n `elem` vars
+                        | True => pure True
+                  defs <- get Ctxt
+                  Just gdef <- lookupDef n defs
+                    | _ => pure False
+                  pure True
+toTTImpClosed (Meta n   args) = pure Implicit
+toTTImpClosed (Bind n (Lam s i ty) scope) = pure $ ILam i (pure n) !(toTTImpClosed ty) !(toTTImpClosed scope)
+toTTImpClosed (Bind n (Pi  s i ty) scope) = pure $ IPi  i (pure n) !(toTTImpClosed ty) !(toTTImpClosed scope)
+toTTImpClosed (Bind n (Let s val ty) scope) = pure $ ILet n (Just !(toTTImpClosed ty)) !(toTTImpClosed val) !(toTTImpClosed scope)
+toTTImpClosed (Bind n (PVar s i ty) scope) = pure $ IPatvar n !(toTTImpClosed ty) !(toTTImpClosed scope)
+toTTImpClosed (Bind n (PVTy s ty) scope) = pure Implicit
+toTTImpClosed (App i f a) = pure $ IApp i !(toTTImpClosed f) !(toTTImpClosed a)
+toTTImpClosed (Quote _ tm) = pure $ IQuote  !(toTTImpClosed tm)
+toTTImpClosed (TCode  tm) = pure $ ICode   !(toTTImpClosed tm)
+toTTImpClosed (Eval   tm) = pure $ IEval   !(toTTImpClosed tm)
+toTTImpClosed (Escape tm) = pure $ IEscape !(toTTImpClosed tm)
+toTTImpClosed TType  = pure IType
+toTTImpClosed Erased = pure Implicit -- Nothing
 
 mutual
   export

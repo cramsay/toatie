@@ -37,7 +37,7 @@ data SExpr = SSplit Name  --^ Output signal
 
            | SJoin  Name         --^ Output signal
                     STag         --^ Tag for this constructor
-                    (List SAtom) --^ Ordered inputs
+                    (List STree) --^ Ordered inputs
 
            | SMux   Name                --^ Output signal
                     Nat                 --^ Tag upper bound
@@ -139,14 +139,14 @@ netlistTm nl tys (CLet x (CCon n args) ty sc)
   = do nl' <- netlistTm nl (ty::tys) sc
        let nl' = addSignal nl' x !(typeToSType ty)
        tag <- tagForCons ty n
-       args' <- traverse argToAtom (zip [0 .. length args] args)
+       args' <- traverse argToSTree (zip [0 .. length args] args)
        Z <- getConsPadding [] ty n
-         | pad => pure $ addAssignment nl' (SJoin x tag (args'++[Const $ Tag pad 0]))
+         | pad => pure $ addAssignment nl' (SJoin x tag (args'++[Tree (Const $ Tag pad 0) []]))
        pure $ addAssignment nl' (SJoin x tag args')
   where
-  argToAtom : (Nat, CExp vars) -> Core SAtom
-  argToAtom (field, arg) = do argty <- getFieldType [] ty n field
-                              tmToName argty arg
+  argToSTree : (Nat, CExp vars) -> Core STree
+  argToSTree (field, arg) = do argty <- getFieldType [] ty n field
+                               tmToSTree tys argty arg
 netlistTm nl tys (CLet x (CConCase (CLocal {idx} p) alts def) ty sc)
   = do nl' <- netlistTm nl (ty::tys) sc
        scTy <- typeOfLocal tys idx

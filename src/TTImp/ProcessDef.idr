@@ -316,9 +316,11 @@ processLHS {vars} env lhs
 hasEmptyPat : {vars : _} ->
               {auto c : Ref Ctxt Defs} ->
               Defs -> Env Term vars -> Term vars -> Core Bool
-hasEmptyPat defs env (Bind x b sc)
-  = pure $ !(isEmpty defs env !(nf defs env (binderType b)))
-             || !(hasEmptyPat defs (b :: env) sc)
+hasEmptyPat defs env (Meta n _)
+  = do Just ty <- lookupDefType n defs
+         | Nothing => throw $ InternalError $ "Couldn't find type for meta: " ++ show n
+       pure $ !(isEmpty defs [] !(nf defs [] ty))
+hasEmptyPat defs env (App _ f a) = pure $ !(hasEmptyPat defs env f) || !(hasEmptyPat defs env a)
 hasEmptyPat defs env _ = pure False
 
 processClause : {auto c : Ref Ctxt Defs} ->
@@ -326,19 +328,29 @@ processClause : {auto c : Ref Ctxt Defs} ->
                 {auto s : Ref Stg Stage} ->
                 ImpClause -> Core (Either RawImp Clause)
 processClause (ImpossibleClause lhs_raw)
-    = do handleUnify
+    = do -- Don't let failures affect staging
+         stage <- get Stg
+         ust <- get UST
+         defs <- get Ctxt
+         handleUnify
            (do
               (lhstm, lhstyg) <- elabTerm InLHS [] lhs_raw Nothing
-              defs <- get Ctxt
-              lhstm <- normalise defs [] lhstm
-              if !(hasEmptyPat defs [] lhstm)
-                 then pure (Left lhs_raw)
+              defs' <- get Ctxt
+              lhstm <- normalise defs' [] lhstm
+              if !(hasEmptyPat defs' [] lhstm)
+                 then do put UST ust
+                         put Ctxt defs
+                         put Stg stage
+                         pure (Left lhs_raw)
                  else throw (ValidCase [] (Left lhstm))
            )
            (\err => case err of
                          ValidCase _ _ => throw err
-                         _ => do defs <- get Ctxt
-                                 if !(impossibleErrOK defs err)
+                         _ => do defs' <- get Ctxt
+                                 put Stg stage
+                                 put UST ust
+                                 put Ctxt defs
+                                 if !(impossibleErrOK defs' err)
                                     then pure (Left lhs_raw)
                                     else throw (ValidCase [] (Right err))
            )
@@ -375,7 +387,7 @@ processClause (PatClause lhs_in rhs)
   dumpHole : Defs -> Name -> Core String
   dumpHole defs n = do Just htype <- lookupDefType n defs
                          | Nothing => throw $ GenericMsg "Unresolved hole has no type"
-                       pure $ unlines $ splitPis n htype
+                       pure $ unlines $ splitPis n !(normalise defs [] htype)
 
 nameListEq : (xs : List Name) -> (ys : List Name) -> Maybe (xs = ys)
 nameListEq [] [] = Just Refl
@@ -554,9 +566,10 @@ processDef n clauses
          updateDef n (record { definition = PMDef cargs tree_ct tree_rt pats})
 
          coreLift $ putStrLn $ "Complete ----------------------"
-         coreLift $ putStrLn $ "Args = " ++ show cargs
-         coreLift $ putStrLn $ "Tree = " ++ show tree_ct
-         coreLift $ putStrLn $ "RTree = " ++ show tree_rt
+         coreLift $ putStrLn $ "Stage: " ++ show !(get Stg)
+         --coreLift $ putStrLn $ "Args = " ++ show cargs
+         --coreLift $ putStrLn $ "Tree = " ++ show tree_ct
+         --coreLift $ putStrLn $ "RTree = " ++ show tree_rt
          coreLift $ putStrLn $ "Processed " ++ show n
   where
 
@@ -571,43 +584,60 @@ processDef n clauses
   catchAll : Clause -> Bool
   catchAll (MkClause env lhs _)
     = all simplePat (getArgs lhs)
+  
+  wrapLams : List Name -> RawImp -> RawImp
+  wrapLams [] tm = tm
+  wrapLams (x::xs) tm = ILam Explicit (Just x) Implicit (wrapLams xs tm)
 
   -- Return 'Nothing' if the clause is impossible, otherwise return the
   -- checked clause (with implicits filled in, so that we can see if they
   -- match any of the given clauses)
-  checkImpossible : Name -> Term [] ->
+  checkImpossible : List Name -> Name -> Term [] ->
                     Core (Maybe (Term []))
-  checkImpossible n tm
+  checkImpossible ns n tm
     = do -- We're checking closed terms that, thanks to Core.Coverage, will
          -- sometimes contain free variables.
          -- We need to resolve this before checking
          -- FIXME Also we don't respect implicitness of arguments...
          let fvs = freeVars [] tm
-         let tmImps = foldl (\tm => \n => substName n Erased tm) tm fvs
-         let Just itm = toTTImp tmImps
-               | Nothing => throw (GenericMsg $ "Failed to unelab clause :" ++ show tm)
+         --let tmImps = foldl (\tm => \n => substName n Erased tm) tm fvs
+         itm <- toTTImpClosed $ weakenNs [] tm--Imps
+         -- Don't let failures affect staging
+         stage <- get Stg
+         ust <- get UST
+         defs <- get Ctxt
 
          handleUnify
            (do ctxt <- get Ctxt
                log "checkimpossible" 10 ("About to unelab term: " ++ show tm)
+               log "checkimpossible" 10 ("With local names: " ++ show ns)
                log "checkimpossible" 10 ("to ttimp: " ++ show itm)
                (lhstm, _) <- elabTerm InLHS [] itm Nothing
-               --let lhstm = tm
-               defs <- get Ctxt
-               --lhs <- normalise defs [] lhstm
-               let lhs = lhstm
+               --let lhstm = tmImps
+               defs' <- get Ctxt
+               lhs <- normalise defs' [] lhstm
+               newust <- get UST
+               let [] = Data.SortedMap.toList $ constraints newust
+                   | _ => do put UST ust
+                             put Stg stage
+                             put Ctxt defs
+                             pure Nothing
+               --let lhs = lhstm
                log "checkimpossible" 10 ("Checking for empty pats: " ++ show lhs)
-               if !(hasEmptyPat defs [] lhs)
+               if !(hasEmptyPat defs' [] lhs)
                  then do put Ctxt ctxt
                          pure Nothing
                  else do empty <- clearDefs ctxt
                          rtm <- normalise empty [] lhs --TODO Maybe I need closeEnv here to strip patvar bindings?
-                         let rtm = lhs
+                         --let rtm = lhs
                          put Ctxt ctxt
+                         put UST ust
                          pure (Just rtm)
            )
            (\err => do log "checkimpossible catch" 10 (show err)
                        defs <- get Ctxt
+                       put Stg stage
+                       put UST ust
                        if not !(recoverableErr defs err)
                           then pure Nothing
                           else pure (Just tm)
@@ -615,9 +645,8 @@ processDef n clauses
 
   getClause : Either RawImp Clause -> Core (Maybe Clause)
   getClause (Left rawlhs)
-    = catch (do --lhsp <- getImpossibleTerm rawlhs --We've comment this out since we can rule out impossible cases without looking at the impossible cases explicitly supplied by the user
-                --pure $ Just $ MkClause [] lhsp Erased)
-                pure Nothing)
+    = catch (do lhsp <- getImpossibleTerm rawlhs
+                pure $ Just $ MkClause [] lhsp Erased)
             (\e => do log "getclause left" 10 $ "Caught error: " ++ show e
                       pure Nothing)
   getClause (Right c) = pure (Just c)
@@ -631,14 +660,15 @@ processDef n clauses
                         then pure []
                         else getMissing n ctree
          log "checkcoverage" 10 ("Initial tree: " ++ show ctree)
-         log "checkcoverage" 10 ("Initial missing: " ++ show missCase)
+         log "checkcoverage" 10 ("Initial missing: " ++ unlines (map show missCase))
          -- Filter out out impossible clauses
-         missImp <- traverse (checkImpossible n) missCase
-         log "checkcoverage" 10 ("After impossible filtering: " ++ show missImp)
+         missImp <- traverse (checkImpossible cargs n) missCase
+         log "checkcoverage" 10 ("After impossible filtering: " ++ unlines (map show missImp))
          -- Filter out matches clauses (perhapsed having come up due to some overlapping patterns)
          missMatch <- traverse (checkMatched covcs) (mapMaybe id missImp)
-         log "checkcoverage" 10 ("After overlap filtering: " ++ show missMatch)
+         log "checkcoverage" 10 ("After overlap filtering: " ++ unlines (map show missMatch))
          let miss = mapMaybe id missMatch
+         defs <- get Ctxt
          if isNil miss
             then pure IsCovering --TODO check that we don't call any functions which are non covering!
             else pure (MissingCases miss)

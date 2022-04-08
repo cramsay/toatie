@@ -153,3 +153,36 @@ pat a,b,c,d =>
           h6 = eqInd2 {_} {_} {_} {plusAssociative a c (plus b d)}
                                   {\n => Equal Nat (plus (plus a b) (plus c d)) n} h5
       in h6
+
+plusEqZeroRight : (a, b : Nat) -> Equal Nat (plus a b) 0 ->
+                                  Equal Nat b 0
+pat b, prf =>
+  plusEqZeroRight Z b prf = prf
+pat n, b =>
+  plusEqZeroRight (S n) b (Refl {_} {_}) impossible
+
+plusEqZeroLeft : (a, b : Nat) -> Equal Nat (plus a b) 0 ->
+                                 Equal Nat a 0
+pat a, b, prf =>
+  plusEqZeroLeft a b prf
+    = let h1 = eqInd _ {_} {_} (plusCommutative a b)
+                               {\x => Equal Nat x 0} prf
+          in plusEqZeroRight b a h1
+
+plusDoubleEq1ImpliesZ : (a, b : Nat) -> Equal Nat (plus a (plus b b)) 1
+                                     -> Equal Nat b 0
+pat a, prf =>
+  plusDoubleEq1ImpliesZ a Z prf = Refl {_} {_}
+pat n, a, prf =>
+  plusDoubleEq1ImpliesZ a (S n) prf
+    = let h1 = eqInd _ {_} {_} (eqSym {_} {_} {_} (plusSuccRightSucc a (plus n (S n))))
+                               {\x => Equal Nat x 1}
+                               prf
+          h2 = eqInd _ {_} {_} (eqSym {_} {_} {_} (plusSuccRightSucc n n))
+                               {\x => Equal Nat (S (plus a x)) 1}
+                               h1
+          h3 = eqInd _ {_} {_} (eqSym {_} {_} {_} (plusSuccRightSucc a (plus n n)))
+                               {\x => Equal Nat (S x) 1}
+                               h2
+      in case h3 of
+           Refl {_} {_} impossible

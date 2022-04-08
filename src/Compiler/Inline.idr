@@ -427,14 +427,10 @@ mutual
          pure $ ((sclv++(x::vallv)) ** (lets',sc'))
   liftLetsTm (CCon x args)
     = do --args' <- traverse abstractArg args
-         (lv ** (lets, args')) <- liftLetsArgs args
+         (lv ** (lets, args')) <- liftLetsArgs True args
          pure $ (lv ** (lets, CCon x args'))
-    where
-    abstractArg : CExp vars -> Core (CExp vars)
-    abstractArg (CLocal p) = pure $ CLocal p
-    abstractArg tm = pure $ CLet !(genName "_conarg") tm Erased (CLocal First)
   liftLetsTm (CApp f args)
-    = do (lv ** (lets, args')) <- liftLetsArgs args
+    = do (lv ** (lets, args')) <- liftLetsArgs False args
          (flv ** (flets, fsc)) <- liftLetsTm $ weakenNs lv f
          let lets' : CExp ((flv ++ lv) ++ vars) -> CExp vars
                    = \newsc => lets . flets $ rewrite appendAssociative flv lv vars in newsc
@@ -487,15 +483,28 @@ mutual
 
   liftLetsArgs : {vars:_} ->
                  {auto l : Ref LVar Int} ->
+                 Bool -> -- ^ Should we lift constructors out to a local def?
                  List (CExp vars) ->
                  Core (lvars **
                        (CExp (lvars++vars) -> CExp vars
                        -- ^ Block of let bindings without scope
                        , List (CExp (lvars++vars))))
                        -- ^ Arguments
-  liftLetsArgs [] = pure ([] ** (id, []))
-  liftLetsArgs (arg :: args)
-    = do (rlv ** (rlets, rargs)) <- liftLetsArgs args
+  liftLetsArgs _ [] = pure ([] ** (id, []))
+  {-
+  liftLetsArgs True ((CCon n cargs) :: args)
+    = do (rlv ** (rlets, rargs)) <- liftLetsArgs True args
+         (alv ** (alets, aarg)) <- liftLetsArgs True $ map (weakenNs rlv) cargs
+         xn <- genName "conarg"
+         let lets' : CExp (((xn::alv) ++ rlv) ++ vars) -> CExp vars
+                   = \newsc => rlets . alets . CLet xn (CCon n aarg) Erased  $ rewrite appendAssociative (xn :: alv) rlv vars in newsc
+         let args' : List (CExp (((xn::alv) ++ rlv) ++ vars))
+                   = (rewrite sym (appendAssociative (xn::alv) rlv vars) in CLocal First) ::
+                     map (\a => rewrite sym (appendAssociative (xn::alv) rlv vars) in weakenNs (xn::alv) a) rargs
+         pure (xn::alv++rlv ** (lets',args'))
+         -}
+  liftLetsArgs liftCons (arg :: args)
+    = do (rlv ** (rlets, rargs)) <- liftLetsArgs liftCons args
          (alv ** (alets, aarg)) <- liftLetsTm $ weakenNs rlv arg
          let lets' : CExp ((alv ++ rlv) ++ vars) -> CExp vars
                    = \newsc => rlets . alets $ rewrite appendAssociative alv rlv vars in newsc

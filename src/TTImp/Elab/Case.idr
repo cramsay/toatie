@@ -170,6 +170,8 @@ caseBlock {vars} mode env scr scrtm scrty alts expected
                  = maybe (App AExplicit applyEnv scrtm)
                          (const applyEnv)
                          splitOn
+       coreLift $ putStrLn $ "GEN CASE APP === " ++ show appTm
+       coreLift $ putStrLn $ "ZZZ with ENV === " ++ show env
 
        let alts' = map (updateClause casen casefnty splitOn env) alts
 

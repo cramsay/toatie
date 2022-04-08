@@ -281,6 +281,49 @@ pat k =>
 pat k =>
   plusNegateInverseRZ (NegS k) = lemmaMinusSymZero k
 
+subDoubleNegate : (a : ZZ) -> Equal ZZ (subZ a (plusZ a a)) (negateZ a)
+pat a =>
+  subDoubleNegate a
+    = let h1 = eqInd2 {_} {_} {_} {negateDistributesPlus a a}
+                 {\x => Equal ZZ (subZ a (plusZ a a))
+                                 (plusZ a (x))}
+                 (Refl {_} {_})
+          h2 = eqInd2 {_} {_} {_} {plusAssociativeZ a (negateZ a) (negateZ a)}
+                 {\x => Equal ZZ (subZ a (plusZ a a)) x} h1
+          h3 = eqInd2 {_} {_} {_} {plusNegateInverseLZ a}
+                 {\x => Equal ZZ (subZ a (plusZ a a))
+                                 (plusZ x (negateZ a))} h2
+      in eqInd2 {_} {_} {_} {plusZeroLeftNeutralZ (negateZ a)} {_} h3
+
+plusPlusAssociativeZ : (a,b,c,d : ZZ) -> Equal ZZ (plusZ (plusZ a b) (plusZ c d))
+                                                  (plusZ (plusZ a c) (plusZ b d))
+pat a,b,c,d =>
+  plusPlusAssociativeZ a b c d
+    = let h1 = Refl {ZZ} {plusZ (plusZ a b) (plusZ c d)}
+          h2 = eqInd2 {_} {_} {_} {eqSym {_} {_} {_} (plusAssociativeZ a b (plusZ c d))}
+                                  {\n => Equal ZZ (plusZ (plusZ a b) (plusZ c d)) n} h1
+          h3 = eqInd2 {_} {_} {_} {plusCommutativeZ b (plusZ c d)}
+                                  {\n => Equal ZZ (plusZ (plusZ a b) (plusZ c d)) (plusZ a n)} h2
+          h4 = eqInd2 {_} {_} {_} {eqSym {_} {_} {_} (plusAssociativeZ c d b)}
+                                  {\n => Equal ZZ (plusZ (plusZ a b) (plusZ c d)) (plusZ a n)} h3
+          h5 = eqInd2 {_} {_} {_} {plusCommutativeZ d b}
+                                  {\n => Equal ZZ (plusZ (plusZ a b) (plusZ c d)) (plusZ a (plusZ c n))} h4
+          h6 = eqInd2 {_} {_} {_} {plusAssociativeZ a c (plusZ b d)}
+                                  {\n => Equal ZZ (plusZ (plusZ a b) (plusZ c d)) n} h5
+      in h6
+
+plusLeftImpliesRHSSub : (a, b, c : ZZ) -> Equal ZZ (plusZ a b) c -> Equal ZZ a (subZ c b)
+pat a, b, c, prf =>
+  plusLeftImpliesRHSSub a b c prf
+    = let h1 = eqCong {_} {_} {\x => subZ x b} {_} {_}  prf
+          h2 = eqInd2 {_} {_} {_} {eqSym {_} {_} {_} (plusAssociativeZ a b (negateZ b))}
+                                  {\x => Equal ZZ x (subZ c b)} h1
+          h3 = eqInd2 {_} {_} {_} {plusNegateInverseLZ b}
+                                  {\x => Equal ZZ (plusZ a x) (subZ c b)} h2
+          h4 = eqInd2 {_} {_} {_} {plusZeroRightNeutralZ a}
+                                  {\x => Equal ZZ x (subZ c b)}  h3
+      in h4
+
 {- Proof of properties of multiplication -}
 
 multZeroLeftZeroZ : (right : ZZ) -> Equal ZZ (multZ (Pos Z) right) (Pos Z)

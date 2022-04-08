@@ -18,6 +18,7 @@ import TTImp.ProcessData
 
 import Data.Maybe
 import Data.SortedSet
+import Data.SortedMap
 
 checkExp : {vars : _} ->
            {auto c : Ref Ctxt Defs} ->

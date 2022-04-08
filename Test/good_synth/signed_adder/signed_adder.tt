@@ -1,0 +1,304 @@
+-- A signed adder example
+
+import Data.Nat
+import Data.ZZ
+import Proofs
+
+simple Bit : Nat -> Type where
+  O : Bit 0
+  I : Bit 1
+
+simple BitPair : Nat -> Nat -> Nat -> Type where
+  MkBitPair : {a,b,c,x,y : Nat} ->
+              {prf : Equal Nat
+                           (plus b (double a))
+                           (plus c (plus x y))
+              } ->
+              Bit a -> Bit b -> BitPair c x y
+
+addBit : {c,x,y : Nat} -> Bit c -> Bit x -> Bit y -> BitPair c x y
+addBit {_} {_} {_} O O O = MkBitPair {0} {0} {0} {0} {0} {Refl {Nat} {0}} O O
+addBit {_} {_} {_} O O I = MkBitPair {0} {1} {0} {0} {1} {Refl {Nat} {1}} O I
+addBit {_} {_} {_} O I O = MkBitPair {0} {1} {0} {1} {0} {Refl {Nat} {1}} O I
+addBit {_} {_} {_} O I I = MkBitPair {1} {0} {0} {1} {1} {Refl {Nat} {2}} I O
+addBit {_} {_} {_} I O O = MkBitPair {0} {1} {1} {0} {0} {Refl {Nat} {1}} O I
+addBit {_} {_} {_} I O I = MkBitPair {1} {0} {1} {0} {1} {Refl {Nat} {2}} I O
+addBit {_} {_} {_} I I O = MkBitPair {1} {0} {1} {1} {0} {Refl {Nat} {2}} I O
+addBit {_} {_} {_} I I I = MkBitPair {1} {1} {1} {1} {1} {Refl {Nat} {3}} I I
+
+doubleZ : ZZ -> ZZ
+pat k =>
+  doubleZ k = plusZ k k
+
+-- Signed binary types
+
+simple Signed : Nat -> ZZ -> Type where
+  SNil  : Signed 0 (Pos 0)
+  SMsb  : {b : Nat} -> Bit b -> Signed 1 (negateZ (Pos b))
+  SCons : {width, b : Nat} -> {val : ZZ} ->
+          Signed (S width) val -> Bit b ->
+          Signed (S (S width)) (plusZ (Pos b) (doubleZ val))
+
+-- Sign extension preserves integer encoding
+
+prfSignExtMsb : (x : ZZ) -> Equal ZZ (plusZ x (doubleZ (negateZ x)))
+                                     (negateZ x)
+pat x =>
+  prfSignExtMsb x
+    = let h0 = eqInd2 {_} {_} {_} {plusAssociativeZ x (negateZ x) (negateZ x)}
+                                  {\a => Equal ZZ (plusZ x (doubleZ (negateZ x))) a}
+                                  (Refl {_} {_})
+          h1 = eqInd2 {_} {_} {_} {plusNegateInverseLZ x}
+                                  {\a => Equal ZZ (plusZ x (doubleZ (negateZ x))) (plusZ a (negateZ x))}
+                                  h0
+          h2 = eqInd2 {_} {_} {_} {plusZeroLeftNeutralZ (negateZ x)}
+                                  {\a => Equal ZZ (plusZ x (doubleZ (negateZ x))) a}
+                                  h1
+      in h2
+
+signExt : (w : Nat) -> {val : ZZ} -> < Signed w val> -> < Signed (S w) val >
+signExt 0 {Pos 0} [| SNil |] = [| SMsb {_} O |]
+pat bval, b =>
+  signExt 1 {_} [| SMsb {bval} b |]
+    = [| let ans = SCons {_} {_} {_} (SMsb {bval} b) b
+         in eqInd2 {_} {_} {_} {prfSignExtMsb (Pos bval)} {_} ans
+      |]
+pat w, bval, b, bitsval, bits : Signed (S w) bitsval =>
+  signExt (S (S w)) {_} [| SCons {w} {bval} {bitsval} bits b |]
+    = [| let rec = ~(signExt (S w) {bitsval} [| bits |])
+         in SCons {_} {_} {_} rec b
+      |]
+
+dismissBitsDifferByTwo : (s1, s2 : Nat) -> Bit s1 -> Bit s2 ->
+                         Equal Nat (plus s1 0) (plus s2 2) ->
+                         Equal Nat 0 1
+dismissBitsDifferByTwo _ _ O O (Refl {_} {_}) impossible
+dismissBitsDifferByTwo _ _ O I (Refl {_} {_}) impossible
+dismissBitsDifferByTwo _ _ I O (Refl {_} {_}) impossible
+dismissBitsDifferByTwo _ _ I I (Refl {_} {_}) impossible
+
+dismissBitsDifferByThree : (s1, s2 : Nat) -> Bit s1 -> Bit s2 ->
+                           Equal Nat (S (plus s1 2)) (plus s2 0) ->
+                           Equal Nat 1 0
+dismissBitsDifferByThree _ _ O O (Refl {_} {_}) impossible
+dismissBitsDifferByThree _ _ O I (Refl {_} {_}) impossible
+dismissBitsDifferByThree _ _ I O (Refl {_} {_}) impossible
+dismissBitsDifferByThree _ _ I I (Refl {_} {_}) impossible
+
+lemmaTwoFAsCoutEq : (c0, x, y, s1, c1, s2, c2 : Nat) ->
+                    Bit c0 -> Bit s1 -> Bit c1 -> Bit s2 -> Bit c2 ->
+                    Equal Nat (plus s1 (double c1)) (plus c0 (plus x y)) ->
+                    Equal Nat (plus s2 (double c2)) (plus c1 (plus x y)) ->
+                    Equal Nat c1 c2
+pat x y s1 s2 s1b s2b prf1 prf2 =>
+  lemmaTwoFAsCoutEq 0 x y s1 0 s2 0 O s1b O s2b O prf1 prf2
+    = Refl {_} {_}
+pat x y s1 s2 s1b s2b prf1 prf2 =>
+  lemmaTwoFAsCoutEq 0 x y s1 1 s2 1 O s1b I s2b I prf1 prf2
+    = Refl {_} {_}
+pat x y s1 s2 s1b s2b prf1 prf2 =>
+  lemmaTwoFAsCoutEq 1 x y s1 0 s2 0 I s1b O s2b O prf1 prf2
+    = Refl {_} {_}
+pat x y s1 s2 s1b s2b prf1 prf2 =>
+  lemmaTwoFAsCoutEq 1 x y s1 1 s2 1 I s1b I s2b I prf1 prf2
+    = Refl {_} {_}
+-- Impossible cases
+pat x y s1 s2 s1b s2b prf1 prf2 =>
+  lemmaTwoFAsCoutEq 0 x y s1 0 s2 1 O s1b O s2b I prf1 prf2
+    = let h1 = eqTrans {_} {_} {_} {_} prf1 (eqSym {_} {_} {_} prf2)
+      in dismissBitsDifferByTwo s1 s2 s1b s2b h1
+pat x y s1 s2 s1b s2b prf1 prf2 =>
+  lemmaTwoFAsCoutEq 0 x y s1 1 s2 0 O s1b I s2b O prf1 prf2
+    = let h1 = eqTrans {_} {_} {_} {_} (eqCong {_} {_} {S} {_} {_} prf1) (eqSym {_} {_} {_} prf2)
+      in dismissBitsDifferByThree s1 s2 s1b s2b h1
+pat x y s1 s2 s1b s2b prf1 prf2 =>
+  lemmaTwoFAsCoutEq 1 x y s1 0 s2 1 I s1b O s2b I prf1 prf2
+    = let h1 = eqTrans {_} {_} {_} {_} prf1 (eqCong {_} {_} {S} {_} {_} (eqSym {_} {_} {_} prf2))
+      in eqSym {_} {_} {_} (dismissBitsDifferByThree s2 s1 s2b s1b (eqSym {_} {_} {_} h1))
+pat x y s1 s2 s1b s2b prf1 prf2 =>
+  lemmaTwoFAsCoutEq 1 x y s1 1 s2 0 I s1b I s2b O prf1 prf2
+    = let h1 = eqTrans {_} {_} {_} {_} prf1 (eqSym {_} {_} {_} prf2)
+      in eqSym {_} {_} {_} (dismissBitsDifferByTwo s2 s1 s2b s1b (eqSym {_} {_} {_} h1))
+
+prfAdderN : (c0, x, y, s1, c1, s2, c2 : Nat) ->
+            Bit c0 -> Bit s1 -> Bit c1 -> Bit s2 -> Bit c2 ->
+            Equal Nat (plus s1 (double c1)) (plus c0 (plus x y)) ->
+            Equal Nat (plus s2 (double c2)) (plus c1 (plus x y)) ->
+            Equal ZZ (plusZ (Pos s1) (doubleZ (negateZ (Pos s2))))
+                     (plusZ (Pos c0) (plusZ (negateZ (Pos x)) (negateZ (Pos y))))
+pat c0 x y s1 c1 s2 c2 c0b s1b c1b s2b c2b prf1 prf2 =>
+  prfAdderN c0 x y s1 c1 s2 c2 c0b s1b c1b s2b c2b prf1 prf2
+    = let -- Prove c1 === c2
+          c1EqC2 = lemmaTwoFAsCoutEq c0 x y s1 c1 s2 c2 c0b s1b c1b s2b c2b prf1 prf2
+          -- Rearrange both helper proofs to define s1 and s2 in terms of c1, x, and y
+          prf2' = eqInd2 {_} {_} {_} {eqSym {_} {_} {_} c1EqC2}
+                                     {\a => Equal Nat (plus s2 (double a)) (plus c1 (plus x y))}
+                                     prf2
+          prf1Z = eqCong {_} {_} {Pos} {_} {_} prf1
+          prf2Z = eqCong {_} {_} {Pos} {_} {_} prf2'
+          eqS1 = plusLeftImpliesRHSSub (Pos s1) (Pos (double c1)) (Pos (plus c0 (plus x y))) prf1Z
+          eqS2 = plusLeftImpliesRHSSub (Pos s2) (Pos (double c1)) (Pos (plus c1 (plus x y))) prf2Z
+          -- Start building the output equation
+          h1 = eqInd2 {_} {_} {_} {eqS2}
+                 {\a => Equal ZZ (plusZ (Pos s1) (doubleZ (negateZ (Pos s2))))
+                                 (plusZ (Pos s1) (doubleZ (negateZ a)))}
+                 (Refl {_} {_})
+          h2 = eqInd2 {_} {_} {_} {eqS1}
+                 {\a => Equal ZZ (plusZ (Pos s1) (doubleZ (negateZ (Pos s2))))
+                                 (plusZ a (doubleZ (negateZ
+                                   (subZ (Pos (plus c1 (plus x y))) (Pos (double c1)))
+                                 )))}
+               h1
+          h3 = eqInd2 {_} {_} {_} {plusCommutative c1 (plus x y)}
+                 {\a => (Equal ZZ (plusZ (Pos s1) (doubleZ (negateZ (Pos s2))))
+                                  (plusZ (plusZ (Pos (plus c0 (plus x y))) (negateZ (Pos (double c1))))
+                                         (doubleZ (negateZ (subZ (Pos a) (Pos (double c1)))))
+                                  ))} h2
+          h4 = eqInd2 {_} {_} {_} {eqSym {_} {_} {_} (plusAssociativeZ (Pos (plus x y)) (Pos c1) (negateZ (Pos (double c1))))}
+                 {\a => (Equal ZZ (plusZ (Pos s1) (doubleZ (negateZ (Pos s2))))
+                                  (plusZ (plusZ (Pos (plus c0 (plus x y))) (negateZ (Pos (double c1))))
+                                         (doubleZ (negateZ a))
+                                  ))} h3
+          h5 = eqInd2 {_} {_} {_} {subDoubleNegate (Pos c1)}
+                 {\a => (Equal ZZ (plusZ (Pos s1) (doubleZ (negateZ (Pos s2))))
+                                  (plusZ (plusZ (Pos (plus c0 (plus x y))) (negateZ (Pos (double c1))))
+                                         (doubleZ (negateZ (plusZ (Pos (plus x y)) a )))
+                                  ))} h4
+          h6 = eqInd2 {_} {_} {_} {negateDistributesPlus (Pos (plus x y)) (negateZ (Pos c1))}
+                 {\a => (Equal ZZ (plusZ (Pos s1) (doubleZ (negateZ (Pos s2))))
+                                  (plusZ (plusZ (Pos (plus c0 (plus x y))) (negateZ (Pos (double c1))))
+                                         (doubleZ a)
+                                  ))} h5
+          h7 = eqInd2 {_} {_} {_} {doubleNegElim (Pos c1)}
+                 {\a => (Equal ZZ (plusZ (Pos s1) (doubleZ (negateZ (Pos s2))))
+                                  (plusZ (plusZ (Pos (plus c0 (plus x y))) (negateZ (Pos (double c1))))
+                                         (doubleZ (plusZ (negateZ (Pos (plus x y))) a))
+                                  ))} h6
+          h8 = eqInd2 {_} {_} {_} {plusCommutativeZ (negateZ (Pos (plus x y))) (Pos c1)}
+                 {\a => (Equal ZZ (plusZ (Pos s1) (doubleZ (negateZ (Pos s2))))
+                                  (plusZ (plusZ (Pos (plus c0 (plus x y))) (negateZ (Pos (double c1))))
+                                         (doubleZ a)
+                                  ))} h7
+          h9 = eqInd2 {_} {_} {_} {plusPlusAssociativeZ (Pos c1) (negateZ (Pos (plus x y))) (Pos c1) (negateZ (Pos (plus x y)))}
+                 {\a => (Equal ZZ (plusZ (Pos s1) (doubleZ (negateZ (Pos s2))))
+                                  (plusZ (plusZ (Pos (plus c0 (plus x y))) (negateZ (Pos (double c1)))) a
+                                  ))} h8
+          h10 = eqInd2 {_} {_} {_} {plusCommutativeZ (Pos (double c1)) (doubleZ (negateZ (Pos (plus x y))))}
+                  {\a => (Equal ZZ (plusZ (Pos s1) (doubleZ (negateZ (Pos s2))))
+                                   (plusZ (plusZ (Pos (plus c0 (plus x y))) (negateZ (Pos (plus c1 c1)))) a)
+                                   )} h9
+          h11 = eqInd2 {_} {_} {_} {plusPlusAssociativeZ (Pos (plus c0 (plus x y))) (negateZ (Pos (double c1)))
+                                                         (doubleZ (negateZ (Pos (plus x y)))) (Pos (double c1))}
+                  {\a => (Equal ZZ (plusZ (Pos s1) (doubleZ (negateZ (Pos s2))))) a} h10
+          h12 = eqInd2 {_} {_} {_} {plusNegateInverseRZ (Pos (double c1))}
+                  {\a => (Equal ZZ (plusZ (Pos s1) (doubleZ (negateZ (Pos s2)))))
+                                   (plusZ (plusZ (Pos (plus c0 (plus x y)))
+                                                 (plusZ (negateZ (Pos (plus x y)))
+                                                        (negateZ (Pos (plus x y)))))
+                                          a)} h11
+          h13 = eqInd2 {_} {_} {_} {plusZeroRightNeutralZ (plusZ (Pos (plus c0 (plus x y)))
+                                                                 (plusZ (negateZ (Pos (plus x y)))
+                                                                        (negateZ (Pos (plus x y)))))}
+                  {\a => (Equal ZZ (plusZ (Pos s1) (doubleZ (negateZ (Pos s2)))) a)} h12
+          h14 = eqInd2 {_} {_} {_} {eqSym {_} {_} {_} (plusAssociativeZ (Pos c0) (Pos (plus x y)) (doubleZ (negateZ (Pos (plus x y)))))}
+                  {\a => (Equal ZZ (plusZ (Pos s1) (doubleZ (negateZ (Pos s2)))) a)} h13
+          h15 = eqInd2 {_} {_} {_} {eqSym {_} {_} {_} (negateDistributesPlus (Pos (plus x y)) (Pos (plus x y)))}
+                  {\a => (Equal ZZ (plusZ (Pos s1) (doubleZ (negateZ (Pos s2))))
+                                   (plusZ (Pos c0) (plusZ (Pos (plus x y)) a)))} h14
+          h16 = eqInd2 {_} {_} {_} {subDoubleNegate (Pos (plus x y))}
+                  {\a => (Equal ZZ (plusZ (Pos s1) (doubleZ (negateZ (Pos s2))))
+                                   (plusZ (Pos c0) a))} h15
+      in eqInd2 {_} {_} {_} {negateDistributesPlus (Pos x) (Pos y)}
+                  {\a => (Equal ZZ (plusZ (Pos s1) (doubleZ (negateZ (Pos s2))))
+                                   (plusZ (Pos c0) a))} h16
+
+prfAdderNRec : (c, xb, yb, a, b : Nat) -> (xsb, ysb : ZZ) ->
+               (prf : Equal Nat (plus b (double a)) (plus c (plus xb yb)) ) ->
+               (Equal ZZ
+                (plusZ (Pos b) (doubleZ (plusZ (Pos a) (plusZ xsb ysb))))
+                (plusZ (Pos c) (plusZ (plusZ (Pos xb) (doubleZ xsb))
+                                      (plusZ (Pos yb) (doubleZ ysb))))
+               )
+pat c, xb, yb, a, b, xsb, ysb,
+    prf : (Equal Nat (plus b (double a))
+                     (plus c (plus xb yb))) =>
+  prfAdderNRec c xb yb a b xsb ysb prf
+    = let h0 = Refl {_} {plusZ (Pos b) (doubleZ (plusZ (Pos a) (plusZ xsb ysb)))}
+          h1 = eqInd2 {_} {_} {_}
+                      {plusPlusAssociativeZ (Pos a) (plusZ xsb ysb) (Pos a) (plusZ xsb ysb)}
+                      {\n => Equal ZZ (plusZ (Pos b) (doubleZ (plusZ (Pos a) (plusZ xsb ysb))))
+                                      (plusZ (Pos b) n)
+                      } h0
+          h2 = eqInd2 {_} {_} {_}
+                      {plusAssociativeZ (Pos b) (Pos (double a)) (doubleZ (plusZ xsb ysb))}
+                      {\n => Equal ZZ (plusZ (Pos b) (doubleZ (plusZ (Pos a) (plusZ xsb ysb)))) n
+                      } h1
+          h3 = eqInd2 {_} {_} {_}
+                      {prf}
+                      {\n => Equal ZZ (plusZ (Pos b) (doubleZ (plusZ (Pos a) (plusZ xsb ysb))))
+                                             (plusZ (Pos n) (doubleZ (plusZ xsb ysb)))
+                      } h2
+          h4 = eqInd2 {_} {_} {_}
+                      {plusPlusAssociativeZ xsb ysb xsb ysb}
+                      {\n => Equal ZZ (plusZ (Pos b) (doubleZ (plusZ (Pos a) (plusZ xsb ysb))))
+                                      (plusZ (plusZ (Pos c) (plusZ (Pos xb) (Pos yb))) n)
+                      } h3
+          h5 = eqInd2 {_} {_} {_}
+                      {eqSym {_} {_} {_} (plusAssociativeZ (Pos c) (Pos (plus xb yb)) (plusZ (doubleZ xsb) (doubleZ ysb)))}
+                      {\n => Equal ZZ (plusZ (Pos b) (doubleZ (plusZ (Pos a) (plusZ xsb ysb))))
+                                             (n)
+                      } h4
+          h6 = eqInd2 {_} {_} {_}
+                      {plusPlusAssociativeZ (Pos xb) (Pos yb) (doubleZ xsb) (doubleZ ysb)}
+                      {\n => Equal ZZ (plusZ (Pos b) (doubleZ (plusZ (Pos a) (plusZ xsb ysb))))
+                                             (plusZ (Pos c) n)
+                      } h5
+      in h6
+
+-----------------------
+-- Signed binary addition (with staging)
+addSubN : (w : Nat) -> {x,y : ZZ} -> {c : Nat} ->
+           < Signed (S w) x > -> < Signed (S w) y > -> < Bit c > ->
+           < Signed (S (S w)) (plusZ (Pos c) (plusZ x y)) >
+pat c, cin, xn, xb, yn, yb =>
+  addSubN 0 {_} {_} {c} [| SMsb {xn} xb |] [| SMsb {yn} yb |] cin
+    = [| let cinEsc = ~cin in
+         case (addBit {_} {_} {_} cinEsc xb yb) of
+           pat a, b, cin', lsb, prf
+           => (MkBitPair {a} {b} {c} {xn} {yn} {prf} cin' lsb) ==>
+             case (addBit {_} {_} {_} cin' xb yb) of
+               pat a', b', cout, msb, prf'
+                 => (MkBitPair {a'} {b'} {_} {xn} {yn} {prf'} cout msb) ==>
+                   let ans = SCons {_} {_} {_} (SMsb {_} msb) lsb
+                   in eqInd2 {_} {_} {_} {prfAdderN c xn yn b a b' a' cinEsc lsb cin' msb cout prf prf'} {_} ans
+
+             
+      |]
+
+pat w, c, cin, xsn, xsb : Signed (S w) xsn, xn, xb, ysn, ysb : Signed (S w) ysn, yn, yb =>
+  addSubN (S w) {_} {_} {c} [| SCons {w} {xn} {xsn} xsb xb |] [| SCons {w} {yn} {ysn} ysb yb |] cin
+    = [| case (addBit {c} {xn} {yn} ~cin xb yb) of
+           pat a, b, cin', lsb, prf
+           => (MkBitPair {a} {b} {c} {xn} {yn} {prf} cin' lsb) ==>
+              let rec = ~(addSubN _ {_} {_} {_} [| xsb |] [| ysb |] [| cin' |])
+                  ans = SCons {S w} {_} {_} rec lsb
+              in eqInd2 {_} {_} {_} {prfAdderNRec c xn yn a b xsn ysn prf} {_} ans
+      |]
+
+adderN : (w : Nat) -> {x,y : ZZ} ->
+       < Signed w x > -> < Signed w y > ->
+       < Signed (S w) (plusZ x y) >
+adderN Z {Pos 0} {Pos 0} [| SNil |] [| SNil |] = [| SMsb {0} O |]
+pat w, x, y, xs, ys =>
+  adderN (S w) {x} {y} xs ys
+    = [| let ans = ~(addSubN w {x} {y} {0} xs ys [|O|])
+         in eqInd2 {_} {_} {_} {plusZeroLeftNeutralZ (plusZ x y)} {_} ans
+      |]
+
+-- Top-level adder specialised for 5-bit inputs
+signed_adder : {x,y : ZZ} ->
+             < Signed 5 x -> Signed 5 y ->
+               Signed 6 (plusZ x y)
+             >
+pat x, y =>
+  signed_adder {x} {y} = [| \xs => \ys => ~(adderN 5 {x} {y} [|xs|] [|ys|]) |]
