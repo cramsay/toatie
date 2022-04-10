@@ -566,7 +566,7 @@ processDef n clauses
          updateDef n (record { definition = PMDef cargs tree_ct tree_rt pats})
 
          coreLift $ putStrLn $ "Complete ----------------------"
-         coreLift $ putStrLn $ "Stage: " ++ show !(get Stg)
+         --coreLift $ putStrLn $ "Stage: " ++ show !(get Stg)
          --coreLift $ putStrLn $ "Args = " ++ show cargs
          --coreLift $ putStrLn $ "Tree = " ++ show tree_ct
          --coreLift $ putStrLn $ "RTree = " ++ show tree_rt
@@ -584,7 +584,7 @@ processDef n clauses
   catchAll : Clause -> Bool
   catchAll (MkClause env lhs _)
     = all simplePat (getArgs lhs)
-  
+
   wrapLams : List Name -> RawImp -> RawImp
   wrapLams [] tm = tm
   wrapLams (x::xs) tm = ILam Explicit (Just x) Implicit (wrapLams xs tm)

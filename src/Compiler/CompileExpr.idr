@@ -101,7 +101,7 @@ mutual
              Core (CExp vars)
   toCExpTm n (Local idx p) = pure $ CLocal p
   toCExpTm n (Meta x xs)
-    = pure CErased --throw $ GenericMsg $ "Cannot compile unsolved metavar into CExp: " ++ show x
+    = throw $ GenericMsg $ "Cannot compile unsolved metavar into CExp: " ++ show x
       -- Can return CErased if this causes problems
   toCExpTm n (App i f arg) = pure $ CApp !(toCExp n f) [!(toCExp n arg)]
   toCExpTm n TType = pure $ CCon (UN "Type") []
@@ -202,7 +202,7 @@ mutual
   toCDef : {auto c : Ref Ctxt Defs} ->
            Name -> Term [] -> Def ->
            Core CDef
-  toCDef n ty (PMDef args _ treeCT _) -- TODO How should we handle pattern vars?
+  toCDef n ty (PMDef args _ treeCT _)
     = do let erased = erasedArgs ty
          let (args' ** p) = mkSub 0  args erased
          comptree <- toCExpTree n treeCT

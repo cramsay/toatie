@@ -408,9 +408,9 @@ pat x, y =>
 
 
 -- Top-level subtractor specialised for 5-bit inputs
-subtractor : {x,y : ZZ} ->
-             < Signed 2 x -> Signed 2 y ->
-               Signed 3 (subZ x y)
+signed_subtractor : {x,y : ZZ} ->
+             < Signed 5 x -> Signed 5 y ->
+               Signed 6 (subZ x y)
              >
 pat x, y =>
-  subtractor {x} {y} = [| \xs => \ys => ~(subtractorN 2 {x} {y} [|xs|] [|ys|]) |]
+  signed_subtractor {x} {y} = [| \xs => \ys => ~(subtractorN 5 {x} {y} [|xs|] [|ys|]) |]

@@ -162,7 +162,6 @@ caseBlock {vars} mode env scr scrtm scrty alts expected
                                       (maybe (Bind scrn (Pi s Explicit scrty) (weaken caseretty))
                                              (const caseretty)
                                              splitOn)
-
        addDef casen $ MkGlobalDef casefnty None Nothing
        let caseRef : Term vars = Ref Func casen
        let applyEnv = applyTo caseRef env
@@ -170,8 +169,6 @@ caseBlock {vars} mode env scr scrtm scrty alts expected
                  = maybe (App AExplicit applyEnv scrtm)
                          (const applyEnv)
                          splitOn
-       coreLift $ putStrLn $ "GEN CASE APP === " ++ show appTm
-       coreLift $ putStrLn $ "ZZZ with ENV === " ++ show env
 
        let alts' = map (updateClause casen casefnty splitOn env) alts
 
@@ -321,7 +318,8 @@ checkCase mode env scr scrty_in alts exp
        (scrtm_in, gscrty) <- check env scr (Just (gnf env scrtyv))
 
        -- Check if we've managed to work out scrty (if not, we bail)
-       scrty <- getTerm gscrty
+       defs <- get Ctxt
+       scrty <- normalise defs env !(getTerm gscrty)
        defs <- get Ctxt
        checkConcrete !(nf defs env scrty)
 
