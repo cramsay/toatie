@@ -49,6 +49,10 @@ pat n, m =>
 pat n, m =>
   plusZ (NegS n) (Pos  m) = minusNatZ m (S n)
 
+doubleZ : ZZ -> ZZ
+pat k =>
+  doubleZ k = plusZ k k
+
 -- Subtract two `ZZ`s
 subZ : ZZ -> ZZ -> ZZ
 pat n, m =>

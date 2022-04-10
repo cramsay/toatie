@@ -1,0 +1,101 @@
+import Data.Nat
+import Proofs
+
+simple Bit : Nat -> Type where
+  O : Bit 0
+  I : Bit 1
+
+simple BitPair : Nat -> Nat -> Nat -> Type where
+  MkBitPair : {a,b,c,x,y : Nat} ->
+              {prf : Equal Nat
+                           (plus b (double a))
+                           (plus c (plus x y))
+              } ->
+              Bit a -> Bit b -> BitPair c x y
+
+-- AND gates
+
+and : Nat -> Nat -> Nat
+pat x, y =>
+  and (S x) (S y) = 1
+pat y =>
+  and Z y = 0
+pat x =>
+  and x Z = 0
+
+prfAndZeroRight : (x : Nat) -> Equal Nat 0 (and x 0)
+prfAndZeroRight Z = Refl {_} {_}
+pat x =>
+  prfAndZeroRight (S x) = Refl {_} {_}
+
+andGate : {x,y : Nat} -> Bit x -> Bit y -> Bit (and x y)
+andGate {_} {_} I I = I
+pat y, b =>
+  andGate {_} {y} O b = O
+pat x, a =>
+  andGate {x} {_} a O
+    = let ans = O in
+      eqInd2 {_} {_} {_} {prfAndZeroRight x} {_} ans
+
+-- OR gates
+
+or : Nat -> Nat -> Nat
+or Z Z = 0
+pat x, y =>
+  or (S x) y = 1
+pat x, y =>
+  or x (S y) = 1
+
+prfOrOneRight : (x : Nat) -> Equal Nat 1 (or x 1)
+prfOrOneRight Z = Refl {_} {_}
+pat x =>
+  prfOrOneRight (S x) = Refl {_} {_}
+
+orGate : {x,y : Nat} -> Bit x -> Bit y -> Bit (or x y)
+orGate {Z} {Z} O O = O
+pat y, b =>
+  orGate {_} {y} I b = I
+pat x, a =>
+  orGate {x} {_} a I =
+    let ans = I in
+    eqInd2 {_} {_} {_} {prfOrOneRight x} {_} ans
+
+
+-- XOR gates
+
+xor : Nat -> Nat -> Nat
+xor Z       Z     = 0
+pat x =>
+  xor (S x) Z     = 1
+pat y =>
+  xor Z     (S y) = 1
+pat x, y =>
+  xor (S x) (S y) = 0
+
+xorGate : {x,y : Nat} -> Bit x -> Bit y -> Bit (xor x y)
+xorGate {_} {_} O O = O
+xorGate {_} {_} O I = I
+xorGate {_} {_} I O = I
+xorGate {_} {_} I I = O
+
+-- NOT gates
+
+not : Nat -> Nat
+not 0 = 1
+pat n =>
+  not (S n) = 0
+
+notGate : {b : Nat} -> Bit b -> Bit (not b)
+notGate {_} O = I
+notGate {_} I = O
+
+-- Full adder
+addBit : {c,x,y : Nat} -> Bit c -> Bit x -> Bit y -> BitPair c x y
+addBit {_} {_} {_} O O O = MkBitPair {0} {0} {0} {0} {0} {Refl {Nat} {0}} O O
+addBit {_} {_} {_} O O I = MkBitPair {0} {1} {0} {0} {1} {Refl {Nat} {1}} O I
+addBit {_} {_} {_} O I O = MkBitPair {0} {1} {0} {1} {0} {Refl {Nat} {1}} O I
+addBit {_} {_} {_} O I I = MkBitPair {1} {0} {0} {1} {1} {Refl {Nat} {2}} I O
+addBit {_} {_} {_} I O O = MkBitPair {0} {1} {1} {0} {0} {Refl {Nat} {1}} O I
+addBit {_} {_} {_} I O I = MkBitPair {1} {0} {1} {0} {1} {Refl {Nat} {2}} I O
+addBit {_} {_} {_} I I O = MkBitPair {1} {0} {1} {1} {0} {Refl {Nat} {2}} I O
+addBit {_} {_} {_} I I I = MkBitPair {1} {1} {1} {1} {1} {Refl {Nat} {3}} I I

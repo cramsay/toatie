@@ -1,0 +1,83 @@
+-- Playing with binary representations a la Brady's "Constructing Correct
+-- Circuits: Verification of Functional Aspects of Hardware Specifications with
+-- Dependent Types"
+
+import Data.Nat
+import Data.Bit
+import Proofs
+
+simple Unsigned : Nat -> Nat -> Type where
+  UNil  : Unsigned 0 0
+  UCons : {width,val,b : Nat} ->
+          Unsigned width val -> Bit b ->
+          Unsigned (S width) (plus b (double val))
+
+prfAddU : (c, xb, yb, a, b, xsb, ysb : Nat) ->
+          (prf : Equal Nat (plus b (double a)) (plus c (plus xb yb)) ) ->
+          (Equal Nat
+           (plus b (double (plus a (plus xsb ysb))))
+           (plus c (plus (plus xb (double xsb)) (plus yb (double ysb))))
+          )
+pat c, xb, yb, a, b, xsb, ysb,
+    prf : (Equal Nat (plus b (double a))
+                     (plus c (plus xb yb))) =>
+  prfAddU c xb yb a b xsb ysb prf
+    = let h0 = Refl {_} {plus b (double (plus a (plus xsb ysb)))}
+          h1 = eqInd2 {_} {_} {_}
+                      {doubleAssociative a (plus xsb ysb)}
+                      {\n : Nat => Equal Nat (plus b (double (plus a (plus xsb ysb))))
+                                             (plus b n)
+                      } h0
+          h2 = eqInd2 {_} {_} {_}
+                      {plusAssociative b (double a) (double (plus xsb ysb))}
+                      {\n : Nat => Equal Nat (plus b (double (plus a (plus xsb ysb))))
+                                             (n)
+                      } h1
+          h3 = eqInd2 {_} {_} {_}
+                      {prf}
+                      {\n : Nat => Equal Nat (plus b (double (plus a (plus xsb ysb))))
+                                             (plus n (double (plus xsb ysb)))
+                      } h2
+          h4 = eqInd2 {_} {_} {_}
+                      {doubleAssociative xsb ysb}
+                      {\n : Nat => Equal Nat (plus b (double (plus a (plus xsb ysb))))
+                                             (plus (plus c (plus xb yb)) n)
+                      } h3
+          h5 = eqInd2 {_} {_} {_}
+                      {eqSym {_} {_} {_} (plusAssociative c (plus xb yb) (plus (double xsb) (double ysb)))}
+                      {\n : Nat => Equal Nat (plus b (double (plus a (plus xsb ysb))))
+                                             (n)
+                      } h4
+          h6 = eqInd2 {_} {_} {_}
+                      {plusPlusAssociative xb yb (double xsb) (double ysb)}
+                      {\n : Nat => Equal Nat (plus b (double (plus a (plus xsb ysb))))
+                                             (plus c n)
+                      } h5
+      in h6
+
+-- -- Unsigned binary addition (with staging)
+addU : (w : Nat) -> {x,y,c : Nat} ->
+           < Unsigned w x > -> < Unsigned w y > -> < Bit c > ->
+           < Unsigned (S w) (plus c (plus x y)) >
+
+pat c : Nat, cin : <Bit c>, xs : <Unsigned 0 0>, ys : <Unsigned 0 0> =>
+  addU 0 {0} {0} {c} [|UNil|] [|UNil|] cin
+    = [| UCons {_} {0} {c} UNil ~cin |]
+
+pat w, xn, xsn, yn, ysn, c : Nat,
+    cin : <Bit c>, xb : Bit xn, yb : Bit yn,
+    xbs : Unsigned w xsn, ybs : Unsigned w ysn =>
+  addU (S w) {_} {_} {c} [| UCons {w} {xsn} {xn} xbs xb |]
+                             [| UCons {w} {ysn} {yn} ybs yb |] cin
+    = [| case (addBit {_} {_} {_} ~cin xb yb) of
+
+           pat a, b : Nat, cin' : Bit a, lsb : Bit b,
+               prf : Equal Nat (plus b (double a)) (plus c (plus xn yn))
+           => (MkBitPair {a} {b} {c} {xn} {yn} {prf} cin' lsb) ==>
+
+                let rec = ~(addU _ {_} {_} {_} [|xbs|] [|ybs|] [|cin'|])
+                    ans = UCons {_} {_} {_} rec lsb
+                in eqInd2 {_} {_} {_}
+                          {prfAddU c xn yn a b xsn ysn prf}
+                          {_} ans
+      |]

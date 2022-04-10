@@ -1,47 +1,13 @@
--- A signed adder example
-
 import Data.Nat
 import Data.ZZ
+import Data.Bit
 import Proofs
 
-simple Bit : Nat -> Type where
-  O : Bit 0
-  I : Bit 1
-
-notNat : Nat -> Nat
-notNat 0 = 1
-notNat (S _) = 0
-
-not : {b : Nat} -> Bit b -> Bit (notNat b)
-not {_} O = I
-not {_} I = O
 
 notIsNegPlus1 : (b : Nat) -> Bit b ->
-                Equal ZZ (Pos (notNat b)) (plusZ (negateZ (Pos b)) (Pos 1))
+                Equal ZZ (Pos (not b)) (plusZ (negateZ (Pos b)) (Pos 1))
 notIsNegPlus1 Z O = Refl {_} {_}
 notIsNegPlus1 1 I = Refl {_} {_}
-
-simple BitPair : Nat -> Nat -> Nat -> Type where
-  MkBitPair : {a,b,c,x,y : Nat} ->
-              {prf : Equal Nat
-                           (plus b (double a))
-                           (plus c (plus x y))
-              } ->
-              Bit a -> Bit b -> BitPair c x y
-
-addBit : {c,x,y : Nat} -> Bit c -> Bit x -> Bit y -> BitPair c x y
-addBit {_} {_} {_} O O O = MkBitPair {0} {0} {0} {0} {0} {Refl {Nat} {0}} O O
-addBit {_} {_} {_} O O I = MkBitPair {0} {1} {0} {0} {1} {Refl {Nat} {1}} O I
-addBit {_} {_} {_} O I O = MkBitPair {0} {1} {0} {1} {0} {Refl {Nat} {1}} O I
-addBit {_} {_} {_} O I I = MkBitPair {1} {0} {0} {1} {1} {Refl {Nat} {2}} I O
-addBit {_} {_} {_} I O O = MkBitPair {0} {1} {1} {0} {0} {Refl {Nat} {1}} O I
-addBit {_} {_} {_} I O I = MkBitPair {1} {0} {1} {0} {1} {Refl {Nat} {2}} I O
-addBit {_} {_} {_} I I O = MkBitPair {1} {0} {1} {1} {0} {Refl {Nat} {2}} I O
-addBit {_} {_} {_} I I I = MkBitPair {1} {1} {1} {1} {1} {Refl {Nat} {3}} I I
-
-doubleZ : ZZ -> ZZ
-pat k =>
-  doubleZ k = plusZ k k
 
 -- Signed binary types
 
@@ -270,11 +236,12 @@ pat c, xb, yb, a, b, xsb, ysb,
 
 -----------------------
 -- Signed binary addition (with staging)
-addSubN : (w : Nat) -> {x,y : ZZ} -> {c : Nat} ->
+
+addSubS : (w : Nat) -> {x,y : ZZ} -> {c : Nat} ->
            < Signed (S w) x > -> < Signed (S w) y > -> < Bit c > ->
            < Signed (S (S w)) (plusZ (Pos c) (plusZ x y)) >
 pat c, cin, xn, xb, yn, yb =>
-  addSubN 0 {_} {_} {c} [| SMsb {xn} xb |] [| SMsb {yn} yb |] cin
+  addSubS 0 {_} {_} {c} [| SMsb {xn} xb |] [| SMsb {yn} yb |] cin
     = [| let cinEsc = ~cin in
          case (addBit {_} {_} {_} cinEsc xb yb) of
            pat a, b, cin', lsb, prf
@@ -289,32 +256,34 @@ pat c, cin, xn, xb, yn, yb =>
       |]
 
 pat w, c, cin, xsn, xsb : Signed (S w) xsn, xn, xb, ysn, ysb : Signed (S w) ysn, yn, yb =>
-  addSubN (S w) {_} {_} {c} [| SCons {w} {xn} {xsn} xsb xb |] [| SCons {w} {yn} {ysn} ysb yb |] cin
+  addSubS (S w) {_} {_} {c} [| SCons {w} {xn} {xsn} xsb xb |] [| SCons {w} {yn} {ysn} ysb yb |] cin
     = [| case (addBit {c} {xn} {yn} ~cin xb yb) of
            pat a, b, cin', lsb, prf
            => (MkBitPair {a} {b} {c} {xn} {yn} {prf} cin' lsb) ==>
-              let rec = ~(addSubN _ {_} {_} {_} [| xsb |] [| ysb |] [| cin' |])
+              let rec = ~(addSubS _ {_} {_} {_} [| xsb |] [| ysb |] [| cin' |])
                   ans = SCons {S w} {_} {_} rec lsb
               in eqInd2 {_} {_} {_} {prfAdderNRec c xn yn a b xsn ysn prf} {_} ans
       |]
 
-adderN : (w : Nat) -> {x,y : ZZ} ->
+-- Specialise for addition
+
+addS : (w : Nat) -> {x,y : ZZ} ->
        < Signed w x > -> < Signed w y > ->
        < Signed (S w) (plusZ x y) >
-adderN Z {Pos 0} {Pos 0} [| SNil |] [| SNil |] = [| SMsb {0} O |]
+addS Z {Pos 0} {Pos 0} [| SNil |] [| SNil |] = [| SMsb {0} O |]
 pat w, x, y, xs, ys =>
-  adderN (S w) {x} {y} xs ys
-    = [| let ans = ~(addSubN w {x} {y} {0} xs ys [|O|])
+  addS (S w) {x} {y} xs ys
+    = [| let ans = ~(addSubS w {x} {y} {0} xs ys [|O|])
          in eqInd2 {_} {_} {_} {plusZeroLeftNeutralZ (plusZ x y)} {_} ans
       |]
 
-prfFlipBits : (n : Nat) -> Bit n -> Equal ZZ (negateZ (Pos (notNat n))) (plusZ (negateZ (negateZ (Pos n))) (NegS 0))
+prfFlipBits : (n : Nat) -> Bit n -> Equal ZZ (negateZ (Pos (not n))) (plusZ (negateZ (negateZ (Pos n))) (NegS 0))
 prfFlipBits Z O = Refl {_} {_}
 prfFlipBits 1 I = Refl {_} {_}
 
 prfFlipBitsRec : (n : Nat) ->  (ns : ZZ) -> Bit n ->
                  Equal ZZ
-                       (plusZ (Pos (notNat n))
+                       (plusZ (Pos (not n))
                               (plusZ (plusZ (negateZ ns) (NegS 0))
                                      (plusZ (negateZ ns) (NegS 0))))
                        (plusZ (negateZ (plusZ (Pos n) (plusZ ns ns)))
@@ -323,7 +292,7 @@ pat n, ns, b =>
   prfFlipBitsRec n ns b
     = let h1 = eqInd2 {_} {_} {_} {notIsNegPlus1 n b}
                  {\x => Equal ZZ
-                              (plusZ (Pos (notNat n))
+                              (plusZ (Pos (not n))
                                       (plusZ (plusZ (negateZ ns) (NegS 0))
                                              (plusZ (negateZ ns) (NegS 0))))
                               (plusZ x
@@ -332,26 +301,26 @@ pat n, ns, b =>
                } (Refl {_} {_})
           h2 = eqInd2 {_} {_} {_} {plusPlusAssociativeZ (negateZ ns) (NegS 0) (negateZ ns) (NegS 0)}
                  {\x => Equal ZZ
-                              (plusZ (Pos (notNat n))
+                              (plusZ (Pos (not n))
                                       (plusZ (plusZ (negateZ ns) (NegS 0))
                                              (plusZ (negateZ ns) (NegS 0))))
                               (plusZ (plusZ (negateZ (Pos n)) (Pos 1)) x)} h1
           h3 = eqInd2 {_} {_} {_} {eqSym {_} {_} {_} (negateDistributesPlus ns ns)}
                  {\x => Equal ZZ
-                              (plusZ (Pos (notNat n))
+                              (plusZ (Pos (not n))
                                       (plusZ (plusZ (negateZ ns) (NegS 0))
                                              (plusZ (negateZ ns) (NegS 0))))
                               (plusZ (plusZ (negateZ (Pos n)) (Pos 1))
                                      (plusZ x (NegS 1)))} h2
           h4 = eqInd2 {_} {_} {_} {plusPlusAssociativeZ (negateZ (Pos n)) (Pos 1) (negateZ (plusZ ns ns)) (NegS 1)}
                  {\x => Equal ZZ
-                              (plusZ (Pos (notNat n))
+                              (plusZ (Pos (not n))
                                       (plusZ (plusZ (negateZ ns) (NegS 0))
                                              (plusZ (negateZ ns) (NegS 0))))
                               x} h3
       in eqInd2 {_} {_} {_} {eqSym {_} {_} {_} (negateDistributesPlus (Pos n) (plusZ ns ns))}
            {\x => Equal ZZ
-                        (plusZ (Pos (notNat n))
+                        (plusZ (Pos (not n))
                                 (plusZ (plusZ (negateZ ns) (NegS 0))
                                        (plusZ (negateZ ns) (NegS 0))))
                         (plusZ x (NegS 0))} h4
@@ -359,13 +328,13 @@ pat n, ns, b =>
 flipBits : (w : Nat) -> {val : ZZ} -> < Signed (S w) val > -> < Signed (S w) (subZ (negateZ val) (Pos 1)) >
 pat bn, b : Bit bn =>
   flipBits Z {negateZ (Pos bn)} [| SMsb {bn} b |]
-    = [| let ans = SMsb {notNat bn} (not {bn} b)
+    = [| let ans = SMsb {not bn} (notGate {bn} b)
          in eqInd2 {ZZ} {_} {_} {prfFlipBits bn b} {_} ans
       |]
 pat w, bn, bsn, bs : Signed (S w) bsn, b =>
   flipBits (S w) {_} [| SCons {_} {bn} {bsn} bs b |]
     = [| let rec = ~(flipBits _  {_} [| bs |])
-             ans = SCons {_} {_} {_} rec (not {_} b)
+             ans = SCons {_} {_} {_} rec (notGate {_} b)
          in eqInd2 {ZZ} {_} {_} {prfFlipBitsRec bn bsn b} {_} ans
       |]
 
@@ -387,30 +356,14 @@ pat x, y =>
 
       in eqInd2 {_} {_} {_} {plusZeroLeftNeutralZ (subZ x y)} {_} h4
 
-subtractorN : (w : Nat) -> {x,y : ZZ} ->
+-- Specialise for subtraction
+subS : (w : Nat) -> {x,y : ZZ} ->
        < Signed w x > -> < Signed w y > ->
        < Signed (S w) (subZ x y) >
-subtractorN Z {Pos 0} {Pos 0} [| SNil |] [| SNil |] = [| SMsb {0} O |]
+subS Z {Pos 0} {Pos 0} [| SNil |] [| SNil |] = [| SMsb {0} O |]
 pat w, x, y, xs, ys =>
-  subtractorN (S w) {x} {y} xs ys
+  subS (S w) {x} {y} xs ys
     = [| let notys = ~(flipBits (w) {_} ys)
-             ans = ~(addSubN w {x} {_} {1} xs [|notys|] [|I|])
+             ans = ~(addSubS w {x} {_} {1} xs [|notys|] [|I|])
          in eqInd2 {_} {_} {_} {prfSubtractorN x y} {_} ans
       |]
-
--- Top-level adder specialised for 5-bit inputs
-adder : {x,y : ZZ} ->
-             < Signed 1 x -> Signed 1 y ->
-               Signed 2 (plusZ x y)
-             >
-pat x, y =>
-  adder {x} {y} = [| \xs => \ys => ~(adderN 1 {x} {y} [|xs|] [|ys|]) |]
-
-
--- Top-level subtractor specialised for 5-bit inputs
-subtractor : {x,y : ZZ} ->
-             < Signed 2 x -> Signed 2 y ->
-               Signed 3 (subZ x y)
-             >
-pat x, y =>
-  subtractor {x} {y} = [| \xs => \ys => ~(subtractorN 2 {x} {y} [|xs|] [|ys|]) |]
