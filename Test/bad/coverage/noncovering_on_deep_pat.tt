@@ -8,3 +8,4 @@ not True = False
 maybeNot : Vect 2 Bool -> Bool
 pat b =>
   maybeNot [False, b] = b
+

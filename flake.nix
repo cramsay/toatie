@@ -16,7 +16,7 @@
           name = "toatie";
           src = ./.;
           doCheck = true;
-          nativeBuildInputs = [ idrisPkgs.idris2 ];
+          nativeBuildInputs = [ idrisPkgs.idris2 pkgs.ghdl ];
           buildPhase = ''
             make bin
           '';

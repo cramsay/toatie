@@ -572,7 +572,11 @@ liftLets : {auto c : Ref Ctxt Defs} ->
            CDef -> Core CDef
 liftLets (MkFun args def)
   = do (_**(lets, sc)) <- liftLetsTm def
-       pure $ MkFun args (lets sc)
+       xn <- genName "res"
+       let sc' = case sc of
+                   CLocal _ => sc
+                   tm       => CLet xn tm Erased (CLocal First)
+       pure $ MkFun args (lets sc')
 liftLets d = pure d
 
 export

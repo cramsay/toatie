@@ -15,7 +15,6 @@ import Core.Unify
 import TTImp.Elab.Check
 import TTImp.TTImp
 import TTImp.Impossible
-import TTImp.PartialEval
 
 import Data.Either
 import Data.Maybe
