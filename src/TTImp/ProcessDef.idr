@@ -169,42 +169,37 @@ getRHSEnv env lhs ty = pure (vars ** (env, lhs, ty))
 -- Based on idris2's findLinear function
 findExp : {vars : _} ->
              {auto c : Ref Ctxt Defs} ->
-             Nat -> (lhsenv : Term vars) ->
+             (lhsenv : Term vars) ->
              Core (List Name)
-findExp bound (Bind n b sc)
-    = findExp (S bound) sc
-findExp bound tm
+findExp (Bind n b sc)
+    = findExp sc
+findExp tm
     = case getFnInfoArgs tm of
            (Ref _  n, []) => pure []
            (Ref nt n, args)
               => do defs <- get Ctxt
                     Just (MkGlobalDef nty _ _) <- lookupDef n (defs)
                          | Nothing => pure []
-                    findExpArg !(nf defs [] nty) args
-           (Quote ty tm, []) => findExp bound tm
+                    findExpArg nty args
+           (Quote ty tm, []) => findExp tm
            _ => pure []
     where
       findExpArg : {vars : _} ->
-                   NF [] -> List (AppInfo, Term vars) ->
+                   Term [] -> List (AppInfo, Term vars) ->
                    Core (List Name)
-      findExpArg (NBind x (Pi _ Explicit _ ) sc) ((_, Local {name=a} idx prf) :: as)
+      findExpArg (Bind x (Pi _ Explicit _ ) sc) ((_, Local {name=a} idx prf) :: as)
           = do defs <- get Ctxt
                let a = nameAt idx prf
-               if idx < bound
-                 then do sc' <- sc defs (toClosure [] (Ref Bound x))
-                         pure $ a :: !(findExpArg sc' as)
-                 else do sc' <- sc defs (toClosure [] (Ref Bound x))
-                         findExpArg sc' as
-      findExpArg (NBind x (Pi _ Explicit _) sc) ((_, a) :: as)
+               let sc' = subst (Ref Bound x) sc
+               pure $ a :: !(findExpArg sc' as)
+      findExpArg (Bind x (Pi _ Explicit _) sc) ((_, a) :: as)
           = do defs <- get Ctxt
-               pure $ !(findExp bound a) ++
-                      !(findExpArg !(sc defs (toClosure [] (Ref Bound x))) as)
-      findExpArg (NBind x (Pi _ Implicit _) sc) ((_, a) :: as) --TODO unsure
+               pure $ !(findExp a) ++
+                      !(findExpArg (subst (Ref Bound x) sc) as)
+      findExpArg (Bind x (Pi _ Implicit _) sc) ((_, a) :: as) --TODO unsure
           = do defs <- get Ctxt
-               pure !(findExpArg !(sc defs (toClosure [] (Ref Bound x))) as)
-      findExpArg ty ((ia, a) :: as)
-          = pure $ !(findExp bound a) ++ !(findExpArg ty as)
-      findExpArg _ [] = pure []
+               pure !(findExpArg (subst (Ref Bound x) sc) as)
+      findExpArg _ _ = pure []
 
 -- Easy interface into findExp
 export
@@ -212,7 +207,7 @@ findExpTop : {vars : _} ->
              {auto c : Ref Ctxt Defs} ->
              Term vars ->
              Core (List Name)
-findExpTop tm = do imps <- findExp (length vars) tm
+findExpTop tm = do imps <- findExp tm
                    pure $ nub imps
 
 -- Wrap a given rhs term with the binders for all names in env, giving each the accessibility
@@ -280,6 +275,21 @@ addDots (IVar x) = do (pats, founds) <- get
                         False => pure $ IVar x
 addDots (ICase scr scrty alts) = pure $ ICase !(addDots scr) !(addDots scrty) alts
 
+-- Patch up LHS pattern implicitness
+-- Sometimes we get this wrong during elaboration if the LHS still has unsolved metavars while we're elaborating
+-- This function will repair that, if all the metavars have been solved.
+fixLHSPatImplicitness : {vars : _} ->
+                        {auto c : Ref Ctxt Defs} ->
+                        Env Term vars -> Term vars -> Core (Term vars)
+fixLHSPatImplicitness env (Bind n (PVar s i ty) sc)
+  = do expPatNs <- findExpTop sc
+       let i' = if n `elem` expPatNs
+                   then Explicit
+                   else Implicit
+       sc' <- fixLHSPatImplicitness (PVar s i' ty :: env) sc
+       pure $ Bind n (PVar s i' ty) sc'
+fixLHSPatImplicitness env tm = pure tm
+
 processLHS :  {auto c : Ref Ctxt Defs} ->
               {auto u : Ref UST UState} ->
               {auto s : Ref Stg Stage} ->
@@ -303,6 +313,8 @@ processLHS {vars} env lhs
        defs <- get Ctxt
        lhstm <- normalise defs env lhstm
        lhsty <- normalise defs env !(getTerm lhstyg)
+
+       lhstm <- fixLHSPatImplicitness env lhstm
 
        ret <-  getRHSEnv env lhstm lhsty
        pure (lhs, ret)
@@ -502,10 +514,7 @@ mkRunTime n
                Core (vars ** (Env Term vars, Term vars, Term vars))
     toErased (vars ** (env, lhs, rhs))
       = do let lhs' = eraseImps env lhs
-           --let specs = map (\v => (v, 250)) vars
-           --rhs <- applySpecialise env Nothing rhs
            let rhs' = eraseImps env rhs
-           -- TODO might want to do some transforms here too?
            pure $ (vars ** (env, lhs', rhs'))
 
     toClause : (vars ** (Env Term vars, Term vars, Term vars)) -> Clause
@@ -564,7 +573,7 @@ processDef n clauses
            | _ => throw $ InternalError $ "Compilation of run-time tree didn't return a tree definition!"
          updateDef n (record { definition = PMDef cargs tree_ct tree_rt pats})
 
-         coreLift $ putStrLn $ "Complete ----------------------"
+         --coreLift $ putStrLn $ "Complete ----------------------"
          --coreLift $ putStrLn $ "Stage: " ++ show !(get Stg)
          --coreLift $ putStrLn $ "Args = " ++ show cargs
          --coreLift $ putStrLn $ "Tree = " ++ show tree_ct

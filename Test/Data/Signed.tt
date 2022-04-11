@@ -331,7 +331,7 @@ pat bn, b : Bit bn =>
     = [| let ans = SMsb {not bn} (notGate {bn} b)
          in eqInd2 {ZZ} {_} {_} {prfFlipBits bn b} {_} ans
       |]
-pat w, bn, bsn, bs : Signed (S w) bsn, b =>
+pat w, bn, bsn, bs, b =>
   flipBits (S w) {_} [| SCons {_} {bn} {bsn} bs b |]
     = [| let rec = ~(flipBits _  {_} [| bs |])
              ans = SCons {_} {_} {_} rec (notGate {_} b)

@@ -1,0 +1,6 @@
+import Data.Nat
+import Data.Unsigned
+
+-- Circuit that operates over non-synthesisable parameter types
+dut : < Nat -> Nat >
+dut = [| S |]
