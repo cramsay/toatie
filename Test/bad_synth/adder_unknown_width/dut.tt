@@ -1,0 +1,14 @@
+import Data.Nat
+import Data.Unsigned
+
+-- Adder with unknown width.
+-- `w` should affect the circuit's bit representation.
+dut : (w : Nat) -> {x,y : Nat} ->
+             < Unsigned w x -> Unsigned w y ->
+               Unsigned (S w) ((plus x y))
+             >
+pat w, x, y =>
+  dut w {x} {y}
+    = [| \xs => \ys =>
+         ~(addU w {x} {y} {0} [|xs|] [|ys|] [| O |])
+      |]

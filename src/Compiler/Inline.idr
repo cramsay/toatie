@@ -654,17 +654,6 @@ mutual
               " is not in normal form: " ++ show tm
   annotateTyTm tys tm = pure tm
 
-export
-closedQuoteType : Term [] -> Core (List (Term []),Term[])
-                          --       ^ Arg types    ^ Ret type
-closedQuoteType (Bind _ _ sc) = closedQuoteType $ subst Erased sc
-closedQuoteType (TCode ty) = getTys [] ty
-  where
-  getTys : List (Term []) -> Term [] -> Core (List (Term []), Term [])
-  getTys args (Bind _ (Pi _ _ ty) sc) = getTys (ty::args) (subst Erased sc)
-  getTys args tm                      = pure (args, tm)
-closedQuoteType ty = throw $ InternalError $ "Expected scope to be a quoted function but got: " ++ show ty
-
 -- Annotate all let binding with their type
 annotateTy : {auto c : Ref Ctxt Defs} ->
              Term [] ->
@@ -733,9 +722,8 @@ compileAndInline : {auto c : Ref Ctxt Defs} ->
                    Core ()
 compileAndInline ns
     = do defs <- get Ctxt
-         traverse_ compileDef ns
-         -- TODO Should I not transform until no progress is made? And limit it by
-         -- a global inliner limit option, like clash
+         traverse_ checkSynthesisable ns
+         traverse_ (compileDef True) ns
          transform 128 ns
   where
     getDefs : List Name -> Core (List (Maybe CDef))
@@ -749,16 +737,6 @@ compileAndInline ns
              l <- newRef LVar (the Int 0)
              traverse_ inlineDef cns
              traverse_ mergeLamDef cns
-             --traverse_ caseLamDef cns
              traverse_ fixArityDef cns
              traverse_ liftLetsDef cns
              traverse_ annotateTyDef cns
-
-{-
--- TODO Let's lay off the case statement optimisations in toCExp and implement them in something
-        like CaseOpt.idr instead. May be easier since we'll have already reduced con cases with a
-        matching scrutinee. If we remove our let binding code that exists already, what rules do:
-
-        1) The clash folk actually implement?
-        2) The idris2 codebase already implement?
--}

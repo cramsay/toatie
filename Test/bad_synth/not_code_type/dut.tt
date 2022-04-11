@@ -1,0 +1,7 @@
+import Data.Nat
+import Data.Unsigned
+
+-- (Valid) circuit definition but without staging
+dut : {x : Nat} -> Unsigned 5 x -> Unsigned 5 x
+pat x, xs =>
+  dut {x} xs = xs

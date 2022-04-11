@@ -8,6 +8,9 @@ import Core.Normalise
 import Core.TT
 import Core.Value
 import Core.Extraction
+import Core.UnifyState
+
+import TTImp.ProcessData
 
 import Data.List
 import Data.Maybe
@@ -74,6 +77,13 @@ erasedArgs ty = go 0 [] ty
   go i xs (Bind x (Pi k Explicit z) scope) = go (S i)       xs  scope
   go _ xs ty = xs
 
+erasedArgsClosed : (ty : Term []) -> List Nat
+erasedArgsClosed ty = go 0 [] ty
+  where
+  go : Nat -> List Nat -> Term vars -> List Nat
+  go i xs (Bind x (Pi k _ z) scope) = go (S i) (i :: xs) scope
+  go _ xs ty = xs
+
 mkSub : Nat -> (ns : List Name) -> List Nat -> (ns' ** SubVars ns' ns)
 mkSub i _ [] = (_ ** SubRefl)
 mkSub i [] ns = (_ ** SubRefl)
@@ -126,7 +136,7 @@ mutual
          Just gdef <- lookupDef n defs
            | Nothing => throw $ GenericMsg $ "Name undefined in context: " ++ show n
          when (isNothing $ compexpr gdef)
-              (compileDef n)
+              (compileDef False n)
          case definition gdef of
            (PMDef args _ treeCT _) => pure $ CRef n
            (DCon tag arity) =>  pure $ CCon n []
@@ -200,30 +210,32 @@ mutual
   toCExpTree n (Case idx p scTy alts@((DefaultCase sc) :: _)) = toCExpTree n sc
 
   toCDef : {auto c : Ref Ctxt Defs} ->
-           Name -> Term [] -> Def ->
+           Bool -> Name -> Term [] -> Def ->
            Core CDef
-  toCDef n ty (PMDef args _ treeCT _)
-    = do let erased = erasedArgs ty
+  toCDef topLevel n ty (PMDef args _ treeCT _)
+    = do let erased = if topLevel
+                         then erasedArgsClosed ty
+                         else erasedArgs ty
          let (args' ** p) = mkSub 0  args erased
          comptree <- toCExpTree n treeCT
          pure $ MkFun args' (shrinkCExp p comptree)
-  toCDef n ty (DCon tag _)
+  toCDef _ n ty (DCon tag _)
     = do let arity = extractionArity ty
          pure $ MkCon (Just tag) arity
-  toCDef n ty (TCon x tag _ cons)
+  toCDef _ n ty (TCon x tag _ cons)
     = do let arity = extractionArity ty
          pure $ MkCon (Just tag) arity
-  toCDef n ty Hole
+  toCDef _ n ty Hole
     = throw $ GenericMsg $ "Cannot compile a Hole to CDef: " ++ show n
-  toCDef n ty (Guess guess constraints)
+  toCDef _ n ty (Guess guess constraints)
     = throw $ GenericMsg $ "Cannot compile a Guess to CDef: " ++ show n
-  toCDef n ty None
+  toCDef _ n ty None
     = throw $ GenericMsg $ "Cannot compile a None to CDef: " ++ show n
 
   ||| Given a name, look up an expression, and compile it to a CExp in the environment
   export
-  compileDef : {auto c : Ref Ctxt Defs} -> Name -> Core ()
-  compileDef n
+  compileDef : {auto c : Ref Ctxt Defs} -> Bool -> Name -> Core ()
+  compileDef topLevel n
     = do defs <- get Ctxt
          Just gdef <- lookupDef n defs
            | Nothing => throw $ InternalError $ "Cannot compile unkonwn name: " ++ show n
@@ -234,5 +246,57 @@ mutual
          gdef <- extractionGlobalDef gdef
          -- Set placeholder compiled expression to prevent loops with mutually recursive definitions
          setCompiled n (MkCon Nothing 0)
-         compexpr <- toCDef n (type gdef) (definition gdef)
+         compexpr <- toCDef topLevel n (type gdef) (definition gdef)
          setCompiled n compexpr
+
+export
+closedQuoteType : Term [] -> Core (List (Term []),Term[])
+--       ^ Arg types    ^ Ret type
+closedQuoteType (Bind _ _ sc) = closedQuoteType $ subst Erased sc
+closedQuoteType (TCode ty) = getTys [] ty
+  where
+  getTys : List (Term []) -> Term [] -> Core (List (Term []), Term [])
+  getTys args (Bind _ (Pi _ Explicit ty) sc) = getTys (ty::args) (subst Erased sc)
+  getTys args (Bind _ (Pi _ Implicit ty) sc) = getTys args (subst Erased sc)
+  getTys args tm                      = pure (args, tm)
+closedQuoteType ty = throw $ InternalError $ "Expected scope to be a quoted function but got: " ++ show ty
+
+export
+checkSynthesisableArgTy : {auto c : Ref Ctxt Defs} ->
+                          {auto u : Ref UST UState} ->
+                          List (Term []) -> Term [] -> Core ()
+checkSynthesisableArgTy recTys ty
+  = do when (ty `elem` recTys)
+            (throw $ GenericMsg $ "Unbounded recursion in argument type: " ++ show ty)
+
+       -- Is our argument a simple type constructor
+       let Just tyconn = getTyConName ty
+             | Nothing => throw $ GenericMsg $ "Arguement type is not synthesisable: " ++ show ty
+       defs <- get Ctxt
+       Just (MkGlobalDef _ (TCon info _ _  _) _) <- lookupDef tyconn defs
+         | _ => throw $ GenericMsg $ "Argument type is not a type constructor: " ++ show ty
+       when (isParam info)
+            (throw $ GenericMsg $ "Argument is a parameter type: " ++ show ty)
+
+       -- Are all explicit args of all data constructors also synthesisable?
+       -- We need spot non-terminating recursion by tracking generated return types too
+       dcons <- dataConsForType [] ty
+       traverse_ (allArgsSynth (ty :: recTys)) $ map snd dcons
+  where
+  allArgsSynth : List (Term []) -> (ty : Term []) -> Core ()
+  allArgsSynth recTys (Bind n b@(Pi s Implicit ty) sc) = allArgsSynth recTys (subst Erased sc)
+  allArgsSynth recTys (Bind n b@(Pi s Explicit ty) sc)
+    = do checkSynthesisableArgTy recTys ty
+         allArgsSynth recTys (subst Erased sc)
+  allArgsSynth recTys ty = pure ()
+
+export
+checkSynthesisable : {auto c : Ref Ctxt Defs} -> Name -> Core ()
+checkSynthesisable n
+  = do defs <- get Ctxt
+       Just ty <- lookupDefType n defs
+         | Nothing => throw $ GenericMsg $ "Couldn't find name in context: " ++ show n
+       -- Check that each codefn arg is synthesisable
+       (args, ret) <- closedQuoteType ty
+       u <- newRef UST initUState
+       traverse_ (checkSynthesisableArgTy []) (ret :: args)
