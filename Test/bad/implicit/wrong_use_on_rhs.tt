@@ -1,0 +1,5 @@
+import Data.Nat
+
+f : {n : Nat} -> Nat
+pat n =>
+  f {n} = n

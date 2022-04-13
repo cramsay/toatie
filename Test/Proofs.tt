@@ -186,3 +186,129 @@ pat n, a, prf =>
                                h2
       in case h3 of
            Refl {_} {_} impossible
+
+-- Mul proofs
+
+mulZeroLeftZero : (x : Nat) -> Equal Nat (mul 0 x) 0
+pat n =>
+  mulZeroLeftZero n = Refl {_} {_}
+
+mulZeroRightZero : (x : Nat) -> Equal Nat (mul x 0) 0
+mulZeroRightZero Z = Refl {_} {_}
+pat n =>
+  mulZeroRightZero (S n) = mulZeroRightZero n
+
+mulRightSuccPlus : (left, right : Nat) -> Equal Nat (mul left (S right))
+                                                    (plus left (mul left right))
+pat right =>
+  mulRightSuccPlus Z right = Refl {_} {_}
+pat left, right =>
+  mulRightSuccPlus (S left) right
+    = let h1 = eqInd2 {_} {_} {_} {mulRightSuccPlus left right}
+                 {\x => Equal Nat (S (plus right (mul left (S right))))
+                                  (S (plus right x))}
+                 (Refl {_} {_})
+          h2 = eqInd2 {_} {_} {_} {plusAssociative right left (mul left right)}
+                 {\x => Equal Nat (S (plus right (mul left (S right))))
+                                  (S x)}
+                 h1
+          h3 = eqInd2 {_} {_} {_} {plusCommutative right left}
+                 {\x => Equal Nat (S (plus right (mul left (S right))))
+                                  (S (plus x (mul left right)))}
+                 h2
+          h4 = eqInd2 {_} {_} {_} {eqSym {_} {_} {_} (plusAssociative left right (mul left right))}
+                 {\x => Equal Nat (S (plus right (mul left (S right))))
+                                  (S x)}
+                 h3
+      in h4
+
+mulLeftSuccPlus : (left, right : Nat) -> Equal Nat (mul (S left) right)
+                                                   (plus right (mul left right))
+pat left, right =>
+  mulLeftSuccPlus left right = Refl {_} {_}
+
+mulCommutative : (left, right : Nat) -> Equal Nat (mul left right)
+                                                  (mul right left)
+pat right =>
+  mulCommutative Z right
+    = eqInd2 {_} {_} {_} {mulZeroRightZero right}
+        {\x => Equal Nat x (mul right 0)} (Refl {_} {_})
+pat left, right =>
+  mulCommutative (S left) right
+    = let h1 = Refl {_} {mul right (S left)}
+          h2 = eqInd2 {_} {_} {_} {mulRightSuccPlus right left}
+                 {\x => Equal Nat x (mul right (S left))} h1
+      in eqInd2 {_} {_} {_} {mulCommutative right left}
+           {\x => Equal Nat (plus right x) (mul right (S left))} h2
+
+mulDistributesOverPlusLeft : (left, centre, right : Nat) ->
+                             Equal Nat (mul (plus left centre) right)
+                                       (plus (mul left right) (mul centre right))
+pat centre, right =>
+  mulDistributesOverPlusLeft Z centre right = Refl {_} {_}
+pat left, centre, right =>
+  mulDistributesOverPlusLeft (S left) centre right
+    = let h1 = eqInd2 {_} {_} {_} {mulDistributesOverPlusLeft left centre right}
+                 {\x => Equal Nat (plus right (mul (plus left centre) right))
+                                  (plus right x)} (Refl {_} {_})
+      in eqInd2 {_} {_} {_} {plusAssociative right (mul left right) (mul centre right)}
+           {\x => Equal Nat (plus right (mul (plus left centre) right)) x} h1
+
+mulDistributesOverPlusRight : (left, centre, right : Nat) ->
+                              Equal Nat (mul left (plus centre right))
+                                        (plus (mul left centre) (mul left right))
+pat left, centre, right =>
+  mulDistributesOverPlusRight left centre right
+    = let h1 = mulDistributesOverPlusLeft centre right left
+          h2 = eqInd2 {_} {_} {_} {mulCommutative right left}
+                 {\x => Equal Nat (mul (plus centre right) left)
+                                  (plus (mul centre left) x)} h1
+          h3 = eqInd2 {_} {_} {_} {mulCommutative centre left}
+                 {\x => Equal Nat (mul (plus centre right) left)
+                                  (plus x (mul left right))} h2
+          h4 = eqInd2 {_} {_} {_} {mulCommutative (plus centre right) left}
+                 {\x => Equal Nat x
+                                  (plus (mul left centre) (mul left right))} h3
+      in h4
+
+mulAssociative : (left, centre, right : Nat) ->
+                              Equal Nat (mul left (mul centre right))
+                                        (mul (mul left centre) right)
+pat centre, right =>
+  mulAssociative Z centre right = Refl {_} {_}
+pat left, centre, right =>
+  mulAssociative (S left) centre right
+    = let h1 = eqInd2 {_} {_} {_} {mulDistributesOverPlusLeft centre (mul left centre) right}
+                 {\x => Equal Nat x
+                                  (mul (plus centre (mul left centre)) right)}
+                 (Refl {_} {_})
+      in eqInd2 {_} {_} {_} {eqSym {_} {_} {_} (mulAssociative left centre right)}
+           {\x => Equal Nat (plus (mul centre right) x)
+                            (mul (plus centre (mul left centre)) right)} h1
+
+mulOneLeftNeutral : (right : Nat) -> Equal Nat (mul 1 right) right
+pat right =>
+  mulOneLeftNeutral right = plusZeroRightNeutral right
+
+mulOneRightNeutral : (left : Nat) -> Equal Nat (mul left 1) left
+pat left =>
+  mulOneRightNeutral left = eqInd2 {_} {_} {_} {mulCommutative 1 left}
+                              {\x => Equal Nat x left} (mulOneLeftNeutral left)
+
+-- Proofs on pow
+
+powerPlusMulPower : (base, exp, exp' : Nat) ->
+                    Equal Nat (pow base (plus exp exp'))
+                              (mul (pow base exp) (pow base exp'))
+pat base, exp' =>
+  powerPlusMulPower base Z exp'
+    = eqInd2 {_} {_} {_} {plusZeroRightNeutral (pow base exp')}
+        {\x => Equal Nat x (plus (pow base exp') 0)}
+        (Refl {_} {_})
+pat exp, base, exp' =>
+  powerPlusMulPower base (S exp) exp'
+    = let h1 = eqInd2 {_} {_} {_} {eqSym {_} {_} {_} (mulAssociative base (pow base exp) (pow base exp'))}
+                 {\x => Equal Nat x (mul (mul base (pow base exp)) (pow base exp'))}
+                 (Refl {_} {_})
+      in eqInd2 {_} {_} {_} {eqSym {_} {_} {_} (powerPlusMulPower base exp exp')}
+           {\x => Equal Nat (mul base x) (mul (mul base (pow base exp)) (pow base exp'))} h1

@@ -300,9 +300,12 @@ checkTerm env (IQuote sc) Nothing
        checkExp env (Quote sctytm sctm) (gnf env $ TCode sctytm) Nothing
 
 checkTerm env (IQuote  sc) (Just exp)
-  = do (TCode iexp) <- getTerm exp
-          | _ => throw $ GenericMsg $ "Expected type of quote in not code type"
-       let innerExp = Just $ gnf env iexp
+  = do expNF <- getNF exp
+       defs <- get Ctxt
+       let (NCode iexp) = expNF
+          | NApp (NMeta _ _) _ => checkTerm env (IQuote sc) Nothing
+          | _ => throw $ GenericMsg $ "Expected type of quote in not code type: " ++ show !(getTerm exp)
+       let innerExp = Just $ gnf env !(quote defs env iexp)
 
        -- Increment stage so we can typecheck the scope
        stage <- get Stg

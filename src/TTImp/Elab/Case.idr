@@ -163,6 +163,7 @@ caseBlock {vars} mode env scr scrtm scrty alts expected
                                              (const caseretty)
                                              splitOn)
        addDef casen $ MkGlobalDef casefnty None Nothing
+       coreLift $ putStrLn $ " CASETY: " ++ show casefnty
        let caseRef : Term vars = Ref Func casen
        let applyEnv = applyTo caseRef env
        let appTm : Term vars
