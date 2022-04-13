@@ -32,3 +32,11 @@ pat x, y =>
   eqNat (S x) (S y) = eqNat x y
 pat x, y =>
   eqNat x y = False
+
+max : (x, y : Nat) -> Nat
+pat y =>
+  max Z y = y
+pat x =>
+  max x Z = x
+pat x, y =>
+  max (S x) (S y) = S (max x y)

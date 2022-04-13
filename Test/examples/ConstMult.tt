@@ -18,6 +18,68 @@ pat left =>
 pat left, right =>
   minus (S left) (S right) = minus left right
 
+data LTE  : (n, m : Nat) -> Type where
+  LTEZero : {right : Nat} -> LTE Z right
+  LTESucc : {left, right : Nat} -> LTE left right -> LTE (S left) (S right)
+
+minusZeroRight : (left : Nat) -> Equal Nat (minus left 0) left
+minusZeroRight Z = Refl {_} {_}
+pat n =>
+  minusZeroRight (S n) = Refl {_} {_}
+
+plusMinusLTE : (x, y : Nat) -> LTE y x -> Equal Nat (plus (minus x y) y) x
+pat x, lte =>
+  plusMinusLTE x Z lte
+    = let h1 = eqInd2 {_} {_} {_} {minusZeroRight x}
+                 {\h => Equal Nat (plus (minus x 0) 0) (plus h 0)}
+                 (Refl {_} {_})
+      in eqInd2 {_} {_} {_} {plusZeroRightNeutral x}
+           {_} h1
+pat y =>
+  plusMinusLTE Z (S y) (LTEZero {_}) impossible
+pat y =>
+  plusMinusLTE Z (S y) (LTESucc {y} {_} _) impossible
+pat x, y, lte : LTE y x =>
+  plusMinusLTE (S x) (S y) (LTESucc {y} {x} lte)
+    = let h0 = plusMinusLTE x y lte
+          h1 = eqCong {_} {_} {S} {_} {_} h0
+          h2 = eqInd2 {_} {_} {_} {plusSuccRightSucc (minus x y) y}
+                 {\h => Equal Nat h (S x) }
+                 h1
+      in h2
+
+maxZeroRightNeutral : (n : Nat) -> Equal Nat (max n 0) n
+maxZeroRightNeutral Z = Refl {_} {_}
+pat n =>
+  maxZeroRightNeutral (S n) = Refl {_} {_}
+
+maxZeroLeftNeutral : (n : Nat) -> Equal Nat (max 0 n) n
+maxZeroLeftNeutral Z = Refl {_} {_}
+pat n =>
+  maxZeroLeftNeutral (S n) = Refl {_} {_}
+
+maxLeftImpliesLTE : (x, y : Nat) -> LTE x (max x y)
+maxLeftImpliesLTE Z Z = LTEZero {Z}
+pat x =>
+  maxLeftImpliesLTE (S x) Z = LTESucc {x} {x} (
+                                eqInd2 {_} {_} {_} {maxZeroRightNeutral x} {_}
+                                  (maxLeftImpliesLTE x Z))
+pat y =>
+  maxLeftImpliesLTE Z y = LTEZero {y}
+pat x, y =>
+  maxLeftImpliesLTE (S x) (S y) = LTESucc {x} {max x y} (maxLeftImpliesLTE x y)
+
+maxRightImpliesLTE : (x, y : Nat) -> LTE y (max x y)
+maxRightImpliesLTE Z Z = LTEZero {Z}
+pat y =>
+  maxRightImpliesLTE Z (S y) = LTESucc {y} {y} (
+                                eqInd2 {_} {_} {_} {maxZeroLeftNeutral y} {_}
+                                  (maxRightImpliesLTE Z y))
+pat x =>
+  maxRightImpliesLTE x Z = LTEZero {max x Z}
+pat x, y =>
+  maxRightImpliesLTE (S x) (S y) = LTESucc {y} {max x y} (maxRightImpliesLTE x y)
+
 data NonZero : Nat -> Type where
   SIsNonZero : (x : Nat) -> NonZero (S x)
 
@@ -287,6 +349,26 @@ pat w', w, val, xsval, xval, xs, x =>
          in UCons {_} {_} {_} rec x
       |]
 
+prfMultConstUOdd : (n, val : Nat) ->
+                   Equal Nat (plus (plus (mul n val) (plus (mul n val) 0)) val)
+                             (mul (S (plus n n)) val)
+pat n val =>
+  prfMultConstUOdd n val
+    = let h1 = Refl {_} {plus (plus (mul n val) (plus (mul n val) 0)) val}
+          h2 = eqInd2 {_} {_} {_} {plusZeroRightNeutral (mul n val)}
+                 {\h => Equal Nat (plus (plus (mul n val) (plus (mul n val) 0)) val)
+                                  (plus (plus (mul n val) h                   ) val)}
+                 h1
+          h3 = eqInd2 {_} {_} {_} {eqSym {_} {_} {_} (mulDistributesOverPlusLeft n n val)}
+                 {\h => Equal Nat (plus (plus (mul n val) (plus (mul n val) 0)) val)
+                                  (plus h val)}
+                 h2
+          h4 = eqInd2 {_} {_} {_} {plusCommutative (mul (plus n n) val) val}
+                 {\h => Equal Nat (plus (plus (mul n val) (plus (mul n val) 0)) val)
+                                  h}
+                 h3
+      in h4
+
 multConstU' : (w : Nat) -> {cval, val : Nat} ->
              HalfRec cval ->
              < Unsigned w val > ->
@@ -295,37 +377,72 @@ pat w, val, xs =>
   multConstU' w {Z} {val} HalfRecZ xs = MkDPair {_} {_} 0 [| UNil |]
 pat cval, hr =>
   multConstU' Z {cval} {Z} hr [| UNil |] = MkDPair {_} {_} 0 [| UNil |]
+--pat w, val, xs, hrec =>
+--  multConstU' w {plus Z Z} {val} (HalfRecEven Z hrec) xs = MkDPair {_} {_} 0 [| UNil |]
+{-
 pat n, w, val, xs, hrec =>
   multConstU' (S w) {plus (S n) (S n)} {val} (HalfRecEven (S n) hrec) xs
     = case multConstU' (S w) {S n} {val} hrec xs of
-           pat w' : Nat, rec : <Unsigned w' (mul (S n) val)> =>
-             MkDPair {Nat} {\a:Nat => Unsigned a (mul (S n) val)} w' rec ==>
+           pat w' : Nat, rec =>
+             MkDPair {_} {\a:Nat=> <Unsigned a _>} w' rec ==>
                let ans = [| UCons {w'} {mul (S n) val} {0} ~rec O |]
-               in _ --MkDPair {_} {_} (S w') (
-                  --  eqInd2 {_} {_} {_} {eqSym {_} {_} {_} (mulDistributesOverPlusLeft (S n) (S n) val)} {\h : Nat => <Unsigned (S w') h >} ans)
-      
+               in MkDPair {_} {\a:Nat=> <Unsigned a (mul (plus (S n) (S n)) val)>}
+                    (S w')
+                    (eqInd2 {_} {_} {_}
+                            {eqSym {_} {_} {_} (mulDistributesOverPlusLeft (S n) (S n) val)}
+                            {\h : Nat => <Unsigned (S w') h >}
+                            ans
+                    )
+-}
+pat n, w, val, xs, hrec =>
+  multConstU' (S w) {plus n n} {val} (HalfRecEven n hrec) xs
+    = case multConstU' (S w) {n} {val} hrec xs of
+           pat w' : Nat, rec =>
+             MkDPair {_} {\a:Nat=> <Unsigned a _>} w' rec ==>
+               let ans = [| UCons {w'} {mul n val} {0} ~rec O |]
+               in MkDPair {_} {\a:Nat=> <Unsigned a (mul (plus n n) val)>}
+                    (S w')
+                    (eqInd2 {_} {_} {_}
+                            {eqSym {_} {_} {_} (mulDistributesOverPlusLeft n n val)}
+                            {\h : Nat => <Unsigned (S w') h >}
+                            ans
+                    )
 pat n, w, val, xs, hrec =>
   multConstU' (S w) {S (plus n n)} {val} (HalfRecOdd n hrec) xs
-    = _
+    = case multConstU' (S w) {n} {val} hrec xs of
+           pat w' : Nat, rec =>
+             MkDPair {_} {\a:Nat=> <Unsigned a _>} w' rec ==>
+               let w'' = max (S w') (S w)
+                   recPad = extend (minus (max (S w') (S w)) (S w')) (S w') {_}
+                              (shiftLeft 1 _ {mul n val} rec)
+                   xsPad = extend (minus (max (S w') (S w)) (S w)) (S w) {_} xs
+                   recPad' = eqInd2 {_} {_} {_} {plusMinusLTE (max (S w') (S w)) (S w') (maxLeftImpliesLTE (S w') (S w))}
+                               {\h => <Unsigned h (plus (mul n val) (plus (mul n val) 0)) >} recPad
+                   xsPad' = eqInd2 {_} {_} {_} {plusMinusLTE (max (S w') (S w)) (S w) (maxRightImpliesLTE (S w') (S w))}
+                               {\h => <Unsigned h val>} xsPad
+                   ans = addU _ {_} {_} {0} recPad' xsPad' [|O|]
+               in MkDPair {_} {\w=> <Unsigned w (mul (S (plus n n)) val)>}
+                    (S (S (max w' w)))
+                    (eqInd2 {_} {_} {_} {prfMultConstUOdd n val}
+                       {\h => < Unsigned (S (S (max w' w))) h >} ans)
+
+multConstU : (cval, w : Nat) -> {val : Nat} ->
+             < Unsigned w val > ->
+             DPair Nat (\w' : Nat => < Unsigned w' (mul cval val) >)
+pat cval, val, w, xs =>
+  multConstU cval w {val} xs = multConstU' w {cval} {val} (halfRec cval) xs
+
+dSnd : (a : Type) -> (f : a -> Type) -> DPair a f -> (f a)
+
+
 
 {-
-pat w, xval, xs =>
-  multConstU Z w {0} {xval} UNil xs = [| zerosU w |]
-pat cw, w, cval, xval, cs : Unsigned cw cval, xs =>
-  multConstU (S cw) w {_} {xval} (UCons {cw} {cval} {0} cs O) xs = [|
-    let rec = ~(multConstU _ _ {_} {_} cs xs)
-        ans = UCons {_} {mul cval xval} {0} rec O
-    in eqInd2 {_} {_} {_}
-         {eqSym {_} {_} {_} (mulDistributesOverPlusLeft cval cval xval)}
-         {_} ans
-  |]
-pat cw, w, cval, xval, cs : Unsigned cw cval, xs =>
-  multConstU (S cw) w {_} {xval} (UCons {cw} {cval} {1} cs I) xs = [|
-    let rec = ~(multConstU _ _ {_} {_} cs xs)
-        recPad = UCons {_} {mul cval xval} {0} rec O
-        ans = ~(addU _ {_} {_} {0} [| recPad |] (extend w {xval} xs) [| O |])
-    in _ --eqInd2 {_} {_} {_}
-       --  {eqSym {_} {_} {_} (mulDistributesOverPlusLeft cval cval xval)}
-       --  {_} ans
-  |]
+multBy12w5 : {val : Nat} -> <Unsigned 5 val -> Unsigned 10 (mul 12 val)>
+pat val =>
+  multBy12w5 {val} = [| \xs => ~(
+                          case multConstU 12 5 {val} [|xs|] of
+                            pat ys => MkDPair {_} {\w' => <Unsigned 10 (mul 12 val)>} 10 ys ==> _
+                            pat w', ys => MkDPair {_} {\w' => <Unsigned w' (mul 12 val)>} w' ys ==> _
+                        )
+                     |]
 -}
