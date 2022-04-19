@@ -40,3 +40,77 @@ pat x =>
   max x Z = x
 pat x, y =>
   max (S x) (S y) = S (max x y)
+
+lte : Nat -> Nat -> Bool
+pat right =>
+  lte Z right = True
+pat left =>
+  lte left Z = False
+pat left, right =>
+  lte (S left) (S right) = lte left right
+
+minus : Nat -> Nat -> Nat
+pat right =>
+  minus Z right = Z
+pat left =>
+  minus left Z = left
+pat left, right =>
+  minus (S left) (S right) = minus left right
+
+data NonZero : Nat -> Type where
+  SIsNonZero : (x : Nat) -> NonZero (S x)
+
+-- mod' fuel a b = a `mod` (S b)
+-- assuming we have enough fuel
+mod' : Nat -> Nat -> Nat -> Nat
+pat centre, right =>
+  mod' Z centre right = centre
+pat fuel, centre, right =>
+  mod' (S fuel) centre right =
+    case lte centre right of
+      True  ==> centre
+      False ==> mod' fuel (minus centre (S right)) right
+
+modNatNZ : Nat -> (y : Nat) -> NonZero y -> Nat
+pat left, right =>
+  modNatNZ left (S right) (SIsNonZero right) = mod' left left right
+
+{-
+-- div' fuel a b = a `div` (S b)
+-- assuming we have enough fuel
+div' : Nat -> Nat -> Nat -> Nat
+pat centre, right =>
+  div' Z centre right = Z
+pat fuel, centre, right =>
+  div' (S fuel) centre right =
+    case lte centre right of
+      True  ==> Z
+      False ==> S (div' fuel (minus centre (S right)) right)
+-}
+divCase : Nat -> Nat -> Bool -> Nat
+div' : Nat -> Nat -> Nat
+
+pat centre, right =>
+  div' centre right = divCase centre right (lte centre right)
+
+pat centre, right =>
+  divCase centre right True = Z
+pat centre, right =>
+  divCase centre right False
+    = S (div' (minus centre (S right)) right)
+
+divNatNZ : Nat -> (y : Nat) -> NonZero y -> Nat
+pat left, right =>
+  divNatNZ left (S right) (SIsNonZero right) = div' left right
+
+flog2 : Nat -> Nat
+flog2 Z = Z
+flog2 1 = Z
+pat n =>
+  flog2 n = plus 1 (flog2 (divNatNZ n 2 (SIsNonZero 1)))
+
+clog2 : Nat -> Nat
+clog2 Z = Z
+clog2 1 = Z
+pat n =>
+  clog2 (S n) = S (flog2 n)

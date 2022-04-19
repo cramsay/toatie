@@ -2,30 +2,9 @@ import Data.Bool
 import Data.Nat
 import Data.Unsigned
 
-lte : Nat -> Nat -> Bool
-pat right =>
-  lte Z right = True
-pat left =>
-  lte left Z = False
-pat left, right =>
-  lte (S left) (S right) = lte left right
-
-minus : Nat -> Nat -> Nat
-pat right =>
-  minus Z right = Z
-pat left =>
-  minus left Z = left
-pat left, right =>
-  minus (S left) (S right) = minus left right
-
 data LTE  : (n, m : Nat) -> Type where
   LTEZero : {right : Nat} -> LTE Z right
   LTESucc : {left, right : Nat} -> LTE left right -> LTE (S left) (S right)
-
-minusZeroRight : (left : Nat) -> Equal Nat (minus left 0) left
-minusZeroRight Z = Refl {_} {_}
-pat n =>
-  minusZeroRight (S n) = Refl {_} {_}
 
 plusMinusLTE : (x, y : Nat) -> LTE y x -> Equal Nat (plus (minus x y) y) x
 pat x, lte =>
@@ -80,56 +59,16 @@ pat x =>
 pat x, y =>
   maxRightImpliesLTE (S x) (S y) = LTESucc {y} {max x y} (maxRightImpliesLTE x y)
 
-data NonZero : Nat -> Type where
-  SIsNonZero : (x : Nat) -> NonZero (S x)
-
--- mod' fuel a b = a `mod` (S b)
--- assuming we have enough fuel
-mod' : Nat -> Nat -> Nat -> Nat
-pat centre, right =>
-  mod' Z centre right = centre
-pat fuel, centre, right =>
-  mod' (S fuel) centre right =
-    case lte centre right of
-      True  ==> centre
-      False ==> mod' fuel (minus centre (S right)) right
-
-modNatNZ : Nat -> (y : Nat) -> NonZero y -> Nat
-pat left, right =>
-  modNatNZ left (S right) (SIsNonZero right) = mod' left left right
-
--- div' fuel a b = a `div` (S b)
--- assuming we have enough fuel
-div' : Nat -> Nat -> Nat -> Nat
-pat centre, right =>
-  div' Z centre right = Z
-pat fuel, centre, right =>
-  div' (S fuel) centre right =
-    case lte centre right of
-      True  ==> Z
-      False ==> S (div' fuel (minus centre (S right)) right)
-
-divNatNZ : Nat -> (y : Nat) -> NonZero y -> Nat
-pat left, right =>
-  divNatNZ left (S right) (SIsNonZero right) = div' left left right
-
-flog2 : Nat -> Nat
-flog2 Z = Z
-flog2 1 = Z
-pat n =>
-  flog2 n = plus 1 (flog2 (divNatNZ n 2 (SIsNonZero 1)))
-
-clog2 : Nat -> Nat
-clog2 Z = Z
-pat n =>
-  clog2 (S n) = S (flog2 n)
-
 zerosU : (w : Nat) -> Unsigned w 0
 zerosU Z = UNil
 pat w =>
   zerosU (S w) = UCons {_} {_} {_} (zerosU w) O
 
-
+-- Think we're golden if we can prove that log2 (pow 2 x) = x
+-- Is that even more general than our current problem though? Probably
+--
+-- Oh shit, do I need the precondition that our input (S n) is a power of two?
+-- Well, we kinda know that right?
 
 
 
@@ -163,7 +102,7 @@ data Half : Nat -> Type where
 -- View for recursively dividing a Nat in half
 data HalfRec : Nat -> Type where
      HalfRecZ : HalfRec Z
-     HalfRecEven : (n : Nat) -> HalfRec n -> HalfRec (plus n n)
+     HalfRecEven : (n : Nat) -> HalfRec (S n) -> HalfRec (plus (S n) (S n))
      HalfRecOdd  : (n : Nat) -> HalfRec n -> HalfRec (S (plus n n))
 
 -- We don't have heuristics to ensure we match on the `Half` arg before our Nat
@@ -189,7 +128,7 @@ pat k =>
 pat k =>
   halfRec' {S (plus k k)} (HalfOdd k)
     = eqInd2 {_} {_} {_} {eqSym {_} {_} {_} (plusSuccRightSucc (S k) k)} {_}
-        (HalfRecEven (S k) (halfRec (S k)))
+        (HalfRecEven k (halfRec (S k)))
 
 halfRec Z = HalfRecZ
 pat n =>
@@ -210,6 +149,7 @@ bitsMax : Nat -> Nat
 pat b =>
   bitsMax b = minus (pow 2 b) 1
 
+{-
 halfToUnsigned : {n : Nat} -> HalfRec n -> DPair Nat (\w  => Unsigned w n)
 halfToUnsigned {Z} HalfRecZ = MkDPair {_} {\w => Unsigned w Z} Z UNil
 pat k, rec =>
@@ -230,6 +170,7 @@ pat k, rec =>
 natToUnsigned : (n : Nat) -> DPair Nat (\w  => Unsigned w n)
 pat n =>
   natToUnsigned n = halfToUnsigned {n} (halfRec n)
+-}
 
 prfShiftLeft : (a, b : Nat) -> Equal Nat
                                      (plus (mul (pow 2 a) b)
@@ -369,44 +310,113 @@ pat n val =>
                  h3
       in h4
 
+mulConstBits : Nat -> Nat -> Nat
+mulConstBits Z _ = Z
+pat n =>
+  mulConstBits (S n) Z = Z
+pat n, w =>
+  mulConstBits (S n) (S w) = plus (clog2 (S n)) (S w)
+
+mulCBZeroLeftZero : (c : Nat) -> Equal Nat (mulConstBits c 0) 0
+mulCBZeroLeftZero Z = Refl {_} {_}
+pat w =>
+  mulCBZeroLeftZero (S w) = Refl {_} {_}
+
+prfMultConstUEvenW : (n, w : Nat) -> Equal Nat (S (mulConstBits (S n) (S w)))
+                                               (mulConstBits (plus (S n) (S n)) (S w))
+pat n, w =>
+  prfMultConstUEvenW n w
+    = let h1 = Refl {_} {plus (clog2 (double (S (n)))) (S w)}
+          h2 : Equal Nat (plus (S (clog2 (S (n)))) (S w))
+                         (plus (clog2 (double (S (n)))) (S w)) 
+             = eqInd2 {_} {_} {_} {clog2DoublePlus1 (S (n)) (SIsNonZero (n))}
+                 {\h => Equal Nat (plus h (S w))
+                                  (plus (clog2 (double (S (n)))) (S w))
+                 } h1
+      in h2
+
+shrinkU : (n, w : Nat) -> {val : Nat} ->
+          <Unsigned (S w) val> -> -- ^ Witness that val fits in an Unsigned (S w)
+          <Unsigned (plus (S (clog2 (plus (S n) (S n)))) (S w))
+                    (plus val (mul (plus (S n) (S n)) val))> ->
+          <Unsigned (plus (clog2 (S (plus (S n) (S n)))) (S w))
+                    (plus val (mul (plus (S n) (S n)) val))>
+pat w, val, xIn, xOut =>
+  shrinkU Z w {val} xIn xOut = xOut
+pat n, w, val, xIn, xOut =>
+  shrinkU (S n) w {val} xIn xOut = _
+
+{-
+xOut:_0 <(Unsigned (S (S (plus (flog2 (S (plus n (S (S n))))) (S w)))) (plus val (plus val (plus val (mul (plus n (S (S n))) val)))))>
+--------------------------------
+<(Unsigned (S (S (plus (flog2 (S (divCase (minus (plus n (S (S n))) 0)
+                                          1
+                                          (lte (minus (plus n (S (S n))) 0) 1) )))
+                       (S w))))
+
+plus (S (clog2 (plus (S (S n)) (S (S n))))) (S w)
+---
+plus (clog2 (S (plus (S (S n)) (S (S n))))) (S w)
+
+-}
+
+-- Specialised addition of a number and a scaled version of itself.
+-- Handles conditional bit growth depending on 2^n boundaries.
+addScaledU : (n, w : Nat) -> {val : Nat} ->
+             <Unsigned (plus (clog2 (plus (S n) (S n))) (S w))
+                       (mul (plus (S n) (S n)) val)> ->
+             <Unsigned (S w) val> ->
+             <Unsigned (plus (clog2 (S (plus (S n) (S n)))) (S w))
+                       (plus val (mul (plus (S n) (S n)) val))>
+pat n, w, val, rec, xs =>
+  addScaledU n w {val} rec xs
+    = let xsPad = extend (clog2 (plus (S n) (S n))) (S w) {_} xs
+          fullAns = addU _ {_} {_} {0} xsPad rec [|O|]
+      in shrinkU _ _ {_} xs fullAns
+
+
 multConstU' : (w : Nat) -> {cval, val : Nat} ->
              HalfRec cval ->
              < Unsigned w val > ->
-             DPair Nat (\w' : Nat => < Unsigned w' (mul cval val) >)
+             < Unsigned (mulConstBits cval w) (mul cval val) >
 pat w, val, xs =>
-  multConstU' w {Z} {val} HalfRecZ xs = MkDPair {_} {_} 0 [| UNil |]
+  multConstU' w {Z} {val} HalfRecZ xs = [| UNil |]
 pat cval, hr =>
-  multConstU' Z {cval} {Z} hr [| UNil |] = MkDPair {_} {_} 0 [| UNil |]
---pat w, val, xs, hrec =>
---  multConstU' w {plus Z Z} {val} (HalfRecEven Z hrec) xs = MkDPair {_} {_} 0 [| UNil |]
+  multConstU' Z {cval} {Z} hr [| UNil |]
+    = let h1 = eqInd2 {_} {_} {_} {eqSym {_} {_} {_} (mulCBZeroLeftZero cval)}
+                 {\h => <Unsigned h 0>}
+                 [| UNil |]
+      in eqInd2 {_} {_} {_} {eqSym {_} {_} {_} (mulZeroRightZero cval)}
+                 {\h => <Unsigned (mulConstBits cval 0) h>} h1
+pat n, w, val, xs, hrec =>
+  multConstU' (S w) {plus (S n) (S n)} {val} (HalfRecEven n hrec) xs
+    = let rec = multConstU' (S w) {S n} {val} hrec xs
+          ans = [| UCons {mulConstBits (S n) (S w)} {mul (S n) val} {0} ~rec O |]
+          h1 = eqInd2 {_} {_} {_}
+                 {eqSym {_} {_} {_} (mulDistributesOverPlusLeft (S n) (S n) val)}
+                 {\h : Nat => <Unsigned (S (plus (clog2 (S n)) (S w))) h>}
+                 ans
+          h2 = eqInd2 {_} {_} {_} {prfMultConstUEvenW n w}
+                 {\h => <Unsigned h (mul (plus (S n) (S n)) val)>}
+                 h1
+      in h2
+pat w, val, xs, hrec =>
+  multConstU' (S w) {1} {val} (HalfRecOdd Z hrec) xs
+    = eqInd2 {_} {_} {_} {eqSym {_} {_} {_} (plusZeroRightNeutral val)}
+        {\h => <Unsigned (S w) h>} xs
+pat n, w, val, xs, hrec =>
+  multConstU' (S w) {S (plus (S n) (S n))} {val} (HalfRecOdd (S n) hrec) xs
+    = let rec = multConstU' (S w) {S n} {val} hrec xs
+          recDouble = [| UCons {mulConstBits (S n) (S w)} {mul (S n) val} {0} ~rec O |]
+          recDouble' = eqInd2 {_} {_} {_}
+                 {eqSym {_} {_} {_} (mulDistributesOverPlusLeft (S n) (S n) val)}
+                 {\h : Nat => <Unsigned (S (plus (clog2 (S n)) (S w))) h>}
+                 recDouble
+          recDouble'' = eqInd2 {_} {_} {_} {prfMultConstUEvenW n w}
+                 {\h => <Unsigned h (mul (plus (S n) (S n)) val)>}
+                 recDouble'
+      in addScaledU n w {val} recDouble'' xs
 {-
-pat n, w, val, xs, hrec =>
-  multConstU' (S w) {plus (S n) (S n)} {val} (HalfRecEven (S n) hrec) xs
-    = case multConstU' (S w) {S n} {val} hrec xs of
-           pat w' : Nat, rec =>
-             MkDPair {_} {\a:Nat=> <Unsigned a _>} w' rec ==>
-               let ans = [| UCons {w'} {mul (S n) val} {0} ~rec O |]
-               in MkDPair {_} {\a:Nat=> <Unsigned a (mul (plus (S n) (S n)) val)>}
-                    (S w')
-                    (eqInd2 {_} {_} {_}
-                            {eqSym {_} {_} {_} (mulDistributesOverPlusLeft (S n) (S n) val)}
-                            {\h : Nat => <Unsigned (S w') h >}
-                            ans
-                    )
--}
-pat n, w, val, xs, hrec =>
-  multConstU' (S w) {plus n n} {val} (HalfRecEven n hrec) xs
-    = case multConstU' (S w) {n} {val} hrec xs of
-           pat w' : Nat, rec =>
-             MkDPair {_} {\a:Nat=> <Unsigned a _>} w' rec ==>
-               let ans = [| UCons {w'} {mul n val} {0} ~rec O |]
-               in MkDPair {_} {\a:Nat=> <Unsigned a (mul (plus n n) val)>}
-                    (S w')
-                    (eqInd2 {_} {_} {_}
-                            {eqSym {_} {_} {_} (mulDistributesOverPlusLeft n n val)}
-                            {\h : Nat => <Unsigned (S w') h >}
-                            ans
-                    )
 pat n, w, val, xs, hrec =>
   multConstU' (S w) {S (plus n n)} {val} (HalfRecOdd n hrec) xs
     = case multConstU' (S w) {n} {val} hrec xs of
@@ -425,24 +435,4 @@ pat n, w, val, xs, hrec =>
                     (S (S (max w' w)))
                     (eqInd2 {_} {_} {_} {prfMultConstUOdd n val}
                        {\h => < Unsigned (S (S (max w' w))) h >} ans)
-
-multConstU : (cval, w : Nat) -> {val : Nat} ->
-             < Unsigned w val > ->
-             DPair Nat (\w' : Nat => < Unsigned w' (mul cval val) >)
-pat cval, val, w, xs =>
-  multConstU cval w {val} xs = multConstU' w {cval} {val} (halfRec cval) xs
-
-dSnd : (a : Type) -> (f : a -> Type) -> DPair a f -> (f a)
-
-
-
-{-
-multBy12w5 : {val : Nat} -> <Unsigned 5 val -> Unsigned 10 (mul 12 val)>
-pat val =>
-  multBy12w5 {val} = [| \xs => ~(
-                          case multConstU 12 5 {val} [|xs|] of
-                            pat ys => MkDPair {_} {\w' => <Unsigned 10 (mul 12 val)>} 10 ys ==> _
-                            pat w', ys => MkDPair {_} {\w' => <Unsigned w' (mul 12 val)>} w' ys ==> _
-                        )
-                     |]
 -}

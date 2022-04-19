@@ -187,6 +187,15 @@ pat n, a, prf =>
       in case h3 of
            Refl {_} {_} impossible
 
+
+-- Incomplete minus proofs
+
+minusZeroRight : (left : Nat) -> Equal Nat (minus left 0) left
+minusZeroRight Z = Refl {_} {_}
+pat n =>
+  minusZeroRight (S n) = Refl {_} {_}
+
+
 -- Mul proofs
 
 mulZeroLeftZero : (x : Nat) -> Equal Nat (mul 0 x) 0
@@ -312,3 +321,72 @@ pat exp, base, exp' =>
                  (Refl {_} {_})
       in eqInd2 {_} {_} {_} {eqSym {_} {_} {_} (powerPlusMulPower base exp exp')}
            {\x => Equal Nat (mul base x) (mul (mul base (pow base exp)) (pow base exp'))} h1
+
+-- Mess of proofs for logs and divs
+
+lteZeroRightFalse : (x : Nat) -> NonZero x -> Equal Bool (lte x Z) False
+pat x =>
+  lteZeroRightFalse Z (SIsNonZero x) impossible
+pat x =>
+  lteZeroRightFalse (S x) (SIsNonZero x) = Refl {_} {_}
+
+div2DoubleFloor : (x : Nat) -> Equal Nat (divNatNZ (plus x (S x)) 2 (SIsNonZero 1))
+                                         x
+div2DoubleFloor Z = Refl {_} {_}
+pat x =>
+  div2DoubleFloor (S x) =
+    let h1 = Refl {_} {divCase (S (plus x (S (S x)))) 1 (lte (plus x (S (S x))) 0)}
+        h2 : Equal Nat (divCase (S (plus x (S (S x)))) 1 (lte (plus x (S (S x))) 0))
+                       (divCase (S (plus x (S (S x)))) 1 (lte (S (plus x (S x))) 0))
+           = eqInd2 {_} {_} {_} {eqSym {_} {_} {_} (plusSuccRightSucc x (S x))}
+               {\h => Equal Nat (divCase (S (plus x (S (S x)))) 1 (lte (plus x (S (S x))) 0))
+                                (divCase (S (plus x (S (S x)))) 1 (lte h 0))
+               }
+               h1
+        h3 : Equal Nat (divCase (S (plus x (S (S x)))) 1 (lte (plus x (S (S x))) 0))
+                       (S (divCase (minus (S (plus x (S x))) 1) 1 (lte (minus (S (plus x (S x))) 1) 1)))
+           = eqInd2 {_} {_} {_} {eqSym {_} {_} {_} (plusSuccRightSucc x (S x))}
+               {\h => Equal Nat (divCase (S (plus x (S (S x)))) 1 (lte (plus x (S (S x))) 0))
+                                (S (divCase (minus h 1) 1 (lte (minus h 1) 1)))
+               } h2
+        h4 : Equal Nat (divCase (S (plus x (S (S x)))) 1 (lte (plus x (S (S x))) 0))
+                       (S (divCase (plus x (S x)) 1 (lte (plus x (S x)) 1)))
+           = eqInd2 {_} {_} {_} {minusZeroRight (plus x (S x))}
+               {\h => Equal Nat (divCase (S (plus x (S (S x)))) 1 (lte (plus x (S (S x))) 0))
+                                (S (divCase h 1 (lte h 1)))
+               } h3
+        rec = div2DoubleFloor x
+        h5 : Equal Nat (divCase (S (plus x (S (S x)))) 1 (lte (plus x (S (S x))) 0))
+                       (S x)
+           = eqInd2 {_} {_} {_} {rec}
+               {\h => Equal Nat (divCase (S (plus x (S (S x)))) 1 (lte (plus x (S (S x))) 0))
+                                (S h)
+               } h4
+    in h5
+
+clog2DoublePlus1 : (x : Nat) -> NonZero x -> Equal Nat (clog2 (plus x x)) (S (clog2 x))
+pat x =>
+  clog2DoublePlus1 Z (SIsNonZero x) impossible
+pat prf =>
+  clog2DoublePlus1 1 prf = Refl {_} {_}
+pat x, prf =>
+  clog2DoublePlus1 (S (S x)) prf
+    = let h1 = Refl {_} {S (flog2 (S (plus x (S (S x)))))}
+          h2 : Equal Nat (S (flog2 (S (plus x (S (S x)))))) (S (flog2 (S (S (plus x (S x))))))
+             = eqInd2 {_} {_} {_} {eqSym {_} {_} {_} (plusSuccRightSucc x (S x))}
+                 {\h => Equal Nat (S (flog2 (S (plus x (S (S x))))))
+                                  (S (flog2 (S h)))
+                 } h1
+          h3 : Equal Nat (S (flog2 (S (plus x (S (S x))))))
+                         (S (S (flog2 (S (divCase (plus x (S x)) 1 (lte (plus x (S x)) 1))))))
+             = eqInd2 {_} {_} {_} {minusZeroRight (plus x (S x))}
+                 {\h => Equal Nat (S (flog2 (S (plus x (S (S x))))))
+                                  (S (S (flog2 (S (divCase h 1 (lte h 1))))))
+                 } h2
+          h4 : Equal Nat (S (flog2 (S (plus x (S (S x))))))
+                         (S (S (flog2 (S x))))
+             = eqInd2 {_} {_} {_} {div2DoubleFloor x}
+                 {\h => Equal Nat (S (flog2 (S (plus x (S (S x))))))
+                                  (S (S (flog2 (S h))))
+                 } h3
+      in h4
