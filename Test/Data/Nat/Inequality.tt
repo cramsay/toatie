@@ -1,0 +1,53 @@
+import Data.Nat
+import Proofs
+
+-- Starting to play around with proofs on inequalities of natural numbers
+-- This is incomplete
+
+data LTE  : (n, m : Nat) -> Type where
+  LTEZero : {right : Nat} -> LTE Z right
+  LTESucc : {left, right : Nat} -> LTE left right -> LTE (S left) (S right)
+
+plusMinusLTE : (x, y : Nat) -> LTE y x -> Equal Nat (plus (minus x y) y) x
+pat x, lte =>
+  plusMinusLTE x Z lte
+    = let h1 = eqInd2 {_} {_} {_} {minusZeroRight x}
+                 {\h => Equal Nat (plus (minus x 0) 0) (plus h 0)}
+                 (Refl {_} {_})
+      in eqInd2 {_} {_} {_} {plusZeroRightNeutral x}
+           {_} h1
+pat y =>
+  plusMinusLTE Z (S y) (LTEZero {_}) impossible
+pat y =>
+  plusMinusLTE Z (S y) (LTESucc {y} {_} _) impossible
+pat x, y, lte : LTE y x =>
+  plusMinusLTE (S x) (S y) (LTESucc {y} {x} lte)
+    = let h0 = plusMinusLTE x y lte
+          h1 = eqCong {_} {_} {S} {_} {_} h0
+          h2 = eqInd2 {_} {_} {_} {plusSuccRightSucc (minus x y) y}
+                 {\h => Equal Nat h (S x) }
+                 h1
+      in h2
+
+maxLeftImpliesLTE : (x, y : Nat) -> LTE x (max x y)
+maxLeftImpliesLTE Z Z = LTEZero {Z}
+pat x =>
+  maxLeftImpliesLTE (S x) Z = LTESucc {x} {x} (
+                                eqInd2 {_} {_} {_} {maxZeroRightNeutral x} {_}
+                                  (maxLeftImpliesLTE x Z))
+pat y =>
+  maxLeftImpliesLTE Z y = LTEZero {y}
+pat x, y =>
+  maxLeftImpliesLTE (S x) (S y) = LTESucc {x} {max x y} (maxLeftImpliesLTE x y)
+
+maxRightImpliesLTE : (x, y : Nat) -> LTE y (max x y)
+maxRightImpliesLTE Z Z = LTEZero {Z}
+pat y =>
+  maxRightImpliesLTE Z (S y) = LTESucc {y} {y} (
+                                eqInd2 {_} {_} {_} {maxZeroLeftNeutral y} {_}
+                                  (maxRightImpliesLTE Z y))
+pat x =>
+  maxRightImpliesLTE x Z = LTEZero {max x Z}
+pat x, y =>
+  maxRightImpliesLTE (S x) (S y) = LTESucc {y} {max x y} (maxRightImpliesLTE x y)
+

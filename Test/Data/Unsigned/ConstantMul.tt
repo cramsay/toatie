@@ -1,0 +1,151 @@
+import Data.Nat
+import Data.Unsigned
+import Proofs
+
+--------------------------------------------------------------------------------
+-- View natural numbers as a series of halfs
+
+-- View for dividing a Nat in half
+data Half : Nat -> Type where
+     HalfOdd : (n : Nat) -> Half (S (plus n n))
+     HalfEven : (n : Nat) -> Half (plus n n)
+
+-- View for recursively dividing a Nat in half
+data HalfRec : Nat -> Type where
+     HalfRecZ : HalfRec Z
+     HalfRec1 : HalfRec 1 
+     HalfRecEven : (n : Nat) -> HalfRec (S n) -> HalfRec (plus (S n) (S n))
+     HalfRecOdd  : (n : Nat) -> HalfRec (S n) -> HalfRec (S (plus (S n) (S n)))
+
+-- We don't have heuristics to ensure we match on the `Half` arg before our Nat
+-- Instead, we encourage toatie to match on the `Half` by introducing `n` as implicit
+half' :  {n : Nat} -> Half n -> Half (S n)
+pat k =>
+  half' {S (plus k k)} (HalfOdd k)
+    = eqInd2 {_} {_} {_} {eqSym {_} {_} {_} (plusSuccRightSucc (S k) k)} {_}
+        (HalfEven (S k))
+pat k =>
+  half' {plus k k} (HalfEven k) = HalfOdd k
+
+-- Covering function for Half
+half :  (n : Nat) -> Half n
+half Z = HalfEven Z
+pat n =>
+  half (S n) = half' {n} (half n)
+
+-- Covering function for HalfRec
+halfRec :  (n : Nat) -> HalfRec n
+halfRec' :  {n : Nat} -> Half n -> HalfRec (S n)
+
+halfRec' {Z} (HalfEven Z) = HalfRec1
+pat k =>
+  halfRec' {plus (S k) (S k)} (HalfEven (S k)) = HalfRecOdd _ (halfRec (S k))
+pat k =>
+  halfRec' {S (plus k k)} (HalfOdd k)
+    = eqInd2 {_} {_} {_} {eqSym {_} {_} {_} (plusSuccRightSucc (S k) k)} {_}
+        (HalfRecEven k (halfRec (S k)))
+
+halfRec Z = HalfRecZ
+pat n =>
+  halfRec (S n) = halfRec' {n} (half n)
+
+--------------------------------------------------------------------------------
+-- Wordlength calcuations for constant multiplication
+
+-- How many extra bits do we need to represent a HalfRec coefficient?
+-- This is a simple worst case, e.g. HalfRecOdd adds one bit for our doubling input
+-- and one more bit for our addition with the original input (regardless of if
+-- we've crossed a power-of-two boundary in the addition or not).
+countBits : {n : Nat} -> HalfRec n -> Nat
+countBits {Z} HalfRecZ = Z
+countBits {1} HalfRec1 = Z
+pat n, hrec =>
+  countBits {plus (S n) (S n)} (HalfRecEven n hrec) = S (countBits {S n} hrec)
+pat n, hrec =>
+  countBits {S (plus (S n) (S n))} (HalfRecOdd n hrec) = S (S (countBits {S n} hrec))
+
+countBits' : (n : Nat) -> Nat
+pat n =>
+  countBits' n = countBits {n} (halfRec n)
+
+-- Output bits for our constant multiplication function
+-- If either the `Nat` argument is zero, so is the output.
+-- This helps us obey the proper domain of log2
+mulConstBits : {n : Nat} -> HalfRec n -> Nat -> Nat
+mulConstBits {Z} HalfRecZ _ = Z
+pat n, hrec =>
+  mulConstBits {n} hrec Z = Z
+pat n, hrec, w =>
+  mulConstBits {n} hrec (S w) = plus (countBits {n} hrec) (S w)
+
+-- Helper proof showing that if our second argument is 0, so it the output of mulConstBits
+mulCBZeroLeftZero : {c : Nat} -> (hrec : HalfRec c) -> Equal Nat (mulConstBits {c} hrec 0) 0
+mulCBZeroLeftZero {Z} HalfRecZ = Refl {_} {_}
+mulCBZeroLeftZero {1} HalfRec1 = Refl {_} {_}
+pat n, hrec =>
+  mulCBZeroLeftZero {plus (S n) (S n)} (HalfRecEven n hrec) = Refl {_} {_}
+pat n, hrec =>
+  mulCBZeroLeftZero {S (plus (S n) (S n))} (HalfRecOdd n hrec) = Refl {_} {_}
+
+--------------------------------------------------------------------------------
+-- Constant multiplication via simple shift-and-add decomp
+--
+-- Output widths are calcuated relative to the _width_ of our quoted input,
+-- rather than its value to allow synthesis of signals whose value will only
+-- be known at circuit run-time
+
+prfMultConstUEvenW : {n : Nat} -> (hrec: HalfRec (S n)) -> (w : Nat) ->
+                     Equal Nat (S (mulConstBits {S n} hrec (S w)))
+                               (S (plus (countBits {S n} hrec) (S w)))
+pat w =>
+  prfMultConstUEvenW {Z} HalfRecZ w impossible
+pat w =>
+  prfMultConstUEvenW {Z} HalfRec1 w = Refl {_} {_}
+pat n, w, hrec =>
+  prfMultConstUEvenW {plus (n) (S n)} (HalfRecEven n hrec) w = Refl {_} {_}
+pat n, w, hrec =>
+  prfMultConstUEvenW {plus (S n) (S n)} (HalfRecOdd n hrec) w = Refl {_} {_}
+
+mulConstU : (w : Nat) -> {cval, val : Nat} ->
+            (hrec : HalfRec cval) ->
+            < Unsigned w val > ->
+            < Unsigned (mulConstBits {cval} hrec w) (mul cval val) >
+pat w, val, xs =>
+  mulConstU w {Z} {val} HalfRecZ xs = [| UNil |]
+pat cval, hr =>
+  mulConstU Z {cval} {Z} hr [| UNil |]
+    = let h1 = eqInd2 {_} {_} {_} {eqSym {_} {_} {_} (mulCBZeroLeftZero {cval} hr)}
+                 {\h => <Unsigned h 0>}
+                 [| UNil |]
+      in eqInd2 {_} {_} {_} {eqSym {_} {_} {_} (mulZeroRightZero cval)}
+                 {\h => <Unsigned (mulConstBits {cval} hr 0) h>} h1
+pat n, w, val, xs, hrec =>
+  mulConstU (S w) {plus (S n) (S n)} {val} (HalfRecEven n hrec) xs
+    = let rec = mulConstU (S w) {S n} {val} hrec xs
+          ans = [| UCons {mulConstBits {S n} hrec (S w)} {mul (S n) val} {0} ~rec O |]
+          h1 = eqInd2 {_} {_} {_}
+                 {eqSym {_} {_} {_} (mulDistributesOverPlusLeft (S n) (S n) val)}
+                 {\h : Nat => <Unsigned (S (mulConstBits {(S n)} hrec (S w))) h>}
+                 ans
+          h2 = eqInd2 {_} {_} {_} {prfMultConstUEvenW {n} hrec w}
+                 {\h => <Unsigned h (mul (plus (S n) (S n)) val)>}
+                 h1
+      in h2
+pat w, val, xs =>
+  mulConstU (S w) {1} {val} HalfRec1 xs
+    = eqInd2 {_} {_} {_} {eqSym {_} {_} {_} (plusZeroRightNeutral val)}
+        {\h => <Unsigned (S w) h>} xs
+pat n, w, val, xs, hrec =>
+  mulConstU (S w) {S (plus (S n) (S n))} {val} (HalfRecOdd n hrec) xs
+    = let rec = mulConstU (S w) {S n} {val} hrec xs
+          recDouble = [| UCons {mulConstBits {S n} hrec (S w)} {mul (S n) val} {0} ~rec O |]
+          recDouble' = eqInd2 {_} {_} {_}
+                 {eqSym {_} {_} {_} (mulDistributesOverPlusLeft (S n) (S n) val)}
+                 {\h : Nat => <Unsigned (S (mulConstBits {S n} hrec (S w))) h>}
+                 recDouble
+          recDouble'' = eqInd2 {_} {_} {_} {prfMultConstUEvenW {n} hrec w}
+                 {\h => <Unsigned h (mul (plus (S n) (S n)) val)>}
+                 recDouble'
+          xsPad = extend (S (countBits {S n} hrec)) (S w) {_} xs
+          ans = addU _ {_} {_} {0} xsPad recDouble'' [|O|]
+      in ans

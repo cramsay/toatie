@@ -12,6 +12,70 @@ simple Unsigned : Nat -> Nat -> Type where
           Unsigned width val -> Bit b ->
           Unsigned (S width) (plus b (double val))
 
+--------------------------------------------------------------------------------
+-- Wordlength manipulation
+
+-- Generate a all-zero word of length `w`
+zerosU : (w : Nat) -> Unsigned w 0
+zerosU Z = UNil
+pat w =>
+  zerosU (S w) = UCons {_} {_} {_} (zerosU w) O
+
+prfShiftLeft : (a, b : Nat) -> Equal Nat
+                                     (plus (mul (pow 2 a) b)
+                                           (mul (pow 2 a) b))
+                                     (mul (pow 2 (S a)) b)
+pat a, b =>
+  prfShiftLeft a b
+    = let h1 = Refl {_} {mul (pow 2 (S a)) b}
+          h2 = eqInd2 {_} {_} {_} {powerPlusMulPower 2 1 a}
+                 {\x => Equal Nat (mul (mul 2 (pow 2 a)) b)
+                                  (mul (pow 2 (S a)) b)}
+                 h1
+          h3 = eqInd2 {_} {_} {_} {plusZeroRightNeutral (pow 2 a)}
+                 {\x => Equal Nat (mul (plus (pow 2 a) x) b)
+                                  (mul (pow 2 (S a)) b)} h2
+      in eqInd2 {_} {_} {_} {mulDistributesOverPlusLeft (pow 2 a) (pow 2 a) b}
+           {\x => Equal Nat x (mul (pow 2 (S a)) b)} h3
+
+-- Shift a word left by `n` bits
+-- This performs a power-of-two multiplication of the input's natural number encoding
+shiftLeft : (n, w : Nat) -> {val : Nat} -> < Unsigned w val > -> < Unsigned (plus n w) (mul (pow 2 n) val) >
+pat w, val, xs =>
+  shiftLeft Z w {val} xs = [|
+    eqInd2 {_} {_} {_} {eqSym {_} {_} {_} (plusZeroRightNeutral val)} {_} ~xs
+  |]
+pat n, w, val, xs =>
+  shiftLeft (S n) w {val} xs = [|
+    let rec = ~(shiftLeft n w {val} xs)
+        ans = UCons {plus n w} {mul (pow 2 n) val} {0} rec O
+    in eqInd2 {_} {_} {_} {prfShiftLeft n val} {_} ans
+  |]
+
+-- Extend a word by `w'` bits by padding zeros onto the MSB
+-- This preserves natural number encoding of the input
+extend : (w', w : Nat) -> {val : Nat} ->
+         < Unsigned w val > ->
+         < Unsigned (plus w' w) val >
+pat w, val, xs =>
+  extend Z w {val} xs = xs
+pat w' =>
+  extend (S w') Z {0} [| UNil |]
+    = let ans = extend w' 1 {_} [| UCons {_} {_} {_} UNil O |]
+      in eqInd2 {_} {_} {_} {eqSym {_} {_} {_} (plusSuccRightSucc w' 0)}
+           {\h => <Unsigned h 0>} ans
+pat w', w, val, xsval, xval, xs, x =>
+  extend (S w') (S w) {_} [| UCons {w} {xsval} {xval} xs x |]
+    = [| let rec = ~( eqInd2 {_} {_} {_} {plusSuccRightSucc w' w}
+                        {\h => <Unsigned h xsval>}
+                        (extend (S w') w {xsval} [|xs|])
+                    )
+         in UCons {_} {_} {_} rec x
+      |]
+
+--------------------------------------------------------------------------------
+-- Unsigned adder
+
 prfAddU : (c, xb, yb, a, b, xsb, ysb : Nat) ->
           (prf : Equal Nat (plus b (double a)) (plus c (plus xb yb)) ) ->
           (Equal Nat
@@ -55,7 +119,7 @@ pat c, xb, yb, a, b, xsb, ysb,
                       } h5
       in h6
 
--- -- Unsigned binary addition (with staging)
+-- Unsigned binary addition (with staging)
 addU : (w : Nat) -> {x,y,c : Nat} ->
            < Unsigned w x > -> < Unsigned w y > -> < Bit c > ->
            < Unsigned (S w) (plus c (plus x y)) >

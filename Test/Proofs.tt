@@ -390,3 +390,23 @@ pat x, prf =>
                                   (S (S (flog2 (S h))))
                  } h3
       in h4
+
+{-
+clog2SuccPowTwoSucc : (x : Nat) ->
+                      Equal Nat (clog2 (S (pow 2 x)))
+                                (S (clog2 (pow 2 x)))
+clog2SuccPowTwoSucc Z = Refl {_} {_}
+clog2SuccPowTwoSucc (S Z) = Refl {_} {_}
+pat x =>
+  clog2SuccPowTwoSucc (S (S x)) = Refl {_} {_}
+  -}
+
+maxZeroRightNeutral : (n : Nat) -> Equal Nat (max n 0) n
+maxZeroRightNeutral Z = Refl {_} {_}
+pat n =>
+  maxZeroRightNeutral (S n) = Refl {_} {_}
+
+maxZeroLeftNeutral : (n : Nat) -> Equal Nat (max 0 n) n
+maxZeroLeftNeutral Z = Refl {_} {_}
+pat n =>
+  maxZeroLeftNeutral (S n) = Refl {_} {_}
