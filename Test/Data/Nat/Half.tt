@@ -1,0 +1,49 @@
+import Data.Nat
+import Proofs
+
+--------------------------------------------------------------------------------
+-- View natural numbers as a series of halfs
+
+-- View for dividing a Nat in half
+data Half : Nat -> Type where
+     HalfOdd : (n : Nat) -> Half (S (plus n n))
+     HalfEven : (n : Nat) -> Half (plus n n)
+
+-- View for recursively dividing a Nat in half
+data HalfRec : Nat -> Type where
+     HalfRecZ : HalfRec Z
+     HalfRec1 : HalfRec 1 
+     HalfRecEven : (n : Nat) -> HalfRec (S n) -> HalfRec (plus (S n) (S n))
+     HalfRecOdd  : (n : Nat) -> HalfRec (S n) -> HalfRec (S (plus (S n) (S n)))
+
+-- We don't have heuristics to ensure we match on the `Half` arg before our Nat
+-- Instead, we encourage toatie to match on the `Half` by introducing `n` as implicit
+half' :  {n : Nat} -> Half n -> Half (S n)
+pat k =>
+  half' {S (plus k k)} (HalfOdd k)
+    = eqInd2 {_} {_} {_} {eqSym {_} {_} {_} (plusSuccRightSucc (S k) k)} {_}
+        (HalfEven (S k))
+pat k =>
+  half' {plus k k} (HalfEven k) = HalfOdd k
+
+-- Covering function for Half
+half :  (n : Nat) -> Half n
+half Z = HalfEven Z
+pat n =>
+  half (S n) = half' {n} (half n)
+
+-- Covering function for HalfRec
+halfRec :  (n : Nat) -> HalfRec n
+halfRec' :  {n : Nat} -> Half n -> HalfRec (S n)
+
+halfRec' {Z} (HalfEven Z) = HalfRec1
+pat k =>
+  halfRec' {plus (S k) (S k)} (HalfEven (S k)) = HalfRecOdd _ (halfRec (S k))
+pat k =>
+  halfRec' {S (plus k k)} (HalfOdd k)
+    = eqInd2 {_} {_} {_} {eqSym {_} {_} {_} (plusSuccRightSucc (S k) k)} {_}
+        (HalfRecEven k (halfRec (S k)))
+
+halfRec Z = HalfRecZ
+pat n =>
+  halfRec (S n) = halfRec' {n} (half n)

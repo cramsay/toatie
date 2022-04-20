@@ -236,8 +236,8 @@ processImplicitUse : {auto c : Ref Ctxt Defs} ->
                      {vars:_} -> Env Term vars -> (lhstm : Term vars) -> (rhstm : Term vars) -> (exprhsty : Term vars) -> Core ()
 processImplicitUse env lhstm rhstm exprhsty
   = do exps <- findExpTop lhstm
-       coreLift $ putStrLn $ "IMPS: ENV = " ++ show env
-       coreLift $ putStrLn $ "IMPS: EXPS = " ++ show exps
+       --coreLift $ putStrLn $ "IMPS: ENV = " ++ show env
+       --coreLift $ putStrLn $ "IMPS: EXPS = " ++ show exps
        let rhstm'    = wrapRHSWithLams env exps rhstm
        let exprhsty' = rhsTypeToPi env exps exprhsty
        case toTTImp rhstm' of
@@ -316,9 +316,9 @@ processLHS {vars} env lhs
        lhstm <- normalise defs env lhstm
        lhsty <- normalise defs env !(getTerm lhstyg)
 
-       coreLift $ putStrLn $ "PROCLHS: ENV = " ++ show env
-       coreLift $ putStrLn $ "PROCLHS: LHSTM = " ++ show lhstm
-       coreLift $ putStrLn $ "PROCLHS: LHSTY = " ++ show lhsty
+       --coreLift $ putStrLn $ "PROCLHS: ENV = " ++ show env
+       --coreLift $ putStrLn $ "PROCLHS: LHSTM = " ++ show lhstm
+       --coreLift $ putStrLn $ "PROCLHS: LHSTY = " ++ show lhsty
 
        solveConstraints InLHS
        ust <- get UST
@@ -589,8 +589,8 @@ processDef n clauses
          --coreLift $ putStrLn $ "Complete ----------------------"
          --coreLift $ putStrLn $ "Stage: " ++ show !(get Stg)
          --coreLift $ putStrLn $ "Args = " ++ show cargs
-         coreLift $ putStrLn $ "Tree = " ++ show tree_ct
-         coreLift $ putStrLn $ "Type = " ++ show (type gdef)
+         --coreLift $ putStrLn $ "Tree = " ++ show tree_ct
+         --coreLift $ putStrLn $ "Type = " ++ show (type gdef)
          --coreLift $ putStrLn $ "RTree = " ++ show tree_rt
          coreLift $ putStrLn $ "Processed " ++ show n
   where

@@ -1,0 +1,169 @@
+import Data.Nat
+import Data.ZZ
+import Data.Nat.Half
+import Data.Signed
+import Proofs
+
+--------------------------------------------------------------------------------
+-- Wordlength calcuations for constant multiplication
+
+-- How many extra bits do we need to represent a HalfRec coefficient?
+-- This is a simple worst case, e.g. HalfRecOdd adds one bit for our doubling input
+-- and one more bit for our addition with the original input (regardless of if
+-- we've crossed a power-of-two boundary in the addition or not).
+countBits : {n : Nat} -> HalfRec n -> Nat
+countBits {Z} HalfRecZ = Z
+countBits {1} HalfRec1 = Z
+pat n, hrec =>
+  countBits {plus (S n) (S n)} (HalfRecEven n hrec) = S (countBits {S n} hrec)
+pat n, hrec =>
+  countBits {S (plus (S n) (S n))} (HalfRecOdd n hrec) = S (S (countBits {S n} hrec))
+
+countBits' : (n : Nat) -> Nat
+pat n =>
+  countBits' n = countBits {n} (halfRec n)
+
+-- Output bits for our constant multiplication function
+-- If either the `Nat` argument is zero, so is the output.
+-- This helps us obey the proper domain of log2
+mulConstBits : {n : Nat} -> HalfRec n -> Nat -> Nat
+mulConstBits {Z} HalfRecZ _ = Z
+pat n, hrec =>
+  mulConstBits {n} hrec Z = Z
+pat n, hrec, w =>
+  mulConstBits {n} hrec (S w) = plus (countBits {n} hrec) (S w)
+
+-- Helper proof showing that if our second argument is 0, so it the output of mulConstBits
+mulCBZeroLeftZero : {c : Nat} -> (hrec : HalfRec c) -> Equal Nat (mulConstBits {c} hrec 0) 0
+mulCBZeroLeftZero {Z} HalfRecZ = Refl {_} {_}
+mulCBZeroLeftZero {1} HalfRec1 = Refl {_} {_}
+pat n, hrec =>
+  mulCBZeroLeftZero {plus (S n) (S n)} (HalfRecEven n hrec) = Refl {_} {_}
+pat n, hrec =>
+  mulCBZeroLeftZero {S (plus (S n) (S n))} (HalfRecOdd n hrec) = Refl {_} {_}
+
+prfPredMulCB : {n : Nat} -> (w : Nat) -> (hrec : HalfRec (S n)) -> Equal Nat (mulConstBits {S n} hrec (S w))
+                                                                   (S (plus (countBits {S n} hrec) w))
+pat n, w =>
+  prfPredMulCB {n} w HalfRecZ impossible
+pat w =>
+  prfPredMulCB {0} w HalfRec1 = Refl {_} {_}
+pat n, w, hrec =>
+  prfPredMulCB {plus n (S n)} w (HalfRecEven n hrec)
+    = eqInd2 {_} {_} {_} {eqSym {_} {_} {_} (plusSuccRightSucc (countBits {S n} hrec) w)}
+        {\h => Equal Nat (plus (S (countBits {S n} hrec)) (S w)) (S h)}
+        (Refl {_} {_})
+pat n, w, hrec =>
+  prfPredMulCB {plus (S n) (S n)} w (HalfRecOdd n hrec)
+    = eqInd2 {_} {_} {_} {eqSym {_} {_} {_} (plusSuccRightSucc (countBits {S n} hrec) w)}
+        {\h => Equal Nat (plus (S (S (countBits {S n} hrec))) (S w)) (S (S h))}
+        (Refl {_} {_})
+     
+
+
+--------------------------------------------------------------------------------
+-- Constant multiplication via simple shift-and-add decomp
+--
+-- Output widths are calcuated relative to the _width_ of our quoted input,
+-- rather than its value to allow synthesis of signals whose value will only
+-- be known at circuit run-time
+
+
+prfMultConstSEvenVal : {n : Nat} -> (hrec : HalfRec (S n)) -> (w : Nat) -> (val : ZZ) ->
+                       Equal ZZ (plusZ (Pos 0) (plusZ (multZ (Pos (S n)) val) (multZ (Pos (S n)) val)))
+                                (multZ (Pos (S (plus n (S n)))) val)
+pat n, hrec, w, val =>
+  prfMultConstSEvenVal {n} hrec w val
+    = let h1 = eqInd2 {_} {_} {_} {plusZeroLeftNeutralZ (plusZ (multZ (Pos (S n)) val) (multZ (Pos (S n)) val))}
+                 {\h => Equal ZZ (plusZ (Pos 0) (plusZ (multZ (Pos (S n)) val) (multZ (Pos (S n)) val)))
+                                 h} (Refl {_} {_})
+          h2 = eqInd2 {_} {_} {_} {eqSym {_} {_} {_} (multDistributesOverPlusLeftZ (Pos (S n)) (Pos (S n)) val)}
+                 {\h => Equal ZZ (plusZ (Pos 0) (plusZ (multZ (Pos (S n)) val) (multZ (Pos (S n)) val)))
+                                 h} h1
+      in h2
+
+prfMultConstSOddVal : {n : Nat} -> (hrec : HalfRec (S n)) -> (w : Nat) -> (val : ZZ) ->
+                      Equal ZZ (plusZ val (multZ (Pos (S (plus n (S n)))) val))
+                               (multZ (Pos (S (S (plus n (S n))))) val)
+pat n, hrec, w, val =>
+  prfMultConstSOddVal {n} hrec w val
+    = let h1 = eqInd2 {_} {_} {_} {eqSym {_} {_} {_} (multOneLeftNeutralZ val)}
+                 {\h => Equal ZZ (plusZ val (multZ (Pos (S (plus n (S n)))) val))
+                                 (plusZ h   (multZ (Pos (S (plus n (S n)))) val))}
+                 (Refl {_} {_})
+          h2 = eqInd2 {_} {_} {_} {eqSym {_} {_} {_} (multDistributesOverPlusLeftZ (Pos 1) (Pos (plus (S n) (S n))) val)}
+                 {\h => Equal ZZ (plusZ val (multZ (Pos (S (plus n (S n)))) val))
+                                 h}
+                 h1
+          
+      in h2
+
+-- Constant multiplication of a `Signed` binary number with a `Nat`ural number
+-- coefficient
+mulNatConstS : (w : Nat) -> {cval : Nat} ->
+            (hrec : HalfRec cval) ->
+            { val : ZZ } ->
+            < Signed w val > ->
+            < Signed (mulConstBits {cval} hrec w) (multZ (Pos cval) val) >
+pat w, val, xs =>
+  mulNatConstS w {Z} HalfRecZ {val} xs = eqInd2 {_} {_} {_} {eqSym {_} {_} {_} (multZeroLeftZeroZ val)}
+                                        {\h => <Signed 0 h>} [| SNil |]
+pat cval, hr =>
+  mulNatConstS Z {cval} hr {Pos Z} [| SNil |]
+    = let h1 = eqInd2 {_} {_} {_} {eqSym {_} {_} {_} (mulCBZeroLeftZero {cval} hr)}
+                 {\h => <Signed h (Pos Z)>}
+                 [| SNil |]
+      in eqInd2 {_} {_} {_} {eqSym {_} {_} {_} (multZeroRightZeroZ (Pos cval))}
+                 {\h => <Signed (mulConstBits {cval} hr 0) h>} h1
+pat n, w, val, xs, hrec =>
+  mulNatConstS (S w) {plus (S n) (S n)} (HalfRecEven n hrec) {val} xs
+    = let rec = eqInd2 {_} {_} {_} {prfPredMulCB {n} w hrec}
+                  {\h => <Signed h (multZ (Pos (S n)) val)>}
+                  (mulNatConstS (S w) {S n} hrec {val} xs)
+          ans = [| SCons {plus (countBits {S n} hrec) w} {0} {multZ (Pos (S n)) val} ~rec O |]
+          ans' = eqInd2 {_} {_} {_} {plusSuccRightSucc (countBits {S n} hrec) w}
+                   {\h => <Signed (S h) (plusZ (Pos 0) (plusZ (multZ (Pos (S n)) val) (multZ (Pos (S n)) val)))>}
+                   ans
+      in eqInd2 {_} {_} {_} {prfMultConstSEvenVal {n} hrec w val}
+           {\h => <Signed (S (plus (countBits {S n} hrec) (S w))) h>}
+           ans'
+pat w, val, xs =>
+  mulNatConstS (S w) {1} HalfRec1 {val} xs
+    = eqInd2 {_} {_} {_} {eqSym {_} {_} {_} (multOneLeftNeutralZ val)}
+        {\h => <Signed (S w) h>} xs
+pat n, w, val, xs, hrec =>
+  mulNatConstS (S w) {S (plus (S n) (S n))} (HalfRecOdd n hrec) {val} xs
+    = let rec = eqInd2 {_} {_} {_} {prfPredMulCB {n} w hrec}
+                  {\h => <Signed h (multZ (Pos (S n)) val)>}
+                  (mulNatConstS (S w) {S n} hrec {val} xs)
+          recDouble = [| SCons {plus (countBits {S n} hrec) w} {0} {multZ (Pos (S n)) val} ~rec O |]
+          recDouble' = eqInd2 {_} {_} {_} {plusSuccRightSucc (countBits {S n} hrec) w}
+                         {\h => <Signed (S h) (plusZ (Pos 0) (plusZ (multZ (Pos (S n)) val) (multZ (Pos (S n)) val)))>}
+                         recDouble
+          recDouble'' = eqInd2 {_} {_} {_} {prfMultConstSEvenVal {n} hrec w val}
+                         {\h => <Signed (S (plus (countBits {S n} hrec) (S w))) h>}
+                         recDouble'
+          xsPad = signExtend (S (countBits {S n} hrec)) (S w) {_} xs
+          ans = addS _ {_} {_} xsPad recDouble''
+      in eqInd2 {_} {_} {_} {prfMultConstSOddVal {n} hrec w val}
+           {\h => <Signed (S (S (plus (countBits {S n} hrec) (S w)))) h>}
+           ans
+
+{-
+
+-- Not sure if we should bother with this tbh... we can always just use a subtractor rather than adder later in a DSP chain...
+
+-- Constant multiplication of a `Signed` binary number with a signed integer
+mulConstS : (w : Nat) -> (cval : ZZ) ->
+            (hrec : HalfRec (absZ cval)) ->
+            { val : ZZ } ->
+            < Signed w val > ->
+            < Signed (mulConstBits {absZ cval} hrec w) (multZ cval val) >
+pat w, cval, hrec, val, xs =>
+  mulConstS w (Pos cval) hrec {val} xs = mulNatConstS w {cval} hrec {val} xs
+pat w, cval, hrec, val, xs =>
+  mulConstS w (NegS cval) hrec {val} xs
+    = let absAns = mulNatConstS w {S cval} hrec {val} xs
+      in _
+
+-}

@@ -1,0 +1,12 @@
+import Data.Bool
+import Data.Nat
+import Data.Signed
+import Data.Signed.ConstantMul
+
+-- Specialised constant multiplier with 5 bit input and constant coefficient
+-- of 13 (inferring an extra 5 bits)
+mul13 : {val : ZZ} ->
+        < Signed 5 val ->
+          Signed (plus (countBits' 13) 5) (multZ (Pos 13) val) >
+pat val =>
+  mul13 {val} = [| \xs => ~(mulNatConstS 5 {13} (halfRec 13) {val} [|xs|]) |]

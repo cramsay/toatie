@@ -605,7 +605,3 @@ pat l, c, r =>
           h4 = eqInd2 {_} {_} {_} {multCommutativeZ r c}
                  {\h => Equal ZZ (multZ (plusZ l c) r) (plusZ (multZ l r) h)} h3
       in h4
-    -- = rewrite multCommutativeZ (l + c) r in
-    --   rewrite multDistributesOverPlusRightZ r l c in
-    --   rewrite multCommutativeZ r l in
-    --   rewrite multCommutativeZ r c in Refl

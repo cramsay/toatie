@@ -35,18 +35,27 @@ pat x =>
                                   h1
       in h2
 
-signExt : (w : Nat) -> {val : ZZ} -> < Signed w val> -> < Signed (S w) val >
-signExt 0 {Pos 0} [| SNil |] = [| SMsb {_} O |]
+signExtend1 : (w : Nat) -> {val : ZZ} -> < Signed w val> -> < Signed (S w) val >
+signExtend1 0 {Pos 0} [| SNil |] = [| SMsb {_} O |]
 pat bval, b =>
-  signExt 1 {_} [| SMsb {bval} b |]
+  signExtend1 1 {_} [| SMsb {bval} b |]
     = [| let ans = SCons {_} {_} {_} (SMsb {bval} b) b
          in eqInd2 {_} {_} {_} {prfSignExtMsb (Pos bval)} {_} ans
       |]
 pat w, bval, b, bitsval, bits : Signed (S w) bitsval =>
-  signExt (S (S w)) {_} [| SCons {w} {bval} {bitsval} bits b |]
-    = [| let rec = ~(signExt (S w) {bitsval} [| bits |])
+  signExtend1 (S (S w)) {_} [| SCons {w} {bval} {bitsval} bits b |]
+    = [| let rec = ~(signExtend1 (S w) {bitsval} [| bits |])
          in SCons {_} {_} {_} rec b
       |]
+
+signExtend : (w' : Nat) -> (w : Nat) -> {val : ZZ} -> < Signed w val> -> < Signed (plus w' w) val >
+pat w, val, xs =>
+  signExtend Z w {val} xs = xs
+pat w', w, val, xs =>
+  signExtend (S w') w {val} xs = eqInd2 {_} {_} {_} {eqSym {_} {_} {_} (plusSuccRightSucc w' w)}
+                                   {\h => <Signed h val>}
+                                   (signExtend w' (S w) {val} (signExtend1 w {val} xs))
+
 
 dismissBitsDifferByTwo : (s1, s2 : Nat) -> Bit s1 -> Bit s2 ->
                          Equal Nat (plus s1 0) (plus s2 2) ->
