@@ -334,9 +334,278 @@ multZeroLeftZeroZ : (right : ZZ) -> Equal ZZ (multZ (Pos Z) right) (Pos Z)
 pat k => multZeroLeftZeroZ (Pos  k) = Refl {_} {_}
 pat k => multZeroLeftZeroZ (NegS k) = Refl {_} {_}
 
-{- Need proofs on multiplication of Nats to continue here...
-
 multZeroRightZeroZ : (left : ZZ) -> Equal ZZ (multZ left (Pos Z)) (Pos Z)
-pat k => multZeroRightZeroZ (Pos  k) = eqCong {_} {_} {Pos} {_} {_} (multZeroRightZero k)
-pat k => multZeroRightZeroZ (NegS k) = _
--}
+pat k => multZeroRightZeroZ (Pos  k) = eqCong {_} {_} {Pos} {_} {_} (mulZeroRightZero k)
+pat k => multZeroRightZeroZ (NegS k) = eqInd2 {_} {_} {_} {mulZeroRightZero k}
+                                         {\h => Equal ZZ (negNat (mul k 0)) (negNat h)}
+                                         (Refl {_} {_})
+
+multOneLeftNeutralZ : (right : ZZ) -> Equal ZZ (multZ (Pos 1) right) right
+pat k =>
+  multOneLeftNeutralZ (Pos  k) = eqCong {_} {_} {Pos} {_} {_} (mulOneLeftNeutral k)
+pat k =>
+  multOneLeftNeutralZ (NegS k) = eqCong {_} {_} {NegS} {_} {_} (mulOneLeftNeutral k)
+
+multOneRightNeutralZ : (left : ZZ) -> Equal ZZ (multZ left (Pos 1)) left
+pat k =>
+  multOneRightNeutralZ (Pos  k) = eqCong {_} {_} {Pos} {_} {_} (mulOneRightNeutral k)
+pat k =>
+  multOneRightNeutralZ (NegS k) = eqCong {_} {_} {NegS} {_} {_} (mulOneRightNeutral k)
+
+multCommutativeZ : (left, right : ZZ) -> Equal ZZ (multZ left right) (multZ right left)
+pat k, j =>
+  multCommutativeZ (Pos  k) (Pos  j) = eqCong {_} {_} {Pos} {_} {_} (mulCommutative k j)
+pat k, j =>
+  multCommutativeZ (Pos  k) (NegS j) = eqCong {_} {_} {negNat} {_} {_} (mulCommutative k (S j))
+pat k, j =>
+  multCommutativeZ (NegS k) (Pos  j) = eqCong {_} {_} {negNat} {_} {_} (mulCommutative (S k) j)
+pat k, j =>
+  multCommutativeZ (NegS k) (NegS j) = eqCong {_} {_} {Pos} {_} {_} (mulCommutative (S k) (S j))
+
+lemmaPosMultNegNat : (k, j : Nat) -> Equal ZZ (multZ (Pos k) (negNat j)) (negNat (mul k j))
+pat k =>
+  lemmaPosMultNegNat k Z = eqInd2 {_} {_} {_} {eqSym {_} {_} {_} (mulZeroRightZero k)}
+                             {\h => Equal ZZ (Pos h) (negNat h)}
+                             (Refl {_} {_})
+pat k, j =>
+  lemmaPosMultNegNat k (S j) = Refl {_} {_}
+
+lemmaNegNatMultPos : (k, j : Nat) -> Equal ZZ (multZ (negNat k) (Pos j)) (negNat (mul k j))
+pat k, j =>
+  lemmaNegNatMultPos k j = let h1 = Refl {_} {negNat (mul k j)}
+                               h2 = eqInd2 {_} {_} {_} {mulCommutative k j}
+                                      {\h => Equal ZZ (negNat h)
+                                                      (negNat (mul k j))} h1
+                               h3 = eqInd2 {_} {_} {_} {eqSym {_} {_} {_} (lemmaPosMultNegNat j k)}
+                                      {\h => Equal ZZ h
+                                                      (negNat (mul k j))} h2
+                           in eqInd2 {_} {_} {_} {multCommutativeZ (Pos j) (negNat k)}
+                                     {\h => Equal ZZ h
+                                                      (negNat (mul k j))} h3
+
+lemmaNegMultNegNat : (k, j : Nat) -> Equal ZZ (multZ (negNat k) (NegS j)) (multZ (Pos k) (Pos (S j)))
+pat j =>
+  lemmaNegMultNegNat Z j = eqInd2 {_} {_} {_} {eqSym {_} {_} {_} (mulZeroLeftZero j)}
+                             {\h => Equal ZZ (negNat h) (Pos h)}
+                             (Refl {_} {_})
+pat j, k =>
+  lemmaNegMultNegNat (S k) j = Refl {_} {_}
+
+lemmaNegatePosNegNat : (k : Nat) -> Equal ZZ (negateZ (Pos k)) (negNat k)
+lemmaNegatePosNegNat Z = Refl {_} {_}
+pat k =>
+  lemmaNegatePosNegNat (S k) = Refl {_} {_}
+
+multNegLeftZ : (k : Nat) -> (j : ZZ) -> Equal ZZ (multZ (NegS k) j) (negateZ (multZ (Pos (S k)) j))
+pat k, j =>
+  multNegLeftZ k (Pos j) = eqSym {_} {_} {_} (lemmaNegatePosNegNat (mul (S k) j))
+pat k, j =>
+  multNegLeftZ k (NegS j) = Refl {_} {_}
+
+multNegateLeftZ : (k, j : ZZ) -> Equal ZZ (multZ (negateZ k) j) (negateZ (multZ k j))
+pat j =>
+  multNegateLeftZ (Pos Z) j = eqInd2 {_} {_} {_} {eqSym {_} {_} {_} (multZeroLeftZeroZ j)}
+                             {\h => Equal ZZ h (negateZ h)}
+                             (Refl {_} {_}) 
+pat k, j =>
+  multNegateLeftZ (Pos (S k)) (Pos j) = eqSym {_} {_} {_} (lemmaNegatePosNegNat (mul (S k) j))
+pat k, j =>
+  multNegateLeftZ (Pos (S k)) (NegS j) = Refl {_} {_}
+pat k, j =>
+  multNegateLeftZ (NegS k) j = let h1 = multNegLeftZ k j
+                                   h2 = eqInd2 {_} {_} {_} {h1}
+                                          {\h => Equal ZZ (negateZ h) (negateZ (multZ (NegS k) j))}
+                                          (Refl {_} {_})
+                               in eqInd2 {_} {_} {_} {doubleNegElim (multZ (Pos (S k)) j)}
+                                    {\h => Equal ZZ h (negateZ (multZ (NegS k) j))} h2
+
+multAssociativeZPos : (k : Nat) -> (c, r : ZZ) -> Equal ZZ (multZ (Pos k) (multZ c r))
+                                                           (multZ (multZ (Pos k) c) r)
+pat k, j, i =>
+  multAssociativeZPos k (Pos  j) (Pos  i) = eqCong {_} {_} {Pos} {_} {_} (mulAssociative k j i)
+pat k, j, i =>
+  multAssociativeZPos k (Pos  j) (NegS i)
+    = let h1 = lemmaPosMultNegNat k (mul j (S i))
+      in eqInd2 {_} {_} {_} {mulAssociative k j (S i)}
+           {\h => Equal ZZ (multZ (Pos k) (negNat (mul j (S i))))
+                           (negNat h)} h1
+pat k, j, i =>
+  multAssociativeZPos k (NegS j) (Pos  i)
+    = let h1 = Refl {_} {multZ (Pos k) (negNat (mul (S j) i))}
+          h2 = eqInd2 {_} {_} {_} {lemmaPosMultNegNat k (mul (S j) i)}
+                 {\h => Equal ZZ (multZ (Pos k) (negNat (mul (S j) i)))
+                                 h} h1
+          h3 = eqInd2 {_} {_} {_} {mulAssociative k (S j) i}
+                 {\h => Equal ZZ (multZ (Pos k) (negNat (mul (S j) i)))
+                                 (negNat h)} h2
+          h4 = eqInd2 {_} {_} {_} {eqSym {_} {_} {_} (lemmaNegNatMultPos (mul k (S j)) i)}
+                 {\h => Equal ZZ (multZ (Pos k) (negNat (mul (S j) i)))
+                                 h} h3
+      in h4
+pat k, j, i =>
+  multAssociativeZPos k (NegS j) (NegS i)
+    = let h1 = Refl {_} {multZ (multZ (Pos k) (NegS j)) (NegS i)}
+          h2 = eqInd2 {_} {_} {_} {lemmaNegMultNegNat (mul k (S j)) i}
+                 {\h => Equal ZZ h
+                                 (multZ (multZ (Pos k) (NegS j)) (NegS i))}
+                 h1
+      in eqInd2 {_} {_} {_} {eqSym {_} {_} {_} (mulAssociative k (S j) (S i))}
+           {\h => Equal ZZ (Pos h)
+                           (multZ (multZ (Pos k) (NegS j)) (NegS i))}
+           h2
+
+multAssociativeZ : (l, c, r : ZZ) -> Equal ZZ (multZ l (multZ c r)) (multZ (multZ l c) r)
+pat k, c, r =>
+  multAssociativeZ (Pos k) c r = multAssociativeZPos k c r
+pat k, c, r =>
+  multAssociativeZ (NegS k) c r
+    = let h1 = eqCong {_} {_} {negateZ} {_} {_} (multAssociativeZPos (S k) c r)
+          h2 = eqInd2 {_} {_} {_} {eqSym {_} {_} {_} (multNegLeftZ k (multZ c r))}
+                 {\h => Equal ZZ h
+                                 (negateZ (multZ (multZ (Pos (S k)) c) r))} h1
+          h3 = eqInd2 {_} {_} {_} {eqSym {_} {_} {_} (multNegateLeftZ (multZ (Pos (S k)) c) r)}
+                 {\h => Equal ZZ (multZ (NegS k) (multZ c r))
+                                 h} h2
+          h4 = eqInd2 {_} {_} {_} {eqSym {_} {_} {_} (multNegLeftZ k c)}
+                 {\h => Equal ZZ (multZ (NegS k) (multZ c r))
+                                 (multZ h r)} h3
+      in h4
+
+
+lemmaPlusPosNegCancel : (k, j, i : Nat) -> Equal ZZ (plusZ (Pos (plus k j)) (negNat (plus k i)))
+                                                    (plusZ (Pos j) (negNat i))
+pat j, i =>
+  lemmaPlusPosNegCancel Z j i = Refl {_} {_}
+pat j =>
+  lemmaPlusPosNegCancel (S Z) j Z = eqCong {_} {_} {Pos} {_} {_} (eqSym {_} {_} {_} (plusZeroRightNeutral j))
+pat j, i =>
+  lemmaPlusPosNegCancel (S Z) j (S i) = Refl {_} {_}
+pat k, j, i =>
+  lemmaPlusPosNegCancel (S (S k)) j i = lemmaPlusPosNegCancel (S k) j i
+
+lemmaPlusPosNegZero : (k : Nat) -> Equal ZZ (plusZ (Pos k) (negNat k)) (Pos Z)
+lemmaPlusPosNegZero Z = Refl {_} {_}
+pat k =>
+  lemmaPlusPosNegZero (S k) = lemmaMinusSymZero k
+
+negNatDistributesPlus : (j, k : Nat) -> Equal ZZ (plusZ (negNat j) (negNat k))
+                                                 (negNat (plus j k))
+pat k =>
+  negNatDistributesPlus Z k = plusZeroLeftNeutralZ (negNat k)
+pat j =>
+  negNatDistributesPlus (S j) Z = eqCong {_} {_} {NegS} {_} {_}
+                                    (eqSym {_} {_} {_} (plusZeroRightNeutral j))
+pat j, k =>
+  negNatDistributesPlus (S j) (S k) = eqCong {_} {_} {NegS} {_} {_}
+                                        (plusSuccRightSucc j k)
+
+multDistributesOverPlusRightPosPosZ : (l, c : Nat) -> (r : ZZ) ->
+                                      Equal ZZ (multZ (Pos l) (plusZ (Pos c) r))
+                                               (plusZ (multZ (Pos l) (Pos c)) (multZ (Pos l) r))
+pat l, c, i =>
+  multDistributesOverPlusRightPosPosZ l c (Pos i)
+    = eqCong {_} {_} {Pos} {_} {_} (mulDistributesOverPlusRight l c i)
+
+pat l, i =>
+  multDistributesOverPlusRightPosPosZ l Z (NegS i)
+    = let h1 = eqSym {_} {_} {_} (plusZeroLeftNeutralZ (negNat (mul l (S i))))
+          h2 = eqInd2 {_} {_} {_} {eqSym {_} {_} {_} (mulZeroRightZero l)}
+                 {\h => Equal ZZ (negNat (mul l (S i)))
+                                 (plusZ (Pos h) (negNat (mul l (S i))))} h1
+      in h2
+
+pat l, c =>
+  multDistributesOverPlusRightPosPosZ l (S c) (NegS Z)
+    = let h1 = Refl {_} {plusZ (Pos (mul l (S c))) (negNat (mul l 1))}
+          h2 = eqInd2 {_} {_} {_} {mulOneRightNeutral l}
+                 {\h => Equal ZZ (plusZ (Pos (mul l (S c))) (negNat h))
+                                 (plusZ (Pos (mul l (S c))) (negNat (mul l 1)))} h1
+          h3 = eqInd2 {_} {_} {_} {mulRightSuccPlus l c}
+                 {\h => Equal ZZ (plusZ (Pos h) (negNat l))
+                                 (plusZ (Pos (mul l (S c))) (negNat (mul l 1)))} h2
+          h4 = eqInd2 {_} {_} {_} {plusCommutative l (mul l c)}
+                 {\h => Equal ZZ (plusZ (Pos h) (negNat l))
+                                 (plusZ (Pos (mul l (S c))) (negNat (mul l 1)))} h3
+          h5 = eqInd2 {_} {_} {_} {eqSym {_} {_} {_} (plusAssociativeZ (Pos (mul l c)) (Pos l) (negNat l))}
+                 {\h => Equal ZZ h
+                                 (plusZ (Pos (mul l (S c))) (negNat (mul l 1)))} h4
+          h6 = eqInd2 {_} {_} {Pos 0} {lemmaPlusPosNegZero l}
+                 {\h => Equal ZZ (plusZ (Pos (mul l c)) h)
+                                 (plusZ (Pos (mul l (S c))) (negNat (mul l 1)))} h5
+          h7 = eqInd2 {_} {_} {_} {plusZeroRightNeutralZ (Pos (mul l c))}
+                 {\h => Equal ZZ h
+                                 (plusZ (Pos (mul l (S c))) (negNat (mul l 1)))} h6
+      in h7
+
+pat l, c, i =>
+  multDistributesOverPlusRightPosPosZ l (S c) (NegS (S i))
+    = let h1 = multDistributesOverPlusRightPosPosZ l c (NegS i)
+          h2 = eqInd2 {_} {_} {_} {eqSym {_} {_} {_} (lemmaPlusPosNegCancel l (mul l c) (mul l (S i)))}
+                 {\h => Equal ZZ (multZ (Pos l) (plusZ (Pos c) (NegS i))) h} h1
+          h3 = eqInd2 {_} {_} {_} {eqSym {_} {_} {_} (mulRightSuccPlus l c)}
+                 {\h => Equal ZZ (multZ (Pos l) (plusZ (Pos c) (NegS i)))
+                                 (plusZ (Pos h) (negNat (plus l (mul l (S i)))))
+                 } h2
+          h4 = eqInd2 {_} {_} {_} {eqSym {_} {_} {_} (mulRightSuccPlus l (S i))}
+                 {\h => Equal ZZ (multZ (Pos l) (plusZ (Pos c) (NegS i)))
+                                 (plusZ (Pos (mul l (S c))) (negNat h))
+                 } h3
+      in h4
+
+multDistributesOverPlusRightPosZ : (k : Nat) -> (c, r : ZZ) -> Equal ZZ (multZ (Pos k) (plusZ c r))
+                                                                        (plusZ (multZ (Pos k) c) (multZ (Pos k) r))
+pat k j r =>
+  multDistributesOverPlusRightPosZ k (Pos j) r
+    = multDistributesOverPlusRightPosPosZ k j r
+pat k j i =>
+  multDistributesOverPlusRightPosZ k (NegS j) (Pos i)
+    = let h1 = multDistributesOverPlusRightPosPosZ k i (NegS j)
+      in eqInd2 {_} {_} {_} {plusCommutativeZ (Pos (mul k i)) (negNat (mul k (S j)))}
+           {\h => Equal ZZ (multZ (Pos k) (plusZ (NegS j) (Pos i)))
+                            h} h1
+pat k j i =>
+  multDistributesOverPlusRightPosZ k (NegS j) (NegS i)
+    = let h1 = Refl {_} {negNat (mul k (S (plus (S j) i)))}
+          h2 = eqInd2 {_} {_} {_} {plusSuccRightSucc (S j) i} 
+                 {\h => Equal ZZ (negNat (mul k (S (plus (S j) i))))
+                                 (negNat (mul k h))} h1
+          h3 = eqInd2 {_} {_} {_} {mulDistributesOverPlusRight k (S j) (S i)} 
+                 {\h => Equal ZZ (negNat (mul k (S (plus (S j) i))))
+                                 (negNat h)} h2
+          h4 = eqInd2 {_} {_} {_} {eqSym {_} {_} {_} (negNatDistributesPlus (mul k (S j)) (mul k (S i)))}
+                 {\h => Equal ZZ (negNat (mul k (S (plus (S j) i))))
+                                 h} h3
+      in h4
+
+multDistributesOverPlusRightZ : (l, c, r : ZZ) -> Equal ZZ (multZ l (plusZ c r))
+                                                           (plusZ (multZ l c) (multZ l r))
+pat k, c, r =>
+  multDistributesOverPlusRightZ (Pos k) c r = multDistributesOverPlusRightPosZ k c r
+pat k, c, r =>
+  multDistributesOverPlusRightZ (NegS k) c r
+    = let h1 = eqCong {_} {_} {negateZ} {_} {_} (multDistributesOverPlusRightPosZ (S k) c r)
+          h2 = eqInd2 {_} {_} {_} {eqSym {_} {_} {_} (multNegLeftZ k (plusZ c r))}
+                 {\h => Equal ZZ h (negateZ (plusZ (multZ (Pos (S k)) c) (multZ (Pos (S k)) r)))} h1
+          h3 = eqInd2 {_} {_} {_} {negateDistributesPlus (multZ (Pos (S k)) c) (multZ (Pos (S k)) r)}
+                 {\h => Equal ZZ (multZ (NegS k) (plusZ c r)) h} h2
+          h4 = eqInd2 {_} {_} {_} {eqSym {_} {_} {_} (multNegLeftZ k c)}
+                 {\h => Equal ZZ (multZ (NegS k) (plusZ c r)) (plusZ h (negateZ (multZ (Pos (S k)) r)))} h3
+          h5 = eqInd2 {_} {_} {_} {eqSym {_} {_} {_} (multNegLeftZ k r)}
+                 {\h => Equal ZZ (multZ (NegS k) (plusZ c r)) (plusZ (multZ (NegS k) c) h)} h4
+      in h5
+
+multDistributesOverPlusLeftZ : (l, c, r : ZZ) -> Equal ZZ (multZ (plusZ l c) r) (plusZ (multZ l r) (multZ c r))
+pat l, c, r =>
+  multDistributesOverPlusLeftZ l c r
+    = let h1 = multDistributesOverPlusRightZ r l c
+          h2 = eqInd2 {_} {_} {_} {multCommutativeZ r (plusZ l c)}
+                 {\h => Equal ZZ h (plusZ (multZ r l) (multZ r c))} h1
+          h3 = eqInd2 {_} {_} {_} {multCommutativeZ r l}
+                 {\h => Equal ZZ (multZ (plusZ l c) r) (plusZ h (multZ r c))} h2
+          h4 = eqInd2 {_} {_} {_} {multCommutativeZ r c}
+                 {\h => Equal ZZ (multZ (plusZ l c) r) (plusZ (multZ l r) h)} h3
+      in h4
+    -- = rewrite multCommutativeZ (l + c) r in
+    --   rewrite multDistributesOverPlusRightZ r l c in
+    --   rewrite multCommutativeZ r l in
+    --   rewrite multCommutativeZ r c in Refl
