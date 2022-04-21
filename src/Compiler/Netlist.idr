@@ -73,6 +73,27 @@ addAssignment nl a = record { assignments $= (a::) } nl
 outputName : Name
 outputName = UN "res"
 
+pruneSTree : STree -> Maybe STree
+pruneSTree (Tree (Const (Tag 0 0)) []) = Nothing
+pruneSTree (Tree (Const (Tag 0 0)) xs)
+  = do let xs' = map pruneSTree xs
+       let [] = mapMaybe id xs'
+            | ((Tree x ys) :: xs'') => pure $ Tree x (ys ++ xs'')
+       Nothing
+pruneSTree (Tree x xs) = do let xs' = map pruneSTree xs
+                            let xs'' = mapMaybe id xs'
+                            pure $ (Tree x xs'')
+
+pruneSJoin : SExpr -> Maybe SExpr
+pruneSJoin (SJoin x (Tag 0 0) xs) = do let xs' = map pruneSTree xs
+                                       let [] = mapMaybe id xs'
+                                            | xs'' => pure $ SJoin x (Tag 0 0) xs''
+                                       Nothing
+pruneSJoin (SJoin x tag xs) = do let xs' = map pruneSTree xs
+                                 let xs'' = mapMaybe id xs'
+                                 pure $ SJoin x tag xs''
+pruneSJoin tm = Just tm
+
 typeToSType : {auto c : Ref Ctxt Defs} ->
               {auto u : Ref UST UState} ->
               Term [] -> Core SType
@@ -141,8 +162,14 @@ netlistTm nl tys (CLet x (CCon n args) ty sc)
        tag <- tagForCons ty n
        args' <- traverse argToSTree (zip [0 .. length args] args)
        Z <- getConsPadding [] ty n
-         | pad => pure $ addAssignment nl' (SJoin x tag (args'++[Tree (Const $ Tag pad 0) []]))
-       pure $ addAssignment nl' (SJoin x tag args')
+         | pad => do let j = (SJoin x tag (args'++[Tree (Const $ Tag pad 0) []]))
+                     let Just j' = pruneSJoin j
+                          | Nothing => pure nl'
+                     pure $ addAssignment nl' j'
+       let j = (SJoin x tag args')
+       let Just j' = pruneSJoin j
+         | Nothing => pure nl'
+       pure $ addAssignment nl' j'
   where
   argToSTree : (Nat, CExp vars) -> Core STree
   argToSTree (field, arg) = do argty <- getFieldType [] ty n field
@@ -163,7 +190,9 @@ netlistTm nl tys (CLet x (CConCase (CLocal {idx} p) alts def) ty sc)
     = do let tys' = map (const Erased) args ++ tys
          tag <- tagForCons scTy n
          tree <- tmToSTree tys' ty tm
-         pure (tag,tree)
+         let Just tree' = pruneSTree tree
+               | Nothing => throw $ GenericMsg $ "Alternative scrutinee is empty!"
+         pure (tag,tree')
 
   netlistDef : Term [] -> Maybe (CExp vars) -> Core STree
   netlistDef ty Nothing = do wTag <- tyTagWidth [] ty
@@ -175,7 +204,7 @@ netlistTm nl tys (CLet x (CPrj con field (CLocal {idx} p)) ty sc)
        let nl' = addSignal nl' x !(typeToSType ty)
        let inner = Signal (nameAt idx p)
        Just (u,l) <- getFieldPos [] !(typeOfLocal tys idx) con field
-         | Nothing => pure $ addAssignment nl' (SJoin x (Tag 0 0) [])
+         | Nothing => pure $ nl' --addAssignment nl' (SJoin x (Tag 0 0) [])
        pure $ addAssignment nl' (SSplit x u l inner)
 -- Output refers to name
 netlistTm nl tys (CLocal {idx} p) = pure $ addAssignment nl (SId outputName (nameAt idx p))

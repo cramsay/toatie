@@ -2,6 +2,7 @@
 # All good files should typecheck and exit with success
 # All bad files should fail typechecking and exit with failure
 
+netlistsvg := $(shell which netlistsvg)
 examples   := $(addsuffix .example , $(basename $(shell find examples/ -name '*.tt')))
 good_tests := $(addsuffix .goodtest, $(basename $(shell find good/ -name '*.tt')))
 bad_tests  := $(addsuffix .badtest , $(basename $(shell find bad/ -name '*.tt')))
@@ -9,7 +10,9 @@ good_synth_tests := $(addsuffix .goodsynthtest, $(basename $(shell find good_syn
 bad_synth_tests := $(addsuffix .badsynthtest, $(basename $(shell find bad_synth/ -name '*.tt')))
 
 good_synth_clean := $(addsuffix .vhd, $(basename $(shell find good_synth/ -name '*.tt'))) \
-                    $(shell find good_synth/ -type f -name 'wave.vcd')
+                    $(shell find good_synth/ -type f -name 'wave.vcd') \
+                    $(shell find good_synth/ -type f -name 'schem.json') \
+                    $(shell find good_synth/ -type f -name 'schem.svg') \
 bad_synth_clean := $(addsuffix .vhd, $(basename $(shell find bad_synth/ -name '*.tt'))) \
                     $(shell find bad_synth/ -type f -name 'wave.vcd')
 ghdl_lib_clean := $(shell find . -type f -name '*.cf')
@@ -32,20 +35,22 @@ test : $(good_tests) $(bad_tests) $(good_synth_tests) $(bad_synth_tests) $(examp
 
 %.goodsynthtest : %.tt
 	@toatie -fNetlist=$(basename $(@F)) -fOutDir=$(@D) $< > /dev/null && \
-   ghdl -i --work=$(subst /,_,$(@D)) $(patsubst %.tt,%.vhd   ,$<   ) && \
-   ghdl -i --work=$(subst /,_,$(@D)) $(patsubst %.tt,%_tb.vhd,$<   ) && \
-   ghdl -m --work=$(subst /,_,$(@D)) $(patsubst %.tt,%       ,$(<F)) && \
-   ghdl -m --work=$(subst /,_,$(@D)) $(patsubst %.tt,%_tb    ,$(<F)) && \
-   ghdl -r --work=$(subst /,_,$(@D)) $(patsubst %.tt,%_tb    ,$(<F)) --vcd=$(@D)/wave.vcd > /dev/null || \
+	ghdl -i --work=$(subst /,_,$(@D)) $(patsubst %.tt,%.vhd   ,$<   ) && \
+	ghdl -i --work=$(subst /,_,$(@D)) $(patsubst %.tt,%_tb.vhd,$<   ) && \
+	ghdl -m --work=$(subst /,_,$(@D)) $(patsubst %.tt,%       ,$(<F)) && \
+	ghdl -m --work=$(subst /,_,$(@D)) $(patsubst %.tt,%_tb    ,$(<F)) && \
+	ghdl -r --work=$(subst /,_,$(@D)) $(patsubst %.tt,%_tb    ,$(<F)) --vcd=$(@D)/wave.vcd > /dev/null && \
+	yosys -m ghdl -p "ghdl --work=$(subst /,_,$(@D)) $(patsubst %.tt,%       ,$(<F)); prep -top $(patsubst %.tt,%       ,$(<F)); write_json -compat-int $(@D)/schem.json" > /dev/null && \
+	node $(netlistsvg) $(@D)/schem.json -o $(@D)/schem.svg || \
 	(echo "Test $@ failed" && exit 1)
 
 %.badsynthtest : %.tt
 	@!(toatie -fNetlist=$(basename $(@F)) -fOutDir=$(@D) $< > /dev/null && \
-     ghdl -i --work=$(subst /,_,$(@D)) $(patsubst %.tt,%.vhd   ,$<   ) && \
-     ghdl -i --work=$(subst /,_,$(@D)) $(patsubst %.tt,%_tb.vhd,$<   ) && \
-     ghdl -m --work=$(subst /,_,$(@D)) $(patsubst %.tt,%       ,$(<F)) && \
-     ghdl -m --work=$(subst /,_,$(@D)) $(patsubst %.tt,%_tb    ,$(<F)) && \
-     ghdl -r --work=$(subst /,_,$(@D)) $(patsubst %.tt,%_tb    ,$(<F)) --vcd=$(@D)/wave.vcd > /dev/null) || \
+	ghdl -i --work=$(subst /,_,$(@D)) $(patsubst %.tt,%.vhd   ,$<   ) && \
+	ghdl -i --work=$(subst /,_,$(@D)) $(patsubst %.tt,%_tb.vhd,$<   ) && \
+	ghdl -m --work=$(subst /,_,$(@D)) $(patsubst %.tt,%       ,$(<F)) && \
+	ghdl -m --work=$(subst /,_,$(@D)) $(patsubst %.tt,%_tb    ,$(<F)) && \
+	ghdl -r --work=$(subst /,_,$(@D)) $(patsubst %.tt,%_tb    ,$(<F)) --vcd=$(@D)/wave.vcd > /dev/null) || \
 	(echo "Test $@ failed" && exit 1)
 
 all : test
