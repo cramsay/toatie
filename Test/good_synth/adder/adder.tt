@@ -3,11 +3,12 @@ import Data.Unsigned
 
 -- Top-level adder specialised for 5-bit inputs
 adder : {x,y : Nat} ->
-             < Unsigned 5 x -> Unsigned 5 y ->
-               Unsigned 6 ((plus x y))
-             >
+        < Unsigned 5 x -> Unsigned 5 y ->
+          Unsigned 6 ((plus x y))
+        >
 pat x, y =>
   adder {x} {y}
-    = [| \xs => \ys =>
-         ~(addU 5 {x} {y} {0} [|xs|] [|ys|] [| O |])
+    = [| \xs : Unsigned _ _ =>
+         \ys : Unsigned _ _ =>
+         ~(addU _ {_} {_} {_} [|xs|] [|ys|] [| O |])
       |]

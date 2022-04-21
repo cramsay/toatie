@@ -42,7 +42,40 @@ me@computer:~/toatie $ devRepl Test/Unsigned.tt #Start the toatie REPL
 
 ## Examples
 
-TODO
+Let's look at an unsigned adder example. The entire _family_ of unsigned adder
+circuits is described as a function `addU` in `Data.Unsigned`. We can specialise
+that into a synthesisable circuit by supplying a concrete wordlength and
+returning a closed, quoted circuit term:
+
+```
+import Data.Nat
+import Data.Unsigned
+
+-- Top-level adder specialised for 5-bit inputs
+adder : {x,y : Nat} ->
+        < Unsigned 5 x -> Unsigned 5 y ->
+          Unsigned 6 ((plus x y))
+        >
+pat x, y =>
+  adder {x} {y}
+    = [| \xs : Unsigned _ _ =>
+         \ys : Unsigned _ _ =>
+         ~(addU _ {_} {_} {_} [|xs|] [|ys|] [| O |])
+      |]
+```
+
+Note the `<...>`, `[|...|]`, and `~` terms for quoted types, quoted terms, and
+escaping quotes respectively. The wordlengths and natural number encodings of
+each `Unsigned` argument can be inferred during typechecking, so are left
+implicit (with `_`). The circuit's type guarantees that the output will:
+
+  1. encode the sum of of inputs' natural number encodings
+  2. extend the wordlength by 1
+
+These properties are proven in the implementation of `addU`. You can try loading
+it in the REPL and use the `:Netlist adder` command to print its VHDL
+representation. See this example (with testbench and synthesised netlist svg) in
+`Test/good_synth/adder/` after running the test suite with `devTest`.
 
 ## Progress
 
