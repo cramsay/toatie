@@ -1,0 +1,15 @@
+import Data.Nat
+import Data.Unsigned
+
+-- Single bit full adder
+full_adder : {x,y,c : Nat} ->
+        < Unsigned 1 x -> Unsigned 1 y -> Bit c ->
+          Unsigned 2 (plus c (plus x y))
+        >
+pat x, y, c =>
+  full_adder {x} {y} {c}
+    = [| \xs : Unsigned _ _ =>
+         \ys : Unsigned _ _ =>
+         \cin : Bit _ =>
+         ~(addU _ {_} {_} {_} [|xs|] [|ys|] [|cin|])
+      |]

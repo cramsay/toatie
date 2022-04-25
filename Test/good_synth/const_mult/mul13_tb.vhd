@@ -9,7 +9,7 @@ end entity;
 architecture behavioural of mul13_tb is
   component mul13 is
     port(
-      ext_0 : in std_logic_vector (N-1 downto 0);
+      xs : in std_logic_vector (N-1 downto 0);
       res : out std_logic_vector (N+4 downto 0)
       );
   end component;
@@ -21,7 +21,7 @@ architecture behavioural of mul13_tb is
 begin
 
   uut : mul13 port map(
-    ext_0 =>std_logic_vector(a),
+    xs =>std_logic_vector(a),
     unsigned(res) => c);
 
   process is

@@ -40,7 +40,7 @@ test : $(good_tests) $(bad_tests) $(good_synth_tests) $(bad_synth_tests) $(examp
 	ghdl -m --work=$(subst /,_,$(@D)) $(patsubst %.tt,%       ,$(<F)) && \
 	ghdl -m --work=$(subst /,_,$(@D)) $(patsubst %.tt,%_tb    ,$(<F)) && \
 	ghdl -r --work=$(subst /,_,$(@D)) $(patsubst %.tt,%_tb    ,$(<F)) --vcd=$(@D)/wave.vcd > /dev/null && \
-	yosys -m ghdl -p "ghdl --work=$(subst /,_,$(@D)) $(patsubst %.tt,%       ,$(<F)); prep -top $(patsubst %.tt,%       ,$(<F)); write_json -compat-int $(@D)/schem.json" > /dev/null && \
+	yosys -m ghdl -p "ghdl --work=$(subst /,_,$(@D)) $(patsubst %.tt,%       ,$(<F)); synth -top $(patsubst %.tt,%       ,$(<F)); write_json -compat-int $(@D)/schem.json" > /dev/null && \
 	node $(netlistsvg) $(@D)/schem.json -o $(@D)/schem.svg || \
 	(echo "Test $@ failed" && exit 1)
 

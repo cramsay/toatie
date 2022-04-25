@@ -323,6 +323,10 @@ fixArity d = pure d
 getLams : {done : _} ->
           Int -> SubstCEnv done args -> CExp (done ++ args) ->
           Core (args' ** (SubstCEnv args' args, CExp (args' ++ args)))
+getLams {done} i env (CLam (UN x) sc)
+    = case elem (UN x) done of
+        True  => getLams {done = (UN x) :: done} (i + 1) (CRef (MN x i) :: env) sc
+        False => getLams {done = (UN x) :: done}  i      (CRef (UN x)   :: env) sc
 getLams {done} i env (CLam x sc)
     = getLams {done = x :: done} (i + 1) (CRef (MN "ext" i) :: env) sc
 getLams {done} i env sc = pure (done ** (env, sc))
@@ -646,6 +650,8 @@ mutual
         in apply fn matchedArgs
   annotateTyTm tys (CLet x (CPrj con field (CLocal {idx} p)) ty sc)
     = do innerty <- typeOfLocal tys idx
+         coreLift $ putStrLn $ "Getting type annotation for proj into " ++ show x
+         coreLift $ putStrLn $ ".. from pos " ++ show idx ++ " in " ++ show tys
          ty' <- typeOfPrj tys con field innerty
          sc' <- annotateTyTm (ty'::tys) sc
          pure $ CLet x (CPrj con field (CLocal {idx} p)) ty' sc'
@@ -660,7 +666,7 @@ annotateTy : {auto c : Ref Ctxt Defs} ->
              CDef -> Core CDef
 annotateTy ty (MkFun args def)
   = do (argTys, retTy) <- closedQuoteType ty
-       def' <- annotateTyTm argTys def
+       def' <- annotateTyTm (reverse argTys) def
        pure $ MkFun args def'
 annotateTy _ d = pure d
 

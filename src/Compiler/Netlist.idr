@@ -234,7 +234,7 @@ genNetlist n
                   [] -- Signals
                   [] -- Assignments
 
-       netlistTm nl argTys prog
+       netlistTm nl (reverse argTys) prog
 
 showName : Name -> String
 showName (UN x) = x

@@ -17,7 +17,15 @@
           name = "toatie";
           src = ./.;
           doCheck = true;
-          nativeBuildInputs = [ idrisPkgs.idris2 pkgs.ghdl ];
+          nativeBuildInputs = [ # Build phase packages
+                                idrisPkgs.idris2
+                                # Test suite packages
+                                pkgs.ghdl
+                                pkgs.yosys
+                                pkgs.yosys-ghdl
+                                netlistsvg.defaultPackage.${system}
+                                pkgs.nodejs-12_x
+                              ];
           buildPhase = ''
             make bin
           '';
@@ -47,8 +55,8 @@
           buildInputs = [
             (idris.packages.${system}.idris2)
             (idris.packages.${system}.emacs-with-idris)
-            pkgs.ghdl
             pkgs.gtkwave
+            pkgs.ghdl
             pkgs.yosys
             pkgs.yosys-ghdl
             netlistsvg.defaultPackage.${system}

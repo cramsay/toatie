@@ -9,8 +9,8 @@ end entity;
 architecture behavioural of signed_subtractor_tb is
   component signed_subtractor is
     port(
-      ext_0 : in std_logic_vector (N-1 downto 0);
-      ext_1 : in std_logic_vector (N-1 downto 0);
+      xs : in std_logic_vector (N-1 downto 0);
+      ys : in std_logic_vector (N-1 downto 0);
       res : out std_logic_vector (N downto 0)
       );
   end component;
@@ -25,8 +25,8 @@ architecture behavioural of signed_subtractor_tb is
 begin
 
   uut : signed_subtractor port map(
-    ext_0 =>std_logic_vector(a),
-    ext_1 =>std_logic_vector(b),
+    xs =>std_logic_vector(a),
+    ys =>std_logic_vector(b),
     signed(res) => c);
 
   process is
