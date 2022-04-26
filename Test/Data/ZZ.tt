@@ -297,7 +297,8 @@ pat a =>
           h3 = eqInd2 {_} {_} {_} {plusNegateInverseLZ a}
                  {\x => Equal ZZ (subZ a (plusZ a a))
                                  (plusZ x (negateZ a))} h2
-      in eqInd2 {_} {_} {_} {plusZeroLeftNeutralZ (negateZ a)} {_} h3
+      in eqInd2 {_} {_} {_} {plusZeroLeftNeutralZ (negateZ a)}
+           {\x => Equal ZZ (subZ a (plusZ a a)) x} h3
 
 plusPlusAssociativeZ : (a,b,c,d : ZZ) -> Equal ZZ (plusZ (plusZ a b) (plusZ c d))
                                                   (plusZ (plusZ a c) (plusZ b d))

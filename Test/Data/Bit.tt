@@ -35,7 +35,7 @@ pat y, b =>
 pat x, a =>
   andGate {x} {_} a O
     = let ans = O in
-      eqInd2 {_} {_} {_} {prfAndZeroRight x} {_} ans
+      eqInd2 {_} {_} {_} {prfAndZeroRight x} {\h => Bit h} ans
 
 -- OR gates
 
@@ -58,7 +58,7 @@ pat y, b =>
 pat x, a =>
   orGate {x} {_} a I =
     let ans = I in
-    eqInd2 {_} {_} {_} {prfOrOneRight x} {_} ans
+    eqInd2 {_} {_} {_} {prfOrOneRight x} {\h => Bit h} ans
 
 
 -- XOR gates

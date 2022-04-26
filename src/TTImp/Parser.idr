@@ -74,13 +74,13 @@ mutual
   listLit : FileName -> IndentInfo -> Rule RawImp
   listLit fname indents
       = do symbol "`["
-           elems <- sepBy (symbol ",") (simpleExpr fname indents)
+           elems <- sepBy (symbol ",") (expr fname indents)
            symbol "]"
            pure $ elemsToImp elems
      where
      elemsToImp : List RawImp -> RawImp
-     elemsToImp [] = IApp AExplicit (IVar (UN "Nil")) Implicit
-     elemsToImp (x :: xs) = IApp AExplicit (IApp AExplicit (IApp AExplicit
+     elemsToImp [] = IApp AImplicit (IVar (UN "Nil")) Implicit
+     elemsToImp (x :: xs) = IApp AExplicit (IApp AExplicit (IApp AImplicit
                               (IVar (UN "Cons"))
                               Implicit)
                               x)
@@ -89,7 +89,7 @@ mutual
   vecLit : FileName -> IndentInfo -> Rule RawImp
   vecLit fname indents
       = do symbol "["
-           elems <- sepBy (symbol ",") (simpleExpr fname indents)
+           elems <- sepBy (symbol ",") (expr fname indents)
            symbol "]"
            pure $ elemsToImp elems
     where

@@ -12,7 +12,7 @@ xor I I = O
 
 -- This looks good! We see that the quotes disappear and we eta-expand the xor with two arguments
 circXor : <Bit -> Bit -> Bit>
-circXor = [| xor |]
+circXor = [| \x => \ y => xor x y |]
 
 -- Looks good! We introduce new names for only the head and tail args
 fst : Vect 2 Bit -> Bit
@@ -21,7 +21,7 @@ pat x, xs =>
 
 -- Looks good!
 twoNots : < Vect 2 Bit -> Vect 2 Bit >
-twoNots = unrollMap 2 {_} {_} [| xor I |]
+twoNots = unrollMap 2 {_} {_} [| \y => xor I y |]
 
 -- Do our patterns get handled OK by our case lifting?
 -- Looks good!
@@ -40,7 +40,7 @@ pat b =>
   maybeNot [O, b] = xor I b
 
 circMN : < Vect 2 Bit -> Bit >
-circMN = [| maybeNot |] 
+circMN = [| \xs => maybeNot xs |] 
 
 cGate : Bit -> Nat -> Bit -> Bit
 pat a, b => cGate a Z     b = b

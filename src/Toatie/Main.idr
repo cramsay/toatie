@@ -63,14 +63,12 @@ containsFOutDir (o::os) = containsFOutDir os
 containsFOutDir [] = Nothing
 
 data ReplCmd : Type where
-  RC_BitRepTy : ReplCmd
-  RC_BitRepTm : ReplCmd
+  RC_BitRep : ReplCmd
   RC_CompileDef : ReplCmd
   RC_Netlist : ReplCmd
 
 parseReplCmd : String -> Maybe ReplCmd
-parseReplCmd ":BitRepTy" = Just RC_BitRepTy
-parseReplCmd ":BitRepTm" = Just RC_BitRepTm
+parseReplCmd ":BitRep" = Just RC_BitRep
 parseReplCmd ":CompileDef"   = Just RC_CompileDef
 parseReplCmd ":Netlist" = Just RC_Netlist
 parseReplCmd _ = Nothing
@@ -84,7 +82,7 @@ repl = do coreLift $ putStr "> "
           let (cmd, inp') = break (' '==) inp
           case parseReplCmd cmd of
 
-            Just RC_BitRepTy =>
+            Just RC_BitRep =>
               do let Right ttexp = runParser Nothing inp' (expr "(input)" init)
                      | Left err => do coreLift $ printLn err
                                       repl
@@ -98,27 +96,6 @@ repl = do coreLift $ putStr "> "
                  coreLift $ putStrLn $ "Tag width: " ++ show w_tag
                  w_field <- tyFieldWidth [] tm
                  coreLift $ putStrLn $ "Field width: " ++ show w_field
-                 repl
-
-            Just RC_BitRepTm =>
-              do let Right ttexp = runParser Nothing inp' (expr "(input)" init)
-                     | Left err => do coreLift $ printLn err
-                                      repl
-                 (tm, gty) <- checkTerm [] ttexp Nothing
-                 ty <- getTerm gty
-                 defs <- get Ctxt
-                 tm <- normalise defs [] tm
-                 ty <- normalise defs [] ty
-                 coreLift $ putStrLn $ "Term : " ++ show tm
-                 coreLift $ putStrLn $ "Type : " ++ show ty
-                 dcons <- dataConsForType [] ty
-                 coreLift $ putStrLn $ "Possible data constructors:\n" ++ unlines (map show dcons)
-                 w_tag <- tyTagWidth [] ty
-                 coreLift $ putStrLn $ "Tag width: " ++ show w_tag
-                 w_field <- tyFieldWidth [] ty
-                 coreLift $ putStrLn $ "Field width: " ++ show w_field
-                 bittree <- decomposeDCon [] tm ty
-                 coreLift $ putStrLn $ "Bit tree:\n" ++ show bittree
                  repl
 
             Just RC_CompileDef =>

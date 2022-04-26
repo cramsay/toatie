@@ -396,11 +396,13 @@ checkTerm env (IEscape code) (Just exp)
 
 checkTerm env (ICase scr scrty alts) exp = checkCase InExpr env scr scrty alts exp
 
+{-
 export
 normaliseHoleTypes : {auto c : Ref Ctxt Defs} ->
                      {auto u : Ref UST UState} ->
                      Core ()
-normaliseHoleTypes
+-}
+TTImp.Elab.Check.normaliseHoleTypes
   = do ust <- get UST
        let hs = Data.SortedSet.toList (holes ust)
        defs <- get Ctxt

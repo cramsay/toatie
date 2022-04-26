@@ -29,9 +29,9 @@ data Pair : Type -> Type -> Type where
 
 data Elem : (a : Type) -> a -> List a -> Type where
      Here  : {a : Type} -> {x : a} -> {xs : List a} ->
-             Elem a x (Cons a x xs)
+             Elem a x (Cons {a} x xs)
      There : {a : Type} -> {x : a} -> {xs : List a} -> {y : a} -> Elem a x xs ->
-             Elem a x (Cons a y xs)
+             Elem a x (Cons {a} y xs)
 
 
 data State : Type -> Type -> Type where
@@ -129,17 +129,17 @@ emptyBowl : {i : Type} -> IxState i (Bowl (Salad `[])) Unit
 pat i =>
   emptyBowl {i} = ixPut {_} {_} (MkBowl _)
 
-addLettuce : (xs : List Ingredient) -> IxState (Bowl (Salad xs)) (Bowl (Salad (Cons Ingredient Lettuce xs))) Unit
+addLettuce : (xs : List Ingredient) -> IxState (Bowl (Salad xs)) (Bowl (Salad (Cons {Ingredient} Lettuce xs))) Unit
 pat xs =>
-  addLettuce xs = ixPut {_} {_} (MkBowl (Salad (Cons Ingredient Lettuce xs)))
+  addLettuce xs = ixPut {_} {_} (MkBowl (Salad (Cons {Ingredient} Lettuce xs)))
 
-addCucumber : (xs : List Ingredient) -> IxState (Bowl (Salad xs)) (Bowl (Salad (Cons Ingredient Cucumber xs))) Unit
+addCucumber : (xs : List Ingredient) -> IxState (Bowl (Salad xs)) (Bowl (Salad (Cons {Ingredient} Cucumber xs))) Unit
 pat xs =>
-  addCucumber xs = ixPut {_} {_} (MkBowl (Salad (Cons Ingredient Cucumber xs)))
+  addCucumber xs = ixPut {_} {_} (MkBowl (Salad (Cons {Ingredient} Cucumber xs)))
 
-addTomato : (xs : List Ingredient) -> IxState (Bowl (Salad xs)) (Bowl (Salad (Cons Ingredient Tomato xs))) Unit
+addTomato : (xs : List Ingredient) -> IxState (Bowl (Salad xs)) (Bowl (Salad (Cons {Ingredient} Tomato xs))) Unit
 pat xs =>
-  addTomato xs = ixPut {_} {_} (MkBowl (Salad (Cons Ingredient Tomato xs)))
+  addTomato xs = ixPut {_} {_} (MkBowl (Salad (Cons {Ingredient} Tomato xs)))
 
 mix : (xs : List Ingredient) ->
       Elem Ingredient Lettuce  xs ->

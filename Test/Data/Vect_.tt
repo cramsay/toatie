@@ -1,0 +1,44 @@
+import Data.Nat
+
+data Vect : Nat -> Type -> Type where
+     VNil : {a : Type} -> Vect Z a
+     VCons : {a : Type} -> {k : Nat} ->
+             a -> Vect k a -> Vect (S k) a
+
+head : {a : Type} -> {n : Nat} -> Vect (S n) a -> a
+pat a : Type =>
+  head {a} {Z} (VNil {a}) impossible
+pat a : Type, n : Nat, x : a, xs : Vect n a =>
+  head {a} {n} (VCons {a} {n} x xs) = x
+
+tail : {a : Type} -> {n : Nat} -> Vect (S n) a -> Vect n a
+pat a : Type, n : Nat, x : a, xs : Vect n a =>
+  tail {a} {n} (VCons {a} {n} x xs) = xs
+
+append : {a : Type} -> {n : Nat} -> {m : Nat} -> Vect n a -> Vect m a -> Vect (plus n m) a
+pat a : Type, m : Nat, ys : Vect m a =>
+  append {a} {Z} {m} (VNil {a}) ys = ys
+pat a : Type, n : Nat, m : Nat, x : a, xs : Vect n a, ys : Vect m a =>
+  append {a} {S n} {m} (VCons {a} {n} x xs) ys = VCons {a} {plus n m} x (append {a} {n} {m} xs ys)
+
+map : (n : Nat) -> {a : Type} -> {b : Type} ->
+      (f : a -> b) ->
+      Vect n a -> Vect n b
+pat a, b, f =>
+  map Z {a} {b} f (VNil {a}) = VNil {b}
+pat n, a, b, f, xs =>
+  map (S n) {a} {b} f xs =
+    let y  = f (head {a} {n} xs)
+        ys = map n {a} {b} f (tail {a} {n} xs)
+    in VCons {b} {n} y ys
+
+foldl : (n : Nat) -> {acc : Type} -> {elem : Type} ->
+        (f : acc -> elem -> acc) ->
+        (init : acc) ->
+        Vect n elem -> acc
+pat acc, elem, f, init =>
+  foldl Z {acc} {elem} f init (VNil {elem}) =  init
+pat n, acc, elem, f, init, xs =>
+  foldl (S n) {acc} {elem} f init xs =
+    let init = f init (head {elem} {n} xs)
+    in foldl n {acc} {elem} f init (tail {elem} {n} xs)

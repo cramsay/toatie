@@ -81,10 +81,10 @@ typeForDataCon n argTys
   -- TODO have a better look at erasure of implicits here
 
   unifyArgTys : {vars : _} -> Env Term vars -> Term vars -> List (Term []) -> Core (Term vars)
-  unifyArgTys env fty [] = do solveConstraints InMatch
+  unifyArgTys env fty [] = do solveConstraints InTerm
                               pure fty
   unifyArgTys env (Bind _ b sc) (aty::atys)
-    = do res <- unify InMatch env (binderType b) (rewrite sym (appendNilRightNeutral vars)
+    = do res <- unify InTerm env (binderType b) (rewrite sym (appendNilRightNeutral vars)
                                                   in weakenNs vars aty)
          unifyArgTys env (subst Erased sc) atys
   unifyArgTys _ fty args = throw $ InternalError $ "Mismatched number of args for constructor unification: "
@@ -140,22 +140,23 @@ dataConsForType env ty
          pure (tm, nmeta :: ns)
   wrapMetaArgs env ty = pure (ty, [])
 
-  substSolvedMetaArgs : {vars' : _} -> Env Term vars' -> (ty : Term vars') -> List Name -> Core (Term vars')
-  substSolvedMetaArgs env (Bind n b@(Pi s i ty) sc) (m :: metas)
+  substSolvedMetaArgs : {vars' : _} -> (ty : Term vars') -> List Name -> Core (Term vars')
+  substSolvedMetaArgs (Bind n b@(Pi s i ty) sc) (m :: metas)
     = do -- check if this meta has been solved
          defs <- get Ctxt
          Just (MkGlobalDef _ (PMDef [] _ (STerm tm) _) _) <- lookupDef m defs -- TODO Should I be assuming that args is empty?! Works for most of my examples so far...
            | _ => -- Wasn't solved, so continue
-                  do sc' <- substSolvedMetaArgs (b::env) sc metas
+                  do sc' <- substSolvedMetaArgs sc metas
                      pure $ Bind n b sc'
          let weakTm = rewrite sym (appendNilRightNeutral vars') in weakenNs vars' tm
          let rest = subst weakTm sc
-         pure $ Bind n b !(substSolvedMetaArgs (b :: env) (weaken rest) metas)
-
-  substSolvedMetaArgs env ty metas = pure ty
+         pure $ Bind n b !(substSolvedMetaArgs (weaken rest) metas)
+  substSolvedMetaArgs ty metas = pure ty
 
   checkConRetTy : Name -> Core (Maybe (Name, Term []))
   checkConRetTy dcon = do defs <- get Ctxt
+                          oldUST <- get UST
+                          oldDefs <- get Ctxt
                           -- Lookup the data constructor type
                           Just (MkGlobalDef dconty (DCon tag arity) _) <- lookupDef dcon defs
                             | _ => throw $ InternalError $ "Data constructor name wasn't found in context: " ++ show dcon
@@ -167,11 +168,10 @@ dataConsForType env ty
                           -- Try to unify with our expected type.
                           -- Constraints are allowable -- better to include
                           -- possibly wrong constructors than ignore possibly correct ones.
-                          oldUST <- get UST
-                          res <- handleUnify (do res <- unify InLHS [] tcty ty'
-                                                 solveConstraints InLHS
+                          res <- handleUnify (do res <- unify InTerm [] tcty ty'
+                                                 solveConstraints InTerm
                                                  defs <- get Ctxt
-                                                 dconty' <- substSolvedMetaArgs [] dconty tyArgNames
+                                                 dconty' <- substSolvedMetaArgs dconty tyArgNames
                                                  pure $ Just (dcon, dconty'))
                                              (\err => pure Nothing)
 
@@ -224,38 +224,6 @@ tyFieldWidth env ty
   dataConFieldWidth : (Name, Term[]) -> Core Nat
   dataConFieldWidth (dcon, dconty)
     = argsFieldWidth 0 [] dconty
-
-export
-decomposeDCon : {auto c : Ref Ctxt Defs} ->
-                {auto u : Ref UST UState} ->
-                {vars : _} ->
-                Env Term vars -> (tm: Term vars) -> (ty : Term vars) -> Core BitRepTree
-decomposeDCon env tm ty
-  = do let (Just dconName) = getDConName tm
-           | Nothing => throw $ InternalError $ "Couldn't deduce DataCon name from the term " ++ show tm
-       dcons <- dataConsForType env ty
-       tagWidth <- tyTagWidth env ty
-       let dconsI = zip dcons [0 .. length dcons]
-       let [((_,dconty),tag)] = filter (\((dn,dty),i) => dn == dconName) dconsI
-             | _ => throw $ InternalError $ "Couldn't find expected data con name in list of valid constructors: " ++ show dconName ++ " in " ++ show dcons
-       let Just tagBits = fromNat tagWidth tag
-             | Nothing => throw $ InternalError $ "Tag " ++ show tag ++ " did not fit into expected word length: " ++ show tagWidth
-       let weakDconTy = rewrite sym (appendNilRightNeutral vars) in weakenNs vars dconty
-       pure $ BRNode tagWidth tagBits !(decomposeArgs env (getFnInfoArgs tm) weakDconTy)
-  where
-    weakenSnds : {n : _} -> {vars' : _} -> List (AppInfo, Term vars') -> List (AppInfo, Term (n::vars'))
-    weakenSnds = map (\(i,tm) => (i,weaken tm))
-
-    decomposeArgs : {vars' : _} -> Env Term vars' -> (Term vars', List (AppInfo, Term vars')) -> (ty : Term vars') -> Core (List BitRepTree)
-    decomposeArgs env (Ref (DataCon _ _) n', []) ty = pure []
-    decomposeArgs env (f, (AImplicit, arg) :: args) (Bind n b sc)
-      = do decomposeArgs (b :: env) (weaken f, weakenSnds args) sc
-
-    decomposeArgs env (f, (AExplicit, arg) :: args) (Bind n b sc)
-      = do argT <- decomposeDCon env arg (binderType b)
-           restT <- decomposeArgs (b :: env) (weaken f, weakenSnds args) sc
-           pure $ argT :: restT
-    decomposeArgs env tm ty = do throw $ InternalError $ "Failed to convert DCon args into their bit representation: " ++ show tm ++ " : " ++ show ty
 
 export
 getTagPos : {auto c : Ref Ctxt Defs} ->

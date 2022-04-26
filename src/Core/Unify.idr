@@ -447,11 +447,10 @@ mutual
            case !(patternEnv env (map snd args)) of
                 Nothing =>
                     -- not in pattern form so postpone
-                    do --coreLift $ putStrLn $ "Hole not in pat form"
-                       -- TODO if it's an invertible hole, unifyHoleApp
-                       --coreLift $ putStrLn $ "GOTCHA " ++ show mname
-                       unifyHoleApp mode env mname margs margs' tmnf
-                       --unifyIfEq True mode env (NApp (NMeta mname $ map snd margs) margs') tmnf
+                    do -- If it's an invertible hole, unifyHoleApp
+                       if mode == InLHS
+                          then unifyHoleApp mode env mname margs margs' tmnf
+                          else unifyIfEq True mode env (NApp (NMeta mname $ map snd margs) margs') tmnf
                 Just (newvars ** (locs, submv)) =>
                     -- In pattern form, using the 'submv' fragment of the
                     -- environment
@@ -527,7 +526,7 @@ mutual
   unifyBothBinders mode env x (Pi sx ix tx) scx y (Pi sy iy ty) scy
     = do defs <- get Ctxt
          -- Don't unify if stages are incompatible
-         if sx > sy
+         if sx < sy
            then convertError env (NBind x (Pi sx ix tx) scx) (NBind y (Pi sy iy ty) scy)
            else
              do empty <- clearDefs defs
@@ -566,7 +565,7 @@ mutual
   unifyBothBinders mode env x (Lam sx ix tx) scx y (Lam sy iy ty) scy
                    = do defs <- get Ctxt
                         -- Check stages
-                        if sx > sy
+                        if sx < sy
                           then convertError env
                                  (NBind x (Lam sx ix tx) scx)
                                  (NBind y (Lam sy iy ty) scy)

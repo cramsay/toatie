@@ -16,6 +16,7 @@ data UnifyMode = InLHS
                | InMatch
                | InTerm
 
+export
 Eq UnifyMode where
   InLHS == InLHS     = True
   InMatch == InMatch = True

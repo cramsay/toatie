@@ -55,3 +55,8 @@ processDecl : {auto c : Ref Ctxt Defs} ->
               {auto s : Ref Stg Stage} ->
               {auto m : Ref Mods (List ModName)} ->
               List DirName -> ImpDecl -> Core ()
+
+export
+normaliseHoleTypes : {auto c : Ref Ctxt Defs} ->
+                     {auto u : Ref UST UState} ->
+                     Core ()

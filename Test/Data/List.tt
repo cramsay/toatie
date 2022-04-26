@@ -6,14 +6,14 @@
 import Data.Nat
 
 data List : Type -> Type where
-  Nil : (a : Type) -> List a
-  Cons : (a : Type) -> (x : a) -> (xs : List a) -> List a
+  Nil : {a : Type} -> List a
+  Cons : {a : Type} -> (x : a) -> (xs : List a) -> List a
 
-map : (a : Type) -> (b: Type) -> (a -> b) -> List a -> List b
+map : {a : Type} -> {b: Type} -> (a -> b) -> List a -> List b
 pat a : Type, b : Type, f : (a -> b) =>
-  map a b f (Nil a) = Nil b
+  map {a} {b} f (Nil {a}) = Nil {b}
 pat a : Type, b : Type, f : (a -> b), x : a, xs : List a =>
-  map a b f (Cons a x xs) = Cons b (f x) (map a b f xs)
+  map {a} {b} f (Cons {a} x xs) = Cons {b} (f x) (map {a} {b} f xs)
 
 -- Can use map with all type parameters inferred:
 -- Note that `[...] translates to fold with Nil and Cons with implicit `a`s.

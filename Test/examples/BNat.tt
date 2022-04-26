@@ -34,7 +34,7 @@ pat r1, r2, x, y =>
 pat r1, r2, y =>
   plusB {r1} {S r2} (BZ {r1}) (BS {r2} y)
     = let rec = BS {_} (plusB {_} {_} (BZ {_}) y)
-      in eqInd2 {_} {_} {_} {plusSuccRightSucc r1 r2} {_} rec
+      in eqInd2 {_} {_} {_} {plusSuccRightSucc r1 r2} {\h => BNat h} rec
 
 -- Examples at REPL:
 -- > plusB {3} {2} (BS {2} (BZ {2})) (natToBNat 2)

@@ -39,9 +39,8 @@ signExtend1 : (w : Nat) -> {val : ZZ} -> < Signed w val> -> < Signed (S w) val >
 signExtend1 0 {Pos 0} [| SNil |] = [| SMsb {_} O |]
 pat bval, b =>
   signExtend1 1 {_} [| SMsb {bval} b |]
-    = [| let ans = SCons {_} {_} {_} (SMsb {bval} b) b
-         in eqInd2 {_} {_} {_} {prfSignExtMsb (Pos bval)} {_} ans
-      |]
+    = eqInd2 {_} {_} {_} {prfSignExtMsb (Pos bval)} {\h => <Signed 2 h>}
+        [| SCons {_} {_} {_} (SMsb {bval} b) b |]
 pat w, bval, b, bitsval, bits : Signed (S w) bitsval =>
   signExtend1 (S (S w)) {_} [| SCons {w} {bval} {bitsval} bits b |]
     = [| let rec = ~(signExtend1 (S w) {bitsval} [| bits |])
@@ -259,9 +258,7 @@ pat c, cin, xn, xb, yn, yb =>
                pat a', b', cout, msb, prf'
                  => (MkBitPair {a'} {b'} {_} {xn} {yn} {prf'} cout msb) ==>
                    let ans = SCons {_} {_} {_} (SMsb {_} msb) lsb
-                   in eqInd2 {_} {_} {_} {prfAdderN c xn yn b a b' a' cinEsc lsb cin' msb cout prf prf'} {_} ans
-
-             
+                   in eqInd2 {_} {_} {_} {prfAdderN c xn yn b a b' a' cinEsc lsb cin' msb cout prf prf'} {\h => Signed 2 h} ans
       |]
 
 pat w, c, cin, xsn, xsb : Signed (S w) xsn, xn, xb, ysn, ysb : Signed (S w) ysn, yn, yb =>
@@ -271,7 +268,7 @@ pat w, c, cin, xsn, xsb : Signed (S w) xsn, xn, xb, ysn, ysb : Signed (S w) ysn,
            => (MkBitPair {a} {b} {c} {xn} {yn} {prf} cin' lsb) ==>
               let rec = ~(addSubS _ {_} {_} {_} [| xsb |] [| ysb |] [| cin' |])
                   ans = SCons {S w} {_} {_} rec lsb
-              in eqInd2 {_} {_} {_} {prfAdderNRec c xn yn a b xsn ysn prf} {_} ans
+              in eqInd2 {_} {_} {_} {prfAdderNRec c xn yn a b xsn ysn prf} {\h => Signed (S (S (S w))) h} ans
       |]
 
 -- Specialise for addition
@@ -283,7 +280,7 @@ addS Z {Pos 0} {Pos 0} [| SNil |] [| SNil |] = [| SMsb {0} O |]
 pat w, x, y, xs, ys =>
   addS (S w) {x} {y} xs ys
     = [| let ans = ~(addSubS w {x} {y} {0} xs ys [|O|])
-         in eqInd2 {_} {_} {_} {plusZeroLeftNeutralZ (plusZ x y)} {_} ans
+         in eqInd2 {_} {_} {_} {plusZeroLeftNeutralZ (plusZ x y)} {\h => Signed (S (S w)) h} ans
       |]
 
 prfFlipBits : (n : Nat) -> Bit n -> Equal ZZ (negateZ (Pos (not n))) (plusZ (negateZ (negateZ (Pos n))) (NegS 0))
@@ -338,13 +335,13 @@ flipBits : (w : Nat) -> {val : ZZ} -> < Signed (S w) val > -> < Signed (S w) (su
 pat bn, b : Bit bn =>
   flipBits Z {negateZ (Pos bn)} [| SMsb {bn} b |]
     = [| let ans = SMsb {not bn} (notGate {bn} b)
-         in eqInd2 {ZZ} {_} {_} {prfFlipBits bn b} {_} ans
+         in eqInd2 {ZZ} {_} {_} {prfFlipBits bn b} {\h => Signed 1 h} ans
       |]
 pat w, bn, bsn, bs, b =>
   flipBits (S w) {_} [| SCons {_} {bn} {bsn} bs b |]
     = [| let rec = ~(flipBits _  {_} [| bs |])
              ans = SCons {_} {_} {_} rec (notGate {_} b)
-         in eqInd2 {ZZ} {_} {_} {prfFlipBitsRec bn bsn b} {_} ans
+         in eqInd2 {ZZ} {_} {_} {prfFlipBitsRec bn bsn b} {\h => Signed (S (S w)) h} ans
       |]
 
 prfSubtractorN : (x, y : ZZ) -> Equal ZZ
@@ -363,7 +360,9 @@ pat x, y =>
                  {\a => Equal ZZ (plusZ (Pos 1) (plusZ x (plusZ (negateZ y) (NegS 0))))
                                  (a)} h3
 
-      in eqInd2 {_} {_} {_} {plusZeroLeftNeutralZ (subZ x y)} {_} h4
+      in eqInd2 {_} {_} {_} {plusZeroLeftNeutralZ (subZ x y)}
+           {\a => Equal ZZ (plusZ (Pos 1) (plusZ x (plusZ (negateZ y) (NegS 0))))
+                                 (a)} h4
 
 -- Specialise for subtraction
 subS : (w : Nat) -> {x,y : ZZ} ->
@@ -374,5 +373,5 @@ pat w, x, y, xs, ys =>
   subS (S w) {x} {y} xs ys
     = [| let notys = ~(flipBits (w) {_} ys)
              ans = ~(addSubS w {x} {_} {1} xs [|notys|] [|I|])
-         in eqInd2 {_} {_} {_} {prfSubtractorN x y} {_} ans
+         in eqInd2 {_} {_} {_} {prfSubtractorN x y} {\h => Signed (S (S w)) h} ans
       |]

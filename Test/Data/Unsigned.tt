@@ -43,13 +43,13 @@ pat a, b =>
 shiftLeft : (n, w : Nat) -> {val : Nat} -> < Unsigned w val > -> < Unsigned (plus n w) (mul (pow 2 n) val) >
 pat w, val, xs =>
   shiftLeft Z w {val} xs = [|
-    eqInd2 {_} {_} {_} {eqSym {_} {_} {_} (plusZeroRightNeutral val)} {_} ~xs
+    eqInd2 {_} {_} {_} {eqSym {_} {_} {_} (plusZeroRightNeutral val)} {\h => Unsigned w h} ~xs
   |]
 pat n, w, val, xs =>
   shiftLeft (S n) w {val} xs = [|
     let rec = ~(shiftLeft n w {val} xs)
         ans = UCons {plus n w} {mul (pow 2 n) val} {0} rec O
-    in eqInd2 {_} {_} {_} {prfShiftLeft n val} {_} ans
+    in eqInd2 {_} {_} {_} {prfShiftLeft n val} {\h => Unsigned (S (plus n w)) h} ans
   |]
 
 -- Extend a word by `w'` bits by padding zeros onto the MSB
@@ -143,5 +143,5 @@ pat w, xn, xsn, yn, ysn, c : Nat,
                     ans = UCons {_} {_} {_} rec lsb
                 in eqInd2 {_} {_} {_}
                           {prfAddU c xn yn a b xsn ysn prf}
-                          {_} ans
+                          {\h => Unsigned (S (S w)) h} ans
       |]

@@ -21,7 +21,7 @@ data HalfRec : Nat -> Type where
 half' :  {n : Nat} -> Half n -> Half (S n)
 pat k =>
   half' {S (plus k k)} (HalfOdd k)
-    = eqInd2 {_} {_} {_} {eqSym {_} {_} {_} (plusSuccRightSucc (S k) k)} {_}
+    = eqInd2 {_} {_} {_} {eqSym {_} {_} {_} (plusSuccRightSucc (S k) k)} {\h => Half h}
         (HalfEven (S k))
 pat k =>
   half' {plus k k} (HalfEven k) = HalfOdd k
@@ -41,7 +41,7 @@ pat k =>
   halfRec' {plus (S k) (S k)} (HalfEven (S k)) = HalfRecOdd _ (halfRec (S k))
 pat k =>
   halfRec' {S (plus k k)} (HalfOdd k)
-    = eqInd2 {_} {_} {_} {eqSym {_} {_} {_} (plusSuccRightSucc (S k) k)} {_}
+    = eqInd2 {_} {_} {_} {eqSym {_} {_} {_} (plusSuccRightSucc (S k) k)} {\h => HalfRec h}
         (HalfRecEven k (halfRec (S k)))
 
 halfRec Z = HalfRecZ
