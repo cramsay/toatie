@@ -323,9 +323,9 @@ processLHS {vars} env lhs
        solveConstraints InLHS
        ust <- get UST
        let [] = SortedSet.toList $ holes ust
-            | (h::hs) => throw $ GenericMsg $ "HOLES PRESENT IN LHS!!"
+            | (h::hs) => throw $ GenericMsg $ "HOLES PRESENT IN LHS! " ++ show (h :: hs)
        let [] = SortedMap.toList $ constraints ust
-            | (h::hs) => throw $ GenericMsg $ "CONSTRS PRESENT IN LHS!!"
+            | (h::hs) => throw $ GenericMsg $ "CONSTRS PRESENT IN LHS! " ++ show (h :: hs)
 
        lhstm <- fixLHSPatImplicitness env lhstm
 

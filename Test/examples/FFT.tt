@@ -1,0 +1,189 @@
+import Data.Nat
+import Data.Signed
+import Data.Vect_ -- This version of Vect is a parameter type, so we can have types who depend on its values
+import Proofs
+
+-- A descriptions of twiddle factors that can ensure our DIT radix-2 structure is
+-- equivalent to a full FFT.
+
+data Twiddles : Type where
+  MkTwiddles : (f : Nat -> Nat -> ZZ) ->
+               -- ^ function to generate twiddle factors
+               (prfMZeroOne : (n : Nat) -> Equal ZZ (f 0 n) (Pos 1)) ->
+               (prfMNOne    : (n : Nat) -> Equal ZZ (f n n) (Pos 1)) ->
+               (prfPow      : (k, m, n : Nat) -> Equal ZZ (multZ (f k n) (f m n)) (f (plus k m) n)) ->
+               (prfDouble   : (m, n : Nat) -> Equal ZZ (f m n) (f (plus m m) (plus n n))) ->
+               -- ^ Proofs of twiddle factor laws
+               Twiddles
+
+twiddleRow : (m, n : Nat) -> Twiddles -> Vect m ZZ
+pat n, f, p1, p2, p3, p4 =>
+  twiddleRow Z n (MkTwiddles f p1 p2 p3 p4) = []
+pat m, n, f, p1, p2, p3, p4 =>
+  twiddleRow (S m) n (MkTwiddles f p1 p2 p3 p4)
+    = let ans = append {_} {m} {1} (twiddleRow m n (MkTwiddles f p1 p2 p3 p4)) [f m n]
+      in eqInd2 {_} {_} {_} {plusCommutative m 1}
+           {\h => Vect h ZZ} ans
+
+-- Witness that a `Nat` is a power of two
+data Pow2 : Nat -> Type where
+  POne : Pow2 1
+  PDouble : (n : Nat) -> Pow2 n -> Pow2 (plus n n)
+
+-- Let's describe the plain, mathematical DFT equation to direct our optimised structure's type
+-- See first eqn @ https://en.wikipedia.org/wiki/Cooley%E2%80%93Tukey_FFT_algorithm#The_radix-2_DIT_case
+
+dftK : Twiddles -> (k, n : Nat) -> Vect n ZZ -> ZZ
+pat f, p1, p2, p3, p4, k, n, xs =>
+  dftK (MkTwiddles f p1 p2 p3 p4) k n xs
+    = let mults = imap n {_} {_}
+                       (\i => \x => multZ x (f (mul i k) n))
+                       xs
+      in foldl n {_} {_} plusZ (Pos 0) mults
+
+dft : Twiddles -> (n : Nat) -> Vect n ZZ -> Vect n ZZ
+pat tw, n, xs =>
+  dft tw n xs
+    = imap n {_} {_}
+           (\k => \x => dftK tw k n xs)
+           xs
+
+-- Let's see if we can make a non-synthesisable dit description and prove its equivalence
+
+dit : Twiddles -> {n : Nat} -> Pow2 n -> Vect n ZZ -> Vect n ZZ
+
+-- Helper for split inputs (helps with our proofs a little bit to be able to refer to this by name)
+dit' : Twiddles -> (n : Nat) -> Pow2 n -> Vect 2 (Vect n ZZ) -> Vect (plus n n) ZZ
+pat tw, n, prec, es, os =>
+  dit' tw n prec [es, os]
+    = let -- Recurse on evens
+          es' = dit tw {n} prec es
+          -- Recurse on odds
+          os' = dit tw {n} prec os
+          -- Get odds, multipied by twiddles
+          tws = twiddleRow n (plus n n) tw
+          os'' = zipWith n {_} {_} {_} multZ tws os' -- ^ For our circuit, we should use
+                                                     -- our signed constant nat mult fn but
+                                                     -- subtract when or twiddle's negative
+          -- Append evens + odds and evens - odds
+          outEs = zipWith n {_} {_} {_} plusZ es' os''
+          outOs = zipWith n {_} {_} {_} subZ  es' os''
+          outs = append {_} {_} {_} outEs outOs
+      in outs
+
+pat tw, xs =>
+  dit tw {1} POne xs = xs
+pat tw, n, prec, xs =>
+  dit tw {plus n n} (PDouble n prec) xs
+    = dit' tw n prec (deinterleave n {_} xs)
+
+-- Prove our DIT's base case is equivalent to a 1-input DFT
+
+eqDitBase : (tw : Twiddles) -> (xs : Vect 1 ZZ) -> Equal (Vect 1 ZZ) (dft tw 1 xs) (dit tw {1}  POne xs)
+pat f, p1, p2, p3, p4, k, x =>
+  eqDitBase (MkTwiddles f p1 p2 p3 p4) [x]
+    = let h1 = eqInd2 {_} {_} {_} {p1 1}
+                 {\h => Equal (Vect 1 ZZ)
+                                 [plusZ (Pos 0) (multZ x (f 0 1))]
+                                 [plusZ (Pos 0) (multZ x h)]
+                 } (Refl {_} {_})
+          h2 = eqInd2 {_} {_} {_} {multOneRightNeutralZ x}
+                 {\h => Equal (Vect 1 ZZ)
+                                 [plusZ (Pos 0) (multZ x (f 0 1))]
+                                 [plusZ (Pos 0) h]
+                 } h1
+          h3 = eqInd2 {_} {_} {_} {plusZeroLeftNeutralZ x}
+                 {\h => Equal (Vect 1 ZZ)
+                                 [plusZ (Pos 0) (multZ x (f 0 1))]
+                                 [h]
+                 } h2
+      in h3
+
+-- ...And the recursive case
+
+eqDit : (tw : Twiddles) -> {n : Nat} -> (isPow2 : Pow2 n)  ->
+        (xs : Vect n ZZ) ->
+        Equal (Vect n ZZ) (dft tw n xs) (dit tw {n} isPow2 xs)
+
+eqDitRec : (tw : Twiddles) -> {n : Nat} -> (isPow2 : Pow2 (plus n n))  ->
+           (xs : Vect (plus n n) ZZ) ->
+           (split : Vect 2 (Vect n ZZ)) ->
+           Equal (Vect 2 (Vect n ZZ)) (deinterleave n {ZZ} xs) split ->
+           Equal (Vect (plus n n) ZZ) (dft tw (plus n n) xs) (dit tw {plus n n} isPow2 xs)
+
+pat tw, xs =>
+  eqDit tw {1} POne xs = eqDitBase tw xs
+pat tw, n, prec, xs =>
+  eqDit tw {plus n n} (PDouble n prec) xs
+    = eqDitRec tw {n} (PDouble n prec) xs (deinterleave n {ZZ} xs) (Refl {_} {_})
+
+
+pat f, p1, p2, p3, p4, n, prec, xs, es, os, prfSplit =>
+  eqDitRec (MkTwiddles f p1 p2 p3 p4) {n} (PDouble n prec) xs [es,os] prfSplit
+    = let h1 = Refl {_} {dit' (MkTwiddles f p1 p2 p3 p4) n prec (deinterleave n {_} xs)}
+          h2 : Equal (Vect (plus n n) ZZ)
+                          (dit' (MkTwiddles f p1 p2 p3 p4) n prec [es,os])
+                          (dit' (MkTwiddles f p1 p2 p3 p4) n prec (deinterleave n {_} xs))
+             = eqInd2 {_} {_} {_} {prfSplit}
+                 {\h => Equal (Vect (plus n n) ZZ)
+                          (dit' (MkTwiddles f p1 p2 p3 p4) n prec h)
+                          (dit' (MkTwiddles f p1 p2 p3 p4) n prec (deinterleave n {_} xs))
+                 } h1
+          h3 = eqInd2 {_} {_} {_} {eqSym {_} {_} {_} (eqDit (MkTwiddles f p1 p2 p3 p4) {n} prec es)}
+                 {\h => Equal (Vect (plus n n) ZZ)
+                          (append {ZZ} {n} {n}
+                             (zipWith n {ZZ} {ZZ} {ZZ} plusZ
+                                 h (zipWith n {ZZ} {ZZ} {ZZ} multZ (twiddleRow n (plus n n) (MkTwiddles f p1 p2 p3 p4))
+                                                                   (dit (MkTwiddles f p1 p2 p3 p4) {n} prec os)))
+                             (zipWith n {ZZ} {ZZ} {ZZ} subZ
+                                 h (zipWith n {ZZ} {ZZ} {ZZ} multZ (twiddleRow n (plus n n) (MkTwiddles f p1 p2 p3 p4))
+                                                                   (dit (MkTwiddles f p1 p2 p3 p4) {n} prec os))))
+                          (dit' (MkTwiddles f p1 p2 p3 p4) n prec (deinterleave n {_} xs))
+                 } h2
+          h4 = eqInd2 {_} {_} {_} {eqSym {_} {_} {_} (eqDit (MkTwiddles f p1 p2 p3 p4) {n} prec os)}
+                 {\h => Equal (Vect (plus n n) ZZ)
+                          (append {ZZ} {n} {n}
+                             (zipWith n {ZZ} {ZZ} {ZZ} plusZ
+                                 (dft (MkTwiddles f p1 p2 p3 p4) n es)
+                                 (zipWith n {ZZ} {ZZ} {ZZ} multZ (twiddleRow n (plus n n) (MkTwiddles f p1 p2 p3 p4)) h))
+                             (zipWith n {ZZ} {ZZ} {ZZ} subZ
+                                 (dft (MkTwiddles f p1 p2 p3 p4) n es)
+                                 (zipWith n {ZZ} {ZZ} {ZZ} multZ (twiddleRow n (plus n n) (MkTwiddles f p1 p2 p3 p4)) h)))
+                          (dit' (MkTwiddles f p1 p2 p3 p4) n prec (deinterleave n {_} xs))
+                 } h3
+      in _
+
+{-
+
+append {ZZ} {n} {n}
+  (zipWith n {ZZ} {ZZ} {ZZ} plusZ
+    (imap' 0 n {ZZ} {ZZ} \k : Nat => \x : ZZ => (foldl n {ZZ} {ZZ} plusZ (Pos 0) (imap' 0 n {ZZ} {ZZ} \i : Nat => \x : ZZ => (multZ x (f (mul i k) n)) es)) es)
+    (zipWith n {ZZ} {ZZ} {ZZ} multZ (twiddleRow n (plus n n) (MkTwiddles f p1 p2 p3 p4))
+                                    (imap' 0 n {ZZ} {ZZ} \k : Nat => \x : ZZ => (foldl n {ZZ} {ZZ} plusZ (Pos 0) (imap' 0 n {ZZ} {ZZ} \i : Nat => \x : ZZ => (multZ x (f (mul i k) n)) os)) os)))
+  (zipWith n {ZZ} {ZZ} {ZZ} subZ
+    (imap' 0 n {ZZ} {ZZ} \k : Nat => \x : ZZ => (foldl n {ZZ} {ZZ} plusZ (Pos 0) (imap' 0 n {ZZ} {ZZ} \i : Nat => \x : ZZ => (multZ x (f (mul i k) n)) es)) es)
+    (zipWith n {ZZ} {ZZ} {ZZ} multZ (twiddleRow n (plus n n) (MkTwiddles f p1 p2 p3 p4))
+                                    (imap' 0 n {ZZ} {ZZ} \k : Nat => \x : ZZ => (foldl n {ZZ} {ZZ} plusZ (Pos 0) (imap' 0 n {ZZ} {ZZ} \i : Nat => \x : ZZ => (multZ x (f (mul i k) n)) os)) os)))
+
+===
+
+(imap' 0 (plus n n) {ZZ} {ZZ} \k : Nat => \x : ZZ => (foldl (plus n n) {ZZ} {ZZ} plusZ (Pos 0) (imap' 0 (plus n n) {ZZ} {ZZ} \i : Nat => \x : ZZ => (multZ x (f (mul i k) (plus n n))) xs)) xs)
+
+
+Comparing dft calls
+(imap' 0         n  {ZZ} {ZZ} \k : Nat => \x : ZZ => (foldl         n  {ZZ} {ZZ} plusZ (Pos 0) (imap' 0         n  {ZZ} {ZZ} \i : Nat => \x : ZZ => (multZ x (f (mul i k)         n))  es)) es)
+(imap' 0 (plus n n) {ZZ} {ZZ} \k : Nat => \x : ZZ => (foldl (plus n n) {ZZ} {ZZ} plusZ (Pos 0) (imap' 0 (plus n n) {ZZ} {ZZ} \i : Nat => \x : ZZ => (multZ x (f (mul i k) (plus n n))) xs)) xs)
+
+-}
+
+
+-- A heterogeneous vector to hold a collection of signed numbers with different
+-- type-level natural number encodings
+simple HWords : (w : Nat) -> (n: Nat) -> Vect n ZZ -> Type where
+  HNil : {w : Nat} -> HWords w 0 []
+  HCons : {w, n : Nat} ->
+          {val : ZZ} ->
+          {vals : Vect n ZZ} ->
+          Signed w val ->
+          HWords w n vals ->
+          HWords w (S n) (VCons {ZZ} {n} val vals)
