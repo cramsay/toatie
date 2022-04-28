@@ -73,47 +73,33 @@ pat n, a, b, c, f, x, xs, y, ys =>
         zs = zipWith n {a} {b} {c} f xs ys
     in VCons {c} {n} z zs
 
+consPair : (n : Nat) -> {a : Type} -> (x, y : a) -> Vect 2 (Vect n a) -> Vect 2 (Vect (S n) a)
+pat n, a, x, y, xs, ys =>
+  consPair n {a} x y [xs, ys] = [VCons {_} {_} x xs, VCons {_} {_} y ys]
+
+pairCons : (n : Nat) -> {a : Type} -> (x, y : a) -> Vect (plus n n) a -> Vect (plus (S n) (S n)) a
+pat n, a, x, y, xs =>
+  pairCons n {a} x y xs = let ans = VCons {a} {S (plus n n)} x (VCons {a} {plus n n} y xs)
+                          in eqInd2 {_} {_} {_} {plusSuccRightSucc (S n) n}
+                               {\h => Vect h a} ans
+
 interleave : (n : Nat) -> {a : Type} -> Vect 2 (Vect n a) -> Vect (plus n n) a
 pat a, xs =>
   interleave Z {a} xs = []
 pat n, a, x, xs, y, ys =>
   interleave (S n) {a} [(VCons {_} {_} x xs), (VCons {_} {_} y ys)]
-    = let ans = VCons {_} {_} x (VCons {_} {_} y (interleave n {_} [xs, ys]))
-      in eqInd2 {_} {_} {_} {plusSuccRightSucc (S n) n}
-           {\h => Vect h a} ans
-
--- Take first two elems of a vector with a witness of their presences in the original
-data TakeTwo : (a : Type) -> (n : Nat) -> Vect (S (S n)) a -> Type where
-  MkTakeTwo : {a : Type} -> (n : Nat) ->
-              (x, y : a) -> (rest : Vect n a) ->
-              (xs : Vect (S (S n)) a) ->
-              Equal (Vect (S (S n)) a) xs (VCons {_} {_} x (VCons {_} {_} y rest)) ->
-              TakeTwo a n xs
-
-takeTwo : {a : Type} -> (n : Nat) -> (xs : Vect (S (S n)) a) -> TakeTwo a n xs
-pat a, x, y =>
-  takeTwo {a} Z [x,y] = MkTakeTwo {a} Z x y [] [x,y] (Refl {_} {_})
-pat n, a, x, y, rest =>
-  takeTwo {a} (S n) (VCons {_} {_} x (VCons {_} {_} y rest))
-    = MkTakeTwo {a} (S n) x y rest (VCons {_} {_} x (VCons {_} {_} y rest)) (Refl {_} {_})
+    = pairCons n {a} x y (interleave n {_} [xs, ys])
 
 deinterleave : (n : Nat) -> {a : Type} -> Vect (plus n n) a -> Vect 2 (Vect n a)
-deinterleave' : (n : Nat) -> {a : Type} -> (xs : Vect (S (S (plus n n))) a) ->
-                TakeTwo a (plus n n) xs ->
-                Vect 2 (Vect (S n) a)
-pat n, a, xs, x, y, rest, prf =>
-  deinterleave' n {a} xs (MkTakeTwo {a} (plus n n) x y rest xs prf)
-    = case deinterleave n {_} rest of
-        pat es, os =>
-          [es,os] ==> [VCons {_} {_} x es, VCons {_} {_} y os]
-
 pat a =>
   deinterleave Z {a} [] = [[], []]
-pat n, a, xs =>
-  deinterleave (S n) {a} xs
-    = let xs' = eqInd2 {_} {_} {_} {eqSym {_} {_} {_} (plusSuccRightSucc (S n) n)} {\h => Vect h a} xs
-          tt  = takeTwo {a} (plus n n) xs'
-      in deinterleave' n {a} xs' tt
+pat a, x, y =>
+  deinterleave 1 {a} [x,y] = [[x], [y]]
+pat n, a, x, y, rest =>
+  deinterleave (S (S n)) {a} (VCons {_} {_} x (VCons {_} {_} y rest))
+    = let rest' = eqInd2 {_} {_} {_} {eqSym {_} {_} {_} (plusSuccRightSucc n (S n))} {\h => Vect h a} rest
+          deiRest = deinterleave (S n) {a} rest'
+      in consPair (S n) {a} x y deiRest
 
 -- Specialsed arithmetic functions for ZZ (used in FFT example)
 
@@ -122,46 +108,94 @@ sumZ Z (VNil {ZZ}) = Pos 0
 pat n, x, xs =>
   sumZ (S n) (VCons {_} {_} x xs) = plusZ x (sumZ n xs)
 
-prfInterleaveSym : (n : Nat) -> (a : Type) -> (xs : Vect (plus n n) a) ->
-                   Equal (Vect (plus n n) a) xs (interleave n {a} (deinterleave n {a} xs))
-pat a =>
-  prfInterleaveSym Z a [] = Refl {_} {_}
-pat n, a, xs =>
-  prfInterleaveSym (S n) a xs
-    = prfInterleaveSym' n a xs (eqSym {_} {_} {_} (plusSuccRightSucc (S n) n))
-      --case takeTwo {a} (plus n n)
-      --        (eqInd2 {_} {_} {_} {eqSym {_} {_} {_} (plusSuccRightSucc (S n) n)}
-      --          {\h => Vect h a} xs) of
-      --   pat x, y, rest, prfT2 =>
-      --     MkTakeTwo {_} _ x y rest _ prfT2 ==>
-      --       let h1 = prfInterleaveSym n a rest
-      --           h2 = eqCong {_} {_} {\h => VCons {a} {S (plus n n)} x (VCons {a} {plus n n} y h)} {_} {_} h1
-      --          -- h3 = eqInd2 {_} {_} {_} {eqSym {_} {_} {_} (prfT2)}
-      --          --        {\h => Equal (Vect (S (S (plus n n))) a)
-      --          --                 h
-      --          --                 (VCons {a} {(S (plus n n))} x (VCons {a} {(plus n n)} y (interleave n {a} (deinterleave n {a} rest))))
-      --          --        } h2
-      --          -- h4 = eqInd2 {_} {_} {_} {plusSuccRightSucc (S n) n}
-      --          --        {\h => Equal (Vect (S (S (plus n n))) a)
-      --          --                 (eqInd2 {Nat} {(S (plus n (S n)))} {(S (S (plus n n)))} {(eqSym {Nat} {(S (S (plus n n)))} {(S (plus n (S n)))} (eqCong {Nat} {Nat} {S} {(S (plus n n))} {(plus n (S n))} (plusSuccRightSucc n n)))} {\h : Nat => (Vect h a)} xs)
-      --          --                 (VCons {a} {(S (plus n n))} x (VCons {a} {(plus n n)} y (interleave n {a} (deinterleave n {a} rest))))
-      --          --        } h3
-      --       in _
+prfInterleaveConsPair : (n : Nat) -> {a : Type} ->
+                        (x, y : a) -> (rest : Vect 2 (Vect (S n) a)) ->
+                        Equal (Vect (plus (S (S n)) (S (S n))) a)
+                          (interleave (S (S n)) {a} (consPair (S n) {a} x y rest))
+                          (pairCons (S n) {a} x y (interleave (S n) {a} rest))
+pat a, x, y, e, o =>
+  prfInterleaveConsPair Z {a} x y [e,o] = Refl {_} {_}
+pat n, a, x, y, e, es, o, os =>
+  prfInterleaveConsPair (S n) {a} x y [VCons {_} {_} e es, VCons {_} {_} o os]
+    = Refl {_} {_}
 
 {-
-(Equal (Vect (S (plus n[6] (S n[6]))) a[5])
+prfInterleaveSym' : (n : Nat) -> {a : Type} ->
+                    (xs : Vect (plus (S n) (S n)) a) ->
+                    (x, y : a) -> (rest : Vect (plus n n) a) ->
+                    Equal (Vect (plus (S n) (S n)) a)
+                      xs
+                      (pairCons n {a} x y rest) ->
+                    Equal (Vect (plus (S n) (S n)) a)
+                      xs
+                      (interleave (S n) {a} (deinterleave (S n) {a} xs))
+pat a, x, y, prf =>
+  prfInterleaveSym' Z {a} [x,y] x y [] prf = Refl {_} {_}
+pat n, a, xs, x, y, rest, prf =>
+  prfInterleaveSym' (S n) {a} xs x y rest prf
+    = let h1 = Refl {_} {interleave (S (S n)) {a} (deinterleave (S (S n)) {a} xs)}
+          h2 = eqInd2 {_} {_} {_} {prf}
+                {\h => Equal (Vect (plus (S (S n)) (S (S n))) a)
+                         (interleave (S (S n)) {a} (deinterleave (S (S n)) {a} h ))
+                         (interleave (S (S n)) {a} (deinterleave (S (S n)) {a} xs))
+                } h1
+                         
+      in _
+-}
 
 
-(eqInd2 {Nat} {(S (S (plus n[6] n[6])))} {(S (plus n[6] (S n[6])))} {(eqCong {Nat} {Nat} {S} {(S (plus n[6] n[6]))} {(plus n[6] (S n[6]))} (plusSuccRightSucc n[6] n[6]))} {\h :_0 Nat => (Vect h[0] a[6])} xs[4])
+lemmaInterleaveSym : {a : Type} -> (n : Nat) -> (x, y : a) -> (rest : Vect (plus n (S (S n))) a) ->
+                     Equal (Vect (plus (S (S n)) (S (S n))) a)
+                       (eqInd2 {_} {_} {_} {(eqCong {_} {_} {S} {_} {_} (eqCong {_} {_} {S} {_} {_} (plusSuccRightSucc n (S n))))} {\h => (Vect h a)}
+                         (VCons {a} {(S (S (plus n (S n))))}
+                           x
+                           (VCons {a} {(S (plus n (S n)))}
+                             y
+                             (eqInd2 {Nat} {(plus n (S (S n)))} {(S (plus n (S n)))} {(eqSym {Nat} {(S (plus n (S n)))} {(plus n (S (S n)))} (plusSuccRightSucc n (S n)))} {\h : Nat => (Vect h a)} rest)))
+                       )
+                       (VCons {a} {(S (plus n (S (S n))))} x (VCons {a} {(plus n (S (S n)))} y rest))
+pat a, x, y, e, o =>
+  lemmaInterleaveSym {a} Z x y [e,o] = Refl {_} {_}
+pat a, x, y, e, o, e', o' =>
+  lemmaInterleaveSym {a} 1 x y [e,o,e',o'] = Refl {_} {_}
+pat n, a, x, y, e, o, rest =>
+  lemmaInterleaveSym {a} (S (S n)) x y (VCons {_} {_} e (VCons {_} {_} o rest)) = _
 
-(interleave (S n[6]) {a[5]} (deinterleave' n[6] {a[5]}
+prfInterleaveSym : (n : Nat) -> {a : Type} ->
+                   (xs : Vect (plus n n) a) ->
+                   Equal (Vect (plus n n) a)
+                     xs
+                     (interleave n {a} (deinterleave n {a} xs))
+pat a =>
+  prfInterleaveSym Z {a} [] = Refl {_} {_}
+pat a, x, y =>
+  prfInterleaveSym 1 {a} [x,y] = Refl {_} {_}
+pat n, a, x, y, rest =>
+  prfInterleaveSym (S (S n)) {a} (VCons {_} {_} x (VCons {_} {_} y rest))
+    = let rest' = eqInd2 {_} {_} {_} {eqSym {_} {_} {_} (plusSuccRightSucc n (S n))} {\h => Vect h a} rest
+          h1 = eqInd2 {_} {_} {_} {prfInterleaveConsPair n {a} x y (deinterleave (S n) {a}
+                                     (eqInd2 {_} {_} {_} {eqSym {_} {_} {_} (plusSuccRightSucc n (S n))} {\h => Vect h a} rest))}
+                 {\h => Equal (Vect (plus (S (S n)) (S (S n))) a)
+                          h
+                          (interleave (S (S n)) {a} (consPair (S n) {a} x y (deinterleave (S n) {a}
+                           (eqInd2 {_} {_} {_} {eqSym {_} {_} {_} (plusSuccRightSucc n (S n))} {\h => Vect h a} rest))))
+                 } (Refl {_} {_})
+          h2 = eqInd2 {_} {_} {_} {eqSym {_} {_} {_} (prfInterleaveSym (S n) {a} (eqInd2 {_} {_} {_} {eqSym {_} {_} {_} (plusSuccRightSucc n (S n))} {\h => Vect h a} rest))}
+             {\h => Equal (Vect (plus (S (S n)) (S (S n))) a)
+                      (pairCons (S n) {a} x y h)
+                      (interleave (S (S n)) {a} (consPair (S n) {a} x y (deinterleave (S n) {a}
+                       (eqInd2 {_} {_} {_} {eqSym {_} {_} {_} (plusSuccRightSucc n (S n))} {\h => Vect h a} rest))))
+             } h1
+      in eqInd2 {_} {_} {_} {lemmaInterleaveSym {a} n x y rest}
+           {\h => Equal (Vect (plus (S (S n)) (S (S n))) a)
+                    h
+                    (interleave (S (S n)) {a} (consPair (S n) {a} x y (deinterleave (S n) {a}
+                     (eqInd2 {_} {_} {_} {eqSym {_} {_} {_} (plusSuccRightSucc n (S n))} {\h => Vect h a} rest))))
+           } h2
 
-  (eqInd2 {Nat} {(S (plus n[6] (S n[6])))} {(S (S (plus n[6] n[6])))} {(eqSym {Nat} {(S (S (plus n[6] n[6])))} {(S (plus n[6] (S n[6])))} (eqCong {Nat} {Nat} {S} {(S (plus n[6] n[6]))} {(plus n[6] (S n[6]))} (plusSuccRightSucc n[6] n[6])))} {\h :_0 Nat => (Vect h[0] a[6])} (eqInd2 {Nat} {(S (S (plus n[6] n[6])))} {(S (plus n[6] (S n[6])))} {(eqCong {Nat} {Nat} {S} {(S (plus n[6] n[6]))} {(plus n[6] (S n[6]))} (plusSuccRightSucc n[6] n[6]))} {\h :_0 Nat => (Vect h[0] a[6])}
+{-
 
-  xs[4]))
+--------------------------------
 
-  (takeTwo {a[5]} (plus n[6] n[6]) (eqInd2 {Nat} {(S (plus n[6] (S n[6])))} {(S (S (plus n[6] n[6])))} {(eqSym {Nat} {(S (S (plus n[6] n[6])))} {(S (plus n[6] (S n[6])))} (eqCong {Nat} {Nat} {S} {(S (plus n[6] n[6]))} {(plus n[6] (S n[6]))} (plusSuccRightSucc n[6] n[6])))} {\h :_0 Nat => (Vect h[0] a[6])} (eqInd2 {Nat} {(S (S (plus n[6] n[6])))} {(S (plus n[6] (S n[6])))} {(eqCong {Nat} {Nat} {S} {(S (plus n[6] n[6]))} {(plus n[6] (S n[6]))} (plusSuccRightSucc n[6] n[6]))} {\h :_0 Nat => (Vect h[0] a[6])} xs[4])))))
-
-)
 
 -}
