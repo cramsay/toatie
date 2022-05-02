@@ -1,0 +1,52 @@
+import Data.Nat
+import Proofs
+
+-- Numbers strictly less than some bound.  The name comes from "finite sets".
+data Fin : (n : Nat) -> Type where
+    FZ : (k : Nat) -> Fin (S k)
+    FS : (k : Nat) -> Fin k -> Fin (S k)
+
+finToNat : {n : Nat} -> Fin n -> Nat
+pat k =>
+  finToNat {S k} (FZ k) = Z
+pat k, fin =>
+  finToNat {S k} (FS k fin) = S (finToNat {k} fin)
+
+-- Weaken the bound on a Fin by 1
+finWeaken : {n : Nat} -> Fin n -> Fin (S n)
+pat k =>
+  finWeaken {S k} (FZ k) = FZ (S k)
+pat k, fin =>
+  finWeaken {S k} (FS k fin) = FS (S k) (finWeaken {k} fin)
+
+-- Weaken the bound on a Fin by some amount
+finWeakenN : (m : Nat) -> {n : Nat} -> Fin n -> Fin (plus m n)
+pat n, fin =>
+  finWeakenN Z {n} fin = fin
+pat m, n, fin =>
+  finWeakenN (S m) {n} fin
+    = eqInd2 {_} {_} {_} {eqSym {_} {_} {_} (plusSuccRightSucc m n)}
+        {\h => Fin h} (finWeakenN m {S n} (finWeaken {n} fin))
+
+finWeakenN' : (m : Nat) -> {n : Nat} -> Fin n -> Fin (plus n m)
+pat m, n =>
+  finWeakenN' m {S n} (FZ n) = FZ (plus n m)
+pat m, n, fin =>
+  finWeakenN' m {S n} (FS n fin) = FS (plus n m) (finWeakenN' m {n} fin)
+
+-- Add some natural number to a Fin, extending the bound accordingly
+finShift : (m : Nat) -> {n : Nat} -> Fin n -> Fin (plus m n)
+pat n, fin =>
+  finShift Z {n} fin = fin
+pat m, n =>
+  finShift (S m) {S n} (FZ n)
+    = FS (plus m (S n)) (finShift m {S n} (FZ n))
+pat m, n, fin =>
+  finShift (S m) {S n} (FS n fin)
+    = FS (plus m (S n)) (finShift m {S n} (FS n fin))
+
+-- Convert a nat to the upper bound of a Fin
+natToFin : (n : Nat) -> Fin (S n)
+natToFin Z = FZ Z
+pat n =>
+  natToFin (S n) = FS (S n) (natToFin n)

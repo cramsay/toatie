@@ -1,5 +1,6 @@
 import Data.Nat
 import Data.ZZ
+import Data.Fin
 import Proofs
 
 data Vect : Nat -> Type -> Type where
@@ -28,28 +29,24 @@ map : (n : Nat) -> {a : Type} -> {b : Type} ->
       Vect n a -> Vect n b
 pat a, b, f =>
   map Z {a} {b} f (VNil {a}) = VNil {b}
-pat n, a, b, f, xs =>
-  map (S n) {a} {b} f xs =
-    let y  = f (head {a} {n} xs)
-        ys = map n {a} {b} f (tail {a} {n} xs)
+pat n, a, b, f, x, xs =>
+  map (S n) {a} {b} f (VCons {_} {_} x xs) =
+    let y  = f x
+        ys = map n {a} {b} f xs
     in VCons {b} {n} y ys
 
-imap' : (i : Nat) -> (n : Nat) -> {a : Type} -> {b : Type} ->
-      (f : Nat -> a -> b) ->
-      Vect n a -> Vect n b
-pat i, a, b, f =>
-  imap' i Z {a} {b} f (VNil {a}) = VNil {b}
-pat i, n, a, b, f, xs =>
-  imap' i (S n) {a} {b} f xs =
-    let y  = f i (head {a} {n} xs)
-        ys = imap' (S i) n {a} {b} f (tail {a} {n} xs)
-    in VCons {b} {n} y ys
+at : {a : Type} -> {n : Nat} -> Fin n -> Vect n a -> a
+pat a, n, x, xs =>
+  at {a} {S n} (FZ n) (VCons {_} {_} x xs) = x
+pat a, n, fin, x, xs =>
+  at {a} {S n} (FS n fin) (VCons {_} {_} x xs) = at {a} {n} fin xs
 
-imap : (n : Nat) -> {a : Type} -> {b : Type} ->
-      (f : Nat -> a -> b) ->
-      Vect n a -> Vect n b
-pat n, a, b, f, xs =>
-  imap n {a} {b} f xs = imap' 0 n {a} {b} f xs
+indices : (n : Nat) -> Vect n (Fin n)
+indices Z = []
+pat n =>
+  indices (S n) =
+    let rec = map n {_} {_} (FS n) (indices n)
+    in VCons {_} {_} (FZ n) rec
 
 foldl : (n : Nat) -> {acc : Type} -> {elem : Type} ->
         (f : acc -> elem -> acc) ->
@@ -72,6 +69,13 @@ pat n, a, b, c, f, x, xs, y, ys =>
     let z  = f x y
         zs = zipWith n {a} {b} {c} f xs ys
     in VCons {c} {n} z zs
+
+imap : (n : Nat) -> {a : Type} -> {b : Type} ->
+       (f : Fin n -> a -> b) ->
+       Vect n a -> Vect n b
+pat n, a, b, f, xs =>
+  imap n {a} {b} f xs = zipWith n {Fin n} {a} {b} f (indices n) xs
+
 
 consPair : (n : Nat) -> {a : Type} -> (x, y : a) -> Vect 2 (Vect n a) -> Vect 2 (Vect (S n) a)
 pat n, a, x, y, xs, ys =>
@@ -105,6 +109,8 @@ pat n, a, x, y, rest =>
 
 sumZ : (n : Nat) -> Vect n ZZ -> ZZ
 sumZ Z (VNil {ZZ}) = Pos 0
+pat x =>
+  sumZ 1 [x] = x
 pat n, x, xs =>
   sumZ (S n) (VCons {_} {_} x xs) = plusZ x (sumZ n xs)
 
@@ -119,30 +125,7 @@ pat n, a, x, y, e, es, o, os =>
   prfInterleaveConsPair (S n) {a} x y [VCons {_} {_} e es, VCons {_} {_} o os]
     = Refl {_} {_}
 
-{-
-prfInterleaveSym' : (n : Nat) -> {a : Type} ->
-                    (xs : Vect (plus (S n) (S n)) a) ->
-                    (x, y : a) -> (rest : Vect (plus n n) a) ->
-                    Equal (Vect (plus (S n) (S n)) a)
-                      xs
-                      (pairCons n {a} x y rest) ->
-                    Equal (Vect (plus (S n) (S n)) a)
-                      xs
-                      (interleave (S n) {a} (deinterleave (S n) {a} xs))
-pat a, x, y, prf =>
-  prfInterleaveSym' Z {a} [x,y] x y [] prf = Refl {_} {_}
-pat n, a, xs, x, y, rest, prf =>
-  prfInterleaveSym' (S n) {a} xs x y rest prf
-    = let h1 = Refl {_} {interleave (S (S n)) {a} (deinterleave (S (S n)) {a} xs)}
-          h2 = eqInd2 {_} {_} {_} {prf}
-                {\h => Equal (Vect (plus (S (S n)) (S (S n))) a)
-                         (interleave (S (S n)) {a} (deinterleave (S (S n)) {a} h ))
-                         (interleave (S (S n)) {a} (deinterleave (S (S n)) {a} xs))
-                } h1
-                         
-      in _
--}
-
+{- Not sure if we'll need these
 
 lemmaInterleaveSym : {a : Type} -> (n : Nat) -> (x, y : a) -> (rest : Vect (plus n (S (S n))) a) ->
                      Equal (Vect (plus (S (S n)) (S (S n))) a)
@@ -151,15 +134,17 @@ lemmaInterleaveSym : {a : Type} -> (n : Nat) -> (x, y : a) -> (rest : Vect (plus
                            x
                            (VCons {a} {(S (plus n (S n)))}
                              y
-                             (eqInd2 {Nat} {(plus n (S (S n)))} {(S (plus n (S n)))} {(eqSym {Nat} {(S (plus n (S n)))} {(plus n (S (S n)))} (plusSuccRightSucc n (S n)))} {\h : Nat => (Vect h a)} rest)))
+                             (eqInd2 {_} {_} {_} {eqSym {_} {_} {_} (plusSuccRightSucc n (S n))} {\h : Nat => (Vect h a)} rest)))
                        )
                        (VCons {a} {(S (plus n (S (S n))))} x (VCons {a} {(plus n (S (S n)))} y rest))
 pat a, x, y, e, o =>
   lemmaInterleaveSym {a} Z x y [e,o] = Refl {_} {_}
 pat a, x, y, e, o, e', o' =>
   lemmaInterleaveSym {a} 1 x y [e,o,e',o'] = Refl {_} {_}
+pat a, x, y, e1, e2, e3, e4, e5, e6, rest =>
+  lemmaInterleaveSym {a} 2 x y [e1,e2,e3,e4,e5,e6] = Refl {_} {_}
 pat n, a, x, y, e, o, rest =>
-  lemmaInterleaveSym {a} (S (S n)) x y (VCons {_} {_} e (VCons {_} {_} o rest)) = _
+  lemmaInterleaveSym {a} (S (S (S n))) x y (VCons {_} {_} e (VCons {_} {_} o rest)) = _
 
 prfInterleaveSym : (n : Nat) -> {a : Type} ->
                    (xs : Vect (plus n n) a) ->
@@ -192,10 +177,132 @@ pat n, a, x, y, rest =>
                     (interleave (S (S n)) {a} (consPair (S n) {a} x y (deinterleave (S n) {a}
                      (eqInd2 {_} {_} {_} {eqSym {_} {_} {_} (plusSuccRightSucc n (S n))} {\h => Vect h a} rest))))
            } h2
-
-{-
-
---------------------------------
-
-
 -}
+
+atCommutesMap : (n : Nat) -> {a,b : Type} -> (i : Fin n) -> (f : a -> b) ->
+                (xs : Vect n a) ->
+                Equal b (at {b} {n} i (map n {a} {b} f xs))
+                        (f (at {a} {n} i xs))
+pat a, b, f, x =>
+  atCommutesMap 1 {a} {b} (FZ 0) f [x]
+    = Refl {_} {_}
+pat n, a, b, f, x, xs =>
+  atCommutesMap (S (S n)) {a} {b} (FZ (S n)) f (VCons {_} {_} x xs)
+    = Refl {_} {_}
+pat n, a, b, irec, f, x, xs =>
+  atCommutesMap (S (S n)) {a} {b} (FS (S n) irec) f (VCons {_} {_} x xs)
+    = atCommutesMap (S n) {a} {b} irec f xs
+
+atCommutesZipWith : (n : Nat) -> {a,b,c : Type} -> (i : Fin n) -> (f : a -> b -> c) ->
+                    (xs : Vect n a) -> (ys : Vect n b) ->
+                    Equal c (at {c} {n} i (zipWith n {a} {b} {c} f xs ys))
+                            (f (at {a} {n} i xs) (at {b} {n} i ys))
+pat a, b, c, f, x, y =>
+  atCommutesZipWith 1 {a} {b} {c} (FZ 0) f [x] [y]
+    = Refl {_} {_}
+pat n, a, b, c, f, x, xs, y, ys =>
+  atCommutesZipWith (S (S n)) {a} {b} {c} (FZ (S n)) f (VCons {_} {_} x xs) (VCons {_}  {_} y ys)
+    = Refl {_} {_}
+pat n, a, b, c, irec, f, x, xs, y, ys =>
+  atCommutesZipWith (S (S n)) {a} {b} {c} (FS (S n) irec) f (VCons {_} {_} x xs) (VCons {_} {_} y ys)
+    = atCommutesZipWith (S n) {a} {b} {c} irec f xs ys
+
+atIndicesNeutral : (n : Nat) -> (i : Fin n) ->
+                   Equal (Fin n) (at {Fin n} {n} i (indices n))
+                                     i
+atIndicesNeutral 1 (FZ 0) = Refl {_} {_}
+pat n =>
+  atIndicesNeutral (S n) (FZ n) = Refl {_} {_}
+pat n, irec =>
+  atIndicesNeutral (S n) (FS n irec)
+    = let h1 = eqInd2 {_} {_} {_} {atCommutesMap n {Fin n} {Fin (S n)} irec (FS n) (indices n)} 
+                 {\h => Equal (Fin (S n))
+                          (at {_} {n} irec (map n {_} {_} (FS n) (indices n)))
+                          h} (Refl {_} {_})
+          h2 = eqInd2 {_} {_} {_} {atIndicesNeutral n irec} 
+                 {\h => Equal (Fin (S n))
+                          (at {_} {n} irec (map n {_} {_} (FS n) (indices n)))
+                          (FS n h)} h1
+      in h2
+
+atCommutesImap : (n : Nat) -> {a,b : Type} -> (i : Fin n) -> (f : (Fin n) -> a -> b) ->
+                 (xs : Vect n a) ->
+                 Equal b (at {b} {n} i (imap n {a} {b} f xs))
+                         (f i (at {a} {n} i xs))
+pat a, b, f, x =>
+  atCommutesImap 1 {a} {b} (FZ 0) f [x]
+    = Refl {_} {_}
+pat n, a, b, f, x, xs =>
+  atCommutesImap (S (S n)) {a} {b} (FZ (S n)) f (VCons {_} {_} x xs)
+    = Refl {_} {_}
+pat n, a, b, irec, f, xs =>
+  atCommutesImap (S (S n)) {a} {b} (FS (S n) irec) f xs
+    = let h1 = atCommutesZipWith (S (S n)) {_} {a} {b} (FS (S n) irec) f (indices (S (S n))) xs
+          h2 = eqInd2 {_} {_} {_} {atIndicesNeutral (S (S n)) (FS (S n) irec)}
+                 {\h => Equal b
+                          (at {_} {_} (FS (S n) irec) (imap (S (S n)) {_} {_} f xs))
+                          (f h (at {_} {_} (FS (S n) irec) xs))
+                 } h1
+      in h2
+
+-- Helper proof to construct equality of two lists, given a proof of equalify
+-- for any elements at index `i`.
+
+eqForAllIndices : (n : Nat) -> {a : Type} ->
+                  (xs, ys : Vect n a) ->
+                  (prfElem : (i : Fin n) -> Equal a (at {a} {n} i xs)
+                                                    (at {a} {n} i ys)) ->
+                  Equal (Vect n a) xs ys
+pat a, prf =>
+  eqForAllIndices Z {a} [] [] prf = Refl {_} {_}
+pat n, a, x, xs, y, ys, prf =>
+  eqForAllIndices (S n) {a} (VCons {_} {_} x xs) (VCons {_} {_} y ys) prf
+    = let headEq = prf (FZ n) 
+          rec = eqForAllIndices n {a} xs ys (\i => prf (FS n i))
+          h1 = eqCong {_} {_} {VCons {_} {_} x} {_} {_} rec
+          h2 = eqInd2 {_} {_} {_} {headEq}
+                 {\h => Equal (Vect (S n) a) (VCons {_} {_} x xs) (VCons {_} {_} h ys)}
+                 h1
+      in h2
+
+-- Next we build up to a similar helper, but where two sections of our list
+-- require different proofs of element-wise equality.
+
+lemmaNextPrfRs : (n,m : Nat) -> {a : Type} ->
+                 (y: a) ->
+                 (rs : Vect m a) ->
+                 (ys : Vect (plus n m) a) ->
+                 (prfRs : (i : Fin m) -> Equal a (at {a} {m} i rs)
+                                                 (at {a} {plus (S n) m} (finShift (S n) {m} i) (VCons {a} {plus n m} y ys))
+                 ) ->
+                 (i' : Fin m) -> Equal a (at {a} {m} i' rs)
+                                         (at {a} {(plus n m)} (finShift n {m} i') ys)
+pat n, m, a, y, rs, ys, prfRs =>
+  lemmaNextPrfRs n (S m) {a} y rs ys prfRs (FZ m) = prfRs (FZ m)
+pat n, m, a, y, rs, ys, fin, prfRs =>
+  lemmaNextPrfRs n (S m) {a} y rs ys prfRs (FS m fin)
+    = prfRs (FS m fin)
+
+eqForSplit : (n,m : Nat) -> {a : Type} ->
+             (ls : Vect n a) ->
+             (rs : Vect m a) ->
+             (ys : Vect (plus n m) a) ->
+             (prfLs : (i : Fin n) -> Equal a (at {a} {n} i ls)
+                                             (at {a} {plus n m} (finWeakenN' m {n} i) ys)) ->
+             (prfRs : (i : Fin m) -> Equal a (at {a} {m} i rs)
+                                             (at {a} {plus n m} (finShift    n {m} i) ys)) ->
+             Equal (Vect (plus n m) a) (append {a} {n} {m} ls rs) ys
+pat m, a, rs, ys, prfLs, prfRs =>
+  eqForSplit Z m {a} [] rs ys prfLs prfRs
+    = eqForAllIndices m {a} rs ys prfRs
+pat n, m, a, l, ls, rs, y, ys, prfLs, prfRs =>
+  eqForSplit (S n) m {a} (VCons {_} {_} l ls) rs (VCons {_} {_} y ys) prfLs prfRs
+    = let headEq = prfLs (FZ n)
+          prfLs' = \i => prfLs (FS n i)
+          prfRs' = lemmaNextPrfRs n m {a} y rs ys prfRs
+          rec = eqForSplit n m {a} ls rs ys prfLs' prfRs'
+      in eqInd2 {_} {_} {_} {headEq}
+           {\h => Equal (Vect (plus (S n) m) a)
+                    (append {_} {_} {_} (VCons {_} {_} l ls) rs)
+                    (VCons {_} {_} h ys)}
+           (eqCong {_} {_} {VCons {_} {_} l} {_} {_} rec)

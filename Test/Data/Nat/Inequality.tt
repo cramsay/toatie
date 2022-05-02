@@ -15,7 +15,7 @@ pat x, lte =>
                  {\h => Equal Nat (plus (minus x 0) 0) (plus h 0)}
                  (Refl {_} {_})
       in eqInd2 {_} {_} {_} {plusZeroRightNeutral x}
-           {_} h1
+           {\h => Equal Nat (plus (minus x 0) 0) h} h1
 pat y =>
   plusMinusLTE Z (S y) (LTEZero {_}) impossible
 pat y =>
@@ -33,7 +33,8 @@ maxLeftImpliesLTE : (x, y : Nat) -> LTE x (max x y)
 maxLeftImpliesLTE Z Z = LTEZero {Z}
 pat x =>
   maxLeftImpliesLTE (S x) Z = LTESucc {x} {x} (
-                                eqInd2 {_} {_} {_} {maxZeroRightNeutral x} {_}
+                                eqInd2 {_} {_} {_} {maxZeroRightNeutral x}
+                                  {\h => LTE x h}
                                   (maxLeftImpliesLTE x Z))
 pat y =>
   maxLeftImpliesLTE Z y = LTEZero {y}
@@ -44,7 +45,8 @@ maxRightImpliesLTE : (x, y : Nat) -> LTE y (max x y)
 maxRightImpliesLTE Z Z = LTEZero {Z}
 pat y =>
   maxRightImpliesLTE Z (S y) = LTESucc {y} {y} (
-                                eqInd2 {_} {_} {_} {maxZeroLeftNeutral y} {_}
+                                eqInd2 {_} {_} {_} {maxZeroLeftNeutral y}
+                                  {\h => LTE y h}
                                   (maxRightImpliesLTE Z y))
 pat x =>
   maxRightImpliesLTE x Z = LTEZero {max x Z}

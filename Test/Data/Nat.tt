@@ -20,6 +20,15 @@ pat y : Nat =>
 pat k : Nat, y : Nat =>
    mul (S k) y = plus y (mul k y)
 
+-- Version of mult with no dangling +0 terms
+mul' : Nat -> Nat -> Nat
+pat y : Nat =>
+   mul' Z y = Z
+pat y : Nat =>
+  mul' 1 y = y
+pat k : Nat, y : Nat =>
+   mul' (S k) y = plus y (mul' k y)
+
 pow : (x,i : Nat) -> Nat
 pat x : Nat =>
   pow x Z = 1
