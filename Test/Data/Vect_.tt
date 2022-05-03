@@ -245,6 +245,36 @@ pat n, a, b, irec, f, xs =>
                  } h1
       in h2
 
+atCommutesZipWithIndices : 
+  (n : Nat) -> {a,b : Type} -> (i : Fin n) -> (f : (Fin n) -> a -> b) ->
+  (xs : Vect n a) ->
+  Equal b (at {b} {n} i (zipWith n {Fin n} {a} {b} f (indices n) xs))
+          (f i (at {a} {n} i xs))
+pat n, a, b, i, f, x, xs =>
+  atCommutesZipWithIndices n {a} {b} i f xs
+    = let -- zipwith commutes
+          h1 = eqInd2 {_} {_} {_} {atCommutesZipWith n {Fin n} {a} {b} i f (indices n) xs}
+                 {\h => Equal b (at {b} {n} i (zipWith n {Fin n} {a} {b} f (indices n) xs))
+                                h
+                 } (Refl {_} {_})
+          -- indices neutral
+          h2 = eqInd2 {_} {_} {_} {atIndicesNeutral n i}
+                 {\h => Equal b (at {b} {n} i (zipWith n {Fin n} {a} {b} f (indices n) xs))
+                                (f h (at {_} {_} i xs))
+                 } h1
+      in h2
+
+{-
+--------------------------------
+(at {b[4]} {(S n[6])} irec[3] (zipWith (S n[6]) {(Fin    (S n[6])) } {a[5]} {b[4]} \i :_0 (Fin (S n[6])) => (f[3] (FS (S n[7]) i[0])) (VCons {(Fin (S n[6]))} {n[6]} (FZ n[6]) (map n[6] {(Fin n[6])} {(Fin (S n[6]))} (FS n[6]) (indices n[6]))) xs[0]))
+(at {b[5]} {(S n[7])} irec[4] (zipWith (S n[7]) {(Fin (S (S n[7])))} {a[6]} {b[5]} f[3] (VCons {(Fin (S (S n[7])))} {n[7]} (FS (S n[7]) (FZ n[7])) (map n[7] {(Fin (S n[7]))} {(Fin (S (S n[7])))} (FS (S n[7])) (map n[7] {(Fin n[7])} {(Fin (S n[7]))} (FS n[7]) (indices n[7])))) xs[1]))
+
+(at {b[4]} {(S n[6])} irec[3] (map (S n[6]) {a[5]} {b[4]} (f[2] (FS (S n[6]) irec[3])) xs[0]))
+(at {b[5]} {(S n[7])} irec[4] (map (S n[7]) {a[6]} {b[5]} (f[3] (FS (S n[7]) irec[4])) xs[1]))
+
+-}
+
+
 -- Helper proof to construct equality of two lists, given a proof of equalify
 -- for any elements at index `i`.
 
@@ -306,3 +336,74 @@ pat n, m, a, l, ls, rs, y, ys, prfLs, prfRs =>
                     (append {_} {_} {_} (VCons {_} {_} l ls) rs)
                     (VCons {_} {_} h ys)}
            (eqCong {_} {_} {VCons {_} {_} l} {_} {_} rec)
+
+multDistributesOverSumZ : (n : Nat) -> (c : ZZ) -> (xs : Vect n ZZ) ->
+                          Equal ZZ (multZ c (sumZ n xs)) (sumZ n (map n {_} {_} (multZ c) xs))
+pat c =>
+  multDistributesOverSumZ Z c [] = multZeroRightZeroZ c
+pat c, x =>
+  multDistributesOverSumZ 1 c [x] = Refl {_} {_}
+pat n, c, x, xs =>
+  multDistributesOverSumZ (S (S n)) c (VCons {_} {_} x xs)
+    = let h1 = Refl {_} {plusZ (multZ c x) (sumZ (S n) (map (S n) {ZZ} {ZZ} (multZ c) xs))}
+          h2 = eqInd2 {_} {_} {_} {eqSym {_} {_} {_} (multDistributesOverSumZ (S n) c xs)}
+                 {\h => Equal ZZ
+                          (plusZ (multZ c x) h)
+                          (plusZ (multZ c x) (sumZ (S n) (map (S n) {ZZ} {ZZ} (multZ c) xs)))}
+                 h1
+          h3 = eqInd2 {_} {_} {_} {eqSym {_} {_} {_} (multDistributesOverPlusRightZ c x (sumZ (S n) xs))}
+                 {\h => Equal ZZ
+                          h
+                          (plusZ (multZ c x) (sumZ (S n) (map (S n) {ZZ} {ZZ} (multZ c) xs)))}
+                 h2
+      in h3
+
+mapDistributesOverZipWith :
+  (n : Nat) ->
+  (a, b, c, d : Type) ->
+  (fmap : c -> d) ->
+  (fzip : a -> b -> c) ->
+  (xs : Vect n a) ->
+  (ys : Vect n b) ->
+  Equal (Vect n d) (map n {_} {_} fmap (zipWith n {_} {_} {_} fzip xs ys))
+                   (zipWith n {_} {_} {_} (\j => \k => fmap (fzip j k)) xs ys)
+pat a, b, c, d, fmap, fzip =>
+  mapDistributesOverZipWith Z a b c d fmap fzip [] [] = Refl {_} {_}
+pat n, a, b, c, d, fmap, fzip, x, xs, y, ys =>
+  mapDistributesOverZipWith (S n) a b c d fmap fzip (VCons {_} {_} x xs) (VCons {_} {_} y ys)
+    = eqCong {_} {_} {VCons {_} {_} (fmap (fzip x y))} {_} {_} (mapDistributesOverZipWith n a b c d fmap fzip xs ys)
+
+mapReducesZipWith :
+  (n : Nat) ->
+  (a, b, c, d : Type) ->
+  (fmap : a -> b) ->
+  (fzip : b -> c -> d) ->
+  (xs : Vect n a) ->
+  (ys : Vect n c) ->
+  Equal (Vect n d) (zipWith n {_} {_} {_} fzip (map n {_} {_} fmap xs) ys)
+                   (zipWith n {_} {_} {_} (\j => \k => fzip (fmap j) k) xs ys)
+pat a, b, c, d, fmap, fzip =>
+  mapReducesZipWith Z a b c d fmap fzip [] [] = Refl {_} {_}
+pat n, a, b, c, d, fmap, fzip, x, xs, y, ys =>
+  mapReducesZipWith (S n) a b c d fmap fzip (VCons {_} {_} x xs) (VCons {_} {_} y ys)
+    = eqCong {_} {_} {VCons {_} {_} (fzip (fmap x) y)} {_} {_} (mapReducesZipWith n a b c d fmap fzip xs ys)
+
+{-
+
+plusInterleavedSum : (n : Nat) ->
+                     (xs : Vect (plus n n) ZZ) ->
+                     (es,os : Vect n ZZ) ->
+                     Equal (Vect 2 (Vect n ZZ)) (deinterleave n {ZZ} xs)
+                                                [es,os] ->
+                     Equal ZZ (plusZ (sumZ n es) (sumZ n os))
+                              (sumZ (plus n n) xs)
+pat prf =>
+  plusInterleavedSum Z [] [] [] prf = Refl {_} {_}
+pat x, y =>
+  plusInterleavedSum 1 [x,y] [x] [y] (Refl {_} {_})
+    = Refl {_} {_}
+pat n, x, y, rest, e, es, o, os, prf =>
+  plusInterleavedSum (S (S n)) (VCons {_} {_} x (VCons {_} {_} y rest)) (VCons {_} {_} e es) (VCons {_} {_} o os) prf
+    = _
+                     
+-}
