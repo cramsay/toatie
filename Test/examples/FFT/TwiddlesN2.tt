@@ -1,0 +1,134 @@
+import Data.Nat
+import Data.Nat.Inequality
+import Data.Fin
+import Proofs
+
+import FFT.Twiddles
+
+{- -----------------------------------------------------------------------------
+   Let's provide an example of a valid twiddle factor function for up to N=2.
+   To go beyond this, we'd need complex numbers (for N=4) and then complex
+   fractional numbers beyond that
+-}
+
+oscilate : Nat -> Nat -> ZZ
+-- For N=1
+pat m =>
+  oscilate m 1 = (Pos 1)
+-- For N=2
+oscilate Z 2 = (Pos 1)
+oscilate 1 2 = (NegS 0) 
+pat k =>
+  oscilate (S (S k)) 2 = oscilate k 2
+-- For N=4
+oscilate Z 4 = (Pos 1)
+oscilate 1 4 = (Pos 1)
+oscilate 2 4 = (NegS 0)
+oscilate 3 4 = (NegS 0)
+pat k =>
+  oscilate (S (S (S (S k)))) 4 = oscilate k 4
+-- Catch-all
+pat k, n =>
+  oscilate k n = Pos 0
+  
+
+lemmaOscilateNegIsSuccM : (m : Nat) -> Equal ZZ (multZ (NegS 0) (oscilate m 2)) (oscilate (S m) 2)
+lemmaOscilateNegIsSuccM Z = Refl {_} {_}
+lemmaOscilateNegIsSuccM 1 = Refl {_} {_}
+pat m =>
+  lemmaOscilateNegIsSuccM (S (S m)) = lemmaOscilateNegIsSuccM m
+
+lemmaOscilateEven2 : (k : Nat) -> Equal ZZ (Pos 1) (oscilate (plus k k) 2)
+lemmaOscilateEven2 Z = Refl {_} {_}
+pat k =>
+  lemmaOscilateEven2 (S k)
+    = let h1 = eqInd2 {_} {_} {_} {eqSym {_} {_} {_} (plusSuccRightSucc (S k) k)}
+                 {\h => Equal ZZ (oscilate h 2)
+                                 (oscilate (plus (S k) (S k)) 2)}
+                 (Refl {_} {_})
+      in eqInd2 {_} {_} {_} {eqSym {_} {_} {_} (lemmaOscilateEven2 k)}
+           {\h => Equal ZZ h (oscilate (plus (S k) (S k)) 2)} h1
+
+lemmaOscilateCycle4 : (k : Nat) -> Equal ZZ (oscilate k 2) (oscilate (plus (S (S k)) (S (S k))) 4)
+lemmaOscilateCycle4 Z = Refl {_} {_}
+lemmaOscilateCycle4 1 = Refl {_} {_}
+pat k =>
+  lemmaOscilateCycle4 (S (S k))
+    = let h1 = eqInd2 {_} {_} {_} {eqSym {_} {_} {_} (plusSuccRightSucc k (S (S (S k))))}
+                 {\h => Equal ZZ (oscilate h 4)
+                                 (oscilate (plus k (S (S (S (S k))))) 4)}
+                 (Refl {_} {_})
+          h2 = eqInd2 {_} {_} {_} {eqSym {_} {_} {_} (plusSuccRightSucc k (S (S k)))}
+                 {\h => Equal ZZ (oscilate (S h) 4)
+                                 (oscilate (plus k (S (S (S (S k))))) 4)}
+                 h1
+      in eqInd2 {_} {_} {_} {eqSym {_} {_} {_} (lemmaOscilateCycle4 k)}
+           {\h => Equal ZZ h
+                           (oscilate (plus k (S (S (S (S k))))) 4)} h2
+
+dismissNotLTE1 : {a : Type} ->
+                 (big : Nat) -> LTE (S (S big)) 1 -> 
+                 a
+pat a, big =>
+  dismissNotLTE1 {a} big (LTEZero {_}) impossible
+                 
+dismissNotLTE2 : {a : Type} ->
+                 (big : Nat) -> LTE (S (S (S big))) 2 -> 
+                 a
+pat a, big =>
+  dismissNotLTE2 {a} big (LTEZero {_}) impossible
+pat a, big, rec =>
+  dismissNotLTE2 {a} big (LTESucc {S (S big)} {1} rec)
+    = dismissNotLTE1 {a} big rec
+
+prfTw2Pow : (k, m, n' : Nat) ->
+            LTE n' 2 ->
+            NonZero n' ->
+            Equal ZZ (multZ (oscilate k n') (oscilate m n')) (oscilate (plus k m) n')
+pat m, lteN, nz =>
+  prfTw2Pow Z m 1 lteN nz
+    = Refl {_} {_}
+pat k, m, lteN, nz =>
+  prfTw2Pow (S k) m 1 lteN nz
+    = Refl {_} {_}
+pat m, lteN, nz =>
+  prfTw2Pow Z m 2 lteN nz
+    = multOneLeftNeutralZ (oscilate m 2)
+pat m, lteN, nz =>
+  prfTw2Pow 1 m 2 lteN nz
+    = lemmaOscilateNegIsSuccM m
+pat k, m, lteN, nz =>
+  prfTw2Pow (S (S k)) m 2 lteN nz
+    = prfTw2Pow k m 2 lteN nz
+pat k, m, n', lteN, nz =>
+  prfTw2Pow k m (S (S (S n'))) lteN nz
+    = dismissNotLTE2 {Equal ZZ (multZ (oscilate k (S (S (S n')))) (oscilate m (S (S (S n')))))
+                               (oscilate (plus k m) (S (S (S n'))))}
+                     n' lteN
+
+prfTw2Scale : (k,n' : Nat) ->
+              LTE n' 2 ->
+              NonZero n' ->
+              Equal ZZ (oscilate k n') (oscilate (plus k k) (plus n' n'))
+pat lteN, nz =>
+  prfTw2Scale Z 1 lteN nz
+    = Refl {_} {_}
+pat k, lteN, nz =>
+  prfTw2Scale (S k) 1 lteN nz
+    = lemmaOscilateEven2 (S k)
+pat lteN, nz =>
+  prfTw2Scale Z 2 lteN nz
+    = Refl {_} {_}
+pat lteN, nz =>
+  prfTw2Scale 1 2 lteN nz
+    = Refl {_} {_}
+pat k, lteN, nz =>
+  prfTw2Scale (S (S k)) 2 lteN nz
+    = lemmaOscilateCycle4 k
+pat k, n', lteN, nz =>
+  prfTw2Scale k (S (S (S n'))) lteN nz = dismissNotLTE2 {Equal ZZ (oscilate k (S (S (S n'))))
+                                                                       (oscilate (double k) (double (S (S (S n')))))
+                                                             } n' lteN
+
+twOscil2 : Twiddles oscilate 2
+twOscil2 = MkTwiddles oscilate 2 (SIsNonZero 1) (Refl {_} {_}) (Refl {_} {_}) prfTw2Pow prfTw2Scale

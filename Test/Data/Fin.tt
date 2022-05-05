@@ -45,8 +45,60 @@ pat m, n, fin =>
   finShift (S m) {S n} (FS n fin)
     = FS (plus m (S n)) (finShift m {S n} (FS n fin))
 
+finDouble : {n : Nat} -> Fin n -> Fin (plus n n)
+pat n =>
+  finDouble {S n} (FZ n) = FZ _
+pat n, fin =>
+  finDouble {S n} (FS n fin)
+    = let ans = FS _ (FS _ (finDouble {n} fin))
+      in eqInd2 {_} {_} {_} {plusSuccRightSucc (S n) n}
+           {\h => Fin h} ans
+
+finPlus : {n, m : Nat} -> Fin n -> Fin m -> Fin (plus n m)
+pat m, finm =>
+  finPlus {1} {m} (FZ 0) finm = finWeaken {m} finm
+pat n, m, finm =>
+  finPlus {S (S n)} {m} (FZ (S n)) finm = finWeaken {plus (S n) m} (finPlus {S n} {m} (FZ n) finm)
+pat n, m, finn =>
+  finPlus {S n} {S m} (FS n finn) (FZ m) = FS (plus n (S m)) (finPlus {n} {S m} finn (FZ m))
+pat n, m, finn, finm =>
+  finPlus {S n} {S m} (FS n finn) (FS m finm) = FS (plus n (S m)) (finPlus {n} {S m} finn (FS m finm))
+
+finPlusS : {n, m : Nat} -> Fin n -> Fin m -> Fin (plus n m)
+pat n, m, finm =>
+  finPlusS {S n} {m} (FZ n) finm = (FS _ (finWeakenN n {m} finm))
+pat n, m, finn =>
+  finPlusS {S n} {S m} (FS n finn) (FZ m) = FS (plus n (S m)) (finPlusS {n} {S m} finn (FZ m))
+pat n, m, finn, finm =>
+  finPlusS {S n} {S m} (FS n finn) (FS m finm) = FS (plus n (S m)) (finPlusS {n} {S m} finn (FS m finm))
+
 -- Convert a nat to the upper bound of a Fin
 natToFin : (n : Nat) -> Fin (S n)
 natToFin Z = FZ Z
 pat n =>
   natToFin (S n) = FS (S n) (natToFin n)
+
+finWeakenZIsZ : (n : Nat) -> Equal (Fin (S (S n)))
+                               (finWeaken {S n} (FZ n))
+                               (FZ (S n))
+finWeakenZIsZ Z = Refl {_} {_}
+pat n =>
+  finWeakenZIsZ (S n) = Refl {_} {_}
+
+finZPlusZIsZ : (n,m : Nat) ->
+               Equal (Fin (plus (S n) (S m)))
+                 (finPlus {S n} {S m} (FZ n) (FZ m))
+                 (FZ (plus n (S m)))
+pat m =>
+  finZPlusZIsZ Z m = Refl {_} {_}
+pat n, m =>
+  finZPlusZIsZ (S n) m
+    = let h1 : Equal (Fin (plus (S (S n)) (S m)))
+                          (finWeaken {plus (S n) (S m)} (finPlus {S n} {S m} (FZ n) (FZ m)))
+                          (finWeaken {plus (S n) (S m)} (FZ (plus n (S m))))
+             = eqInd2 {_} {_} {_} {finZPlusZIsZ n m}
+                 {\h => Equal (Fin (plus (S (S n)) (S m)))
+                          (finWeaken {plus (S n) (S m)} (finPlus {S n} {S m} (FZ n) (FZ m)))
+                          (finWeaken {plus (S n) (S m)} h)
+                 } (Refl {_} {_})
+      in h1

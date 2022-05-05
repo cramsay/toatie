@@ -1,4 +1,5 @@
 import Data.Nat
+import Data.Fin
 import Proofs
 
 -- Starting to play around with proofs on inequalities of natural numbers
@@ -53,3 +54,47 @@ pat x =>
 pat x, y =>
   maxRightImpliesLTE (S x) (S y) = LTESucc {y} {max x y} (maxRightImpliesLTE x y)
 
+ltePlusRight : (n,m : Nat) -> LTE n (plus n m)
+pat m =>
+  ltePlusRight Z m = LTEZero {m}
+pat n, m =>
+  ltePlusRight (S n) m = LTESucc {n} {plus n m} (ltePlusRight n m)
+
+lteRefl : (n : Nat) -> LTE n n
+lteRefl Z = LTEZero {_}
+pat n =>
+  lteRefl (S n) = LTESucc {n} {n} (lteRefl n)
+
+doubleLte : (x, y : Nat) -> LTE x y -> LTE (plus x x) (plus y y)
+pat y, lte =>
+  doubleLte Z y lte = LTEZero {_}
+pat x, y =>
+  doubleLte (S x) Z (LTEZero {_}) impossible
+pat x, y, lte =>
+  doubleLte (S x) Z (LTESucc {_} {_} lte) impossible
+pat x, y, lte =>
+  doubleLte (S x) (S y) (LTESucc {_} {_} lte)
+    = let h1 = LTESucc {_} {_} (LTESucc {_} {_} (doubleLte x y lte))
+          h2 = eqInd2 {_} {_} {_} {plusSuccRightSucc (S x) x}
+                 {\h => LTE h (S (S (plus y y)))} h1
+          h3 = eqInd2 {_} {_} {_} {plusSuccRightSucc (S y) y}
+                 {\h => LTE (plus (S x) (S x)) h} h2
+      in h3
+
+lteWeaken : (x,y : Nat) -> LTE x y -> LTE x (S y)
+pat y, lte =>
+  lteWeaken Z y lte = LTEZero {_}
+pat x, y, lte =>
+  lteWeaken (S x) (S y) (LTESucc {x} {y} lte) = LTESucc {_} {_} (lteWeaken _ _ lte)
+
+lteWeakenN : (x,y : Nat) -> LTE x y -> (n : Nat) -> LTE x (plus n y)
+pat x, y, lte =>
+  lteWeakenN x y lte Z = lte
+pat x, y, lte, n =>
+  lteWeakenN x y lte (S n) = lteWeaken x (plus n y) (lteWeakenN x y lte n)
+
+finToLTE : (n : Nat) -> (i : Fin n) -> LTE (finToNat {n} i) n
+pat n =>
+  finToLTE (S n) (FZ n) = LTEZero {_}
+pat n, fin =>
+  finToLTE (S n) (FS n fin) = LTESucc {_} {_} (finToLTE n fin)

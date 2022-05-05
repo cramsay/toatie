@@ -389,6 +389,54 @@ pat n, a, b, c, d, fmap, fzip, x, xs, y, ys =>
     = eqCong {_} {_} {VCons {_} {_} (fzip (fmap x) y)} {_} {_} (mapReducesZipWith n a b c d fmap fzip xs ys)
 
 {-
+lemmaHeadInterleaved : {a : Type} ->
+                       (n : Nat) ->
+                       (x : a) ->
+                       (xs : Vect (plus n (S n)) a) ->
+                       (e : a) ->
+                       (es : Vect n a) ->
+                       (o : a) ->
+                       (os : Vect n a) ->
+                       Equal (Vect 2 (Vect (S n) a))
+                         (deinterleave (S n) {a} (VCons {_} {_} x xs))
+                         [VCons {_} {_} e es, VCons {_} {_} o os] ->
+                       Equal a x e
+pat a, e, o =>
+  lemmaHeadInterleaved {a} Z e [o] e [] o [] (Refl {_} {_})
+    = Refl {_} {_}
+pat a, e, o, e2, o2 =>
+  lemmaHeadInterleaved {a} 1 e [o,e2,o2] e [e2] o [o2] (Refl {_} {_})
+    = Refl {_} {_}
+pat a, n, x, xs, e, es, o, os, prf =>
+  lemmaHeadInterleaved {a} (S (S n)) e (VCons {_} {_} o xs) e es o os (Refl {_} {_})
+    = _
+
+atInterleavedEven : {a : Type} ->
+                    (n : Nat) ->
+                    (xs : Vect (plus n n) a) ->
+                    (es,os : Vect n a) ->
+                    Equal (Vect 2 (Vect n a)) (deinterleave n {a} xs)
+                                               [es,os] ->
+                    (i : Fin n) ->
+                    Equal a (at {_} {_} i es)
+                            (at {_} {_} (finPlus {_} {_} i i) xs)
+pat a, n, x, xs, e, es, o, os, prfInter =>
+  atInterleavedEven {a} (S n) (VCons {_} {_} x xs) (VCons {_} {_} e es) (VCons {_} {_} o os) (Refl {_} {_}) (FZ n)
+    = let h1 : Equal a
+                 (at {a} {(S (plus n (S n)))} (FZ (plus n (S n))) (VCons {a} {(plus n (S n))} x xs))
+                 (at {a} {(S (plus n (S n)))} (finPlus {(S n)} {(S n)} (FZ n) (FZ n)) (VCons {a} {(plus n (S n))} x xs))
+             = eqInd2 {_} {_} {_} {finZPlusZIsZ n n}
+                 {\h => Equal a
+                          (at {a} {(S (plus n (S n)))} h (VCons {a} {(plus n (S n))} x xs))
+                          (at {a} {(S (plus n (S n)))} (finPlus {(S n)} {(S n)} (FZ n) (FZ n)) (VCons {a} {(plus n (S n))} x xs))}
+                 (Refl {_} {_})
+      in _
+
+{-
+at {a} {(S n)} (FZ n) es
+====
+at {a} {(S (plus n (S n)))} (eqInd2 {Nat} {(plus n (S (S n)))} {(S (plus n (S n)))} {(eqSym {Nat} {(S (plus n (S n)))} {(plus n (S (S n)))} (plusSuccRightSucc n (S n)))} {\h :_0 Nat => (Fin h)} (finWeakenN n {(S (S n))} (FZ (S n)))) xs
+-}
 
 plusInterleavedSum : (n : Nat) ->
                      (xs : Vect (plus n n) ZZ) ->
@@ -405,5 +453,4 @@ pat x, y =>
 pat n, x, y, rest, e, es, o, os, prf =>
   plusInterleavedSum (S (S n)) (VCons {_} {_} x (VCons {_} {_} y rest)) (VCons {_} {_} e es) (VCons {_} {_} o os) prf
     = _
-                     
 -}

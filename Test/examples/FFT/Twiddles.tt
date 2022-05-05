@@ -1,0 +1,150 @@
+import Data.Nat
+import Data.Nat.Inequality
+import Data.ZZ
+import Data.Fin
+import Data.Vect_ -- This version of Vect is a parameter type, so we can have types who depend on its values
+import Proofs
+
+-- A descriptions of twiddle factors that can ensure our DIT radix-2 structure is
+-- equivalent to a full FFT.
+
+data Twiddles : (f : Nat -> Nat -> ZZ) -> (n : Nat) -> Type where
+  MkTwiddles : (f : Nat -> Nat -> ZZ) ->
+               (n : Nat) ->
+               NonZero n ->
+               -- ^ function to generate twiddle factors
+               (prfMZeroOne : Equal ZZ (f 0 n) (Pos 1)) ->
+               (prfMNOne    : Equal ZZ (f n n) (Pos 1)) ->
+               (prfPow      : (k, m, n' : Nat) ->
+                              LTE n' n ->
+                              NonZero n' ->
+                              Equal ZZ (multZ (f k n') (f m n')) (f (plus k m) n')) ->
+               (prfScale    : (k, n' : Nat) ->
+                              LTE n' n ->
+                              NonZero n' ->
+                              Equal ZZ (f k n') (f (plus k k) (plus n' n'))) ->
+                              
+               -- ^ Proofs of twiddle factor laws
+               Twiddles f n
+
+-- Prove that we can always half N in our twiddle factors to get a new set of factors
+
+halfTwiddles : {f : Nat -> Nat -> ZZ} -> {n : Nat} -> Twiddles f (plus n n) -> Twiddles f n
+pat f, p1, p2, p3, p4 =>
+  halfTwiddles {f} {Z} (MkTwiddles f Z (SIsNonZero _) p1 p2 p3 p4) impossible
+pat f, n, nz, p1, p2, p3, p4 =>
+  halfTwiddles {f} {S n} (MkTwiddles f (plus (S n) (S n)) nz p1 p2 p3 p4)
+    = let p1' = eqInd2 {_} {_} {_} {eqSym {_} {_} {_} (p4 0 (S n) (ltePlusRight (S n) (S n)) (SIsNonZero n))}
+                  {\h => Equal ZZ h (Pos 1)} p1
+          p2' = eqInd2 {_} {_} {_} {eqSym {_} {_} {_} (p4 (S n) (S n) (ltePlusRight (S n) (S n)) (SIsNonZero n))}
+                  {\h => Equal ZZ h (Pos 1)} p2
+          p3' = \k => \m => \n' => \lteN => \nz =>
+                   p3 k m n' (lteWeakenN n' (S n) lteN (S n)) nz
+          p4' = \k => \n' => \lteN => \nz =>
+                   p4 k n' (lteWeakenN n' (S n) lteN (S n)) nz
+      in MkTwiddles f (S n) (SIsNonZero n) p1' p2' p3' p4'
+
+-- Generate a single twiddle factor of the form w^{km}_n
+
+twiddle : {f : Nat -> Nat -> ZZ} -> {n : Nat} -> Twiddles f n -> (k, m : Nat) -> ZZ
+pat f, n, k, m, nz, p1, p2, p3, p4 =>
+  twiddle {f} {n} (MkTwiddles f n nz p1 p2 p3 p4) k m = f (mul k m) n
+
+-- Generate a row of twiddle factors
+-- Returns w^{km}_n for all m <- [0 .. M-1]
+
+twiddleRow : {f : Nat -> Nat -> ZZ} -> (n : Nat) -> Twiddles f n -> (k, m : Nat) -> Vect m ZZ
+pat f, n, tw, k, m =>
+  twiddleRow {f} n tw k m
+    = map m {_} {_} (\i => twiddle {f} {n} tw k (finToNat {m} i)) (indices m)
+
+-- Some lemmas for working with twiddle factors
+
+lemmaTwiddleRowElem :
+  {f : Nat -> Nat -> ZZ} -> (n : Nat) -> (tw : Twiddles f n) ->
+  (k : Nat) -> (m : Fin n) ->
+  Equal ZZ (at {_} {_} m (twiddleRow {f} n tw k n))
+           (twiddle {f} {n} tw k (finToNat {n} m))
+pat f, n, tw, k, m =>
+  lemmaTwiddleRowElem {f} n tw k m
+    = let h1 = eqInd2 {_} {_} {_} {atCommutesMap n {_} {_} m (\i => twiddle {f} {n} tw k (finToNat {n} i)) (indices n)}
+                 {\h => Equal ZZ (at {_} {_} m (twiddleRow {f} n tw k n))
+                                 h}
+                 (Refl {_} {_})
+          h2 = eqInd2 {_} {_} {_} {atIndicesNeutral n m}
+                 {\h => Equal ZZ (at {_} {_} m (twiddleRow {f} n tw k n))
+                                 (twiddle {f} {n} tw k (finToNat {n} h))}
+                 h1
+      in h2
+
+lemmaTwiddleHalfRowElem :
+  {f : Nat -> Nat -> ZZ} -> (n : Nat) -> (tw : Twiddles f (plus n n)) ->
+  (k : Nat) -> (m : Fin n) ->
+  Equal ZZ (at {_} {_} m (twiddleRow {f} (plus n n) tw k n))
+           (twiddle {f} {plus n n} tw k (finToNat {n} m))
+pat f, n, tw, k, m =>
+  lemmaTwiddleHalfRowElem {f} n tw k m
+    = let h1 = eqInd2 {_} {_} {_} {atCommutesMap n {_} {_} m (\i => twiddle {f} {plus n n} tw k (finToNat {n} i)) (indices n)}
+                 {\h => Equal ZZ (at {_} {_} m (twiddleRow {f} (plus n n) tw k n))
+                                 h}
+                 (Refl {_} {_})
+          h2 = eqInd2 {_} {_} {_} {atIndicesNeutral n m}
+                 {\h => Equal ZZ (at {_} {_} m (twiddleRow {f} (plus n n) tw k n))
+                                 (twiddle {f} {plus n n} tw k (finToNat {n} h))}
+                 h1
+      in h2
+
+lemmaHalfTwiddleScale :
+  {f : Nat -> Nat -> ZZ} -> (n : Nat) ->
+  (tw  : Twiddles f (plus n n)) ->
+  (tw'  : Twiddles f n) ->
+  Equal (Twiddles f n) (halfTwiddles {f} {n} tw) tw' ->
+  (k, i : Fin n) ->
+  Equal ZZ (twiddle {f} {n} (halfTwiddles {f} {n} tw) (finToNat {n} k) (finToNat {n} i))
+           (twiddle {f} {plus n n} tw (double (finToNat {n} k)) (finToNat {n} i))
+pat f, n, nz, p1, p2, p3, p4, nz', p1', p2', p3', p4', prf, k, i =>
+  lemmaHalfTwiddleScale {f} n (MkTwiddles f (plus n n) nz p1 p2 p3 p4) (MkTwiddles f n nz' p1' p2' p3' p4') prf k i
+    = let h1 : Equal ZZ (twiddle {f} {n} (halfTwiddles {f} {n} (MkTwiddles f (plus n n) nz p1 p2 p3 p4))
+                                 (finToNat {n} k) (finToNat {n} i))
+                        (twiddle {f} {n} (MkTwiddles f n nz' p1' p2' p3' p4')
+                                 (finToNat {n} k)  (finToNat {n} i))
+             = eqInd2 {_} {_} {_} {prf}
+                 {\h => Equal ZZ (twiddle {f} {n} (halfTwiddles {f} {n} (MkTwiddles f (plus n n) nz p1 p2 p3 p4))
+                                          (finToNat {n} k)  (finToNat {n} i))
+                                 (twiddle {f} {n} h (finToNat {n} k)  (finToNat {n} i))}
+                 (Refl {_} {_})
+          h2 = eqInd2 {_} {_} {_} {
+                   p4 (mul (finToNat {n} k) (finToNat {n} i)) n (ltePlusRight n n) nz'
+                 }
+                 {\h => Equal ZZ (twiddle {f} {n} (halfTwiddles {f} {n} (MkTwiddles f (plus n n) nz p1 p2 p3 p4))
+                                          (finToNat {n} k)  (finToNat {n} i))
+                                 h}
+                 h1
+          h3 = eqInd2 {_} {_} {_} {eqSym {_} {_} {_} (mulDistributesOverPlusLeft (finToNat {n} k) (finToNat {n} k) (finToNat {n} i))}
+                 {\h => Equal ZZ (twiddle {f} {n} (halfTwiddles {f} {n} (MkTwiddles f (plus n n) nz p1 p2 p3 p4))
+                                          (finToNat {n} k)  (finToNat {n} i))
+                                 (f h (plus n n))}
+                 h2
+      in h3
+
+lemmaHalfTwiddleRowScale :
+  {f : Nat -> Nat -> ZZ} -> (n : Nat) -> (tw : Twiddles f (plus n n)) ->
+  (k : Fin n) ->
+  Equal (Vect n ZZ) (twiddleRow {f} n (halfTwiddles {f} {n} tw) (finToNat {n} k) n)
+                    (twiddleRow {f} (plus n n) tw (double (finToNat {n} k)) n)
+pat f, n, tw, k =>
+  lemmaHalfTwiddleRowScale {f} n tw k
+    = let hHalf = \i : Fin n => eqSym {_} {_} {_} (lemmaTwiddleRowElem {f} n (halfTwiddles {f} {n} tw) (finToNat {n} k) i)
+          hFull = \i : Fin n => eqSym {_} {_} {_} (lemmaTwiddleHalfRowElem {f} n tw (double (finToNat {n} k)) i)
+          h1 = \i : Fin n => eqInd2 {_} {_} {_} {hFull i}
+                 {\h =>  Equal ZZ (twiddle {f} {n} (halfTwiddles {f} {n} tw) (finToNat {n} k)  (finToNat {n} i))
+                                  h
+                 } (lemmaHalfTwiddleScale {f} n tw (halfTwiddles {f} {n} tw) (Refl {_} {_}) k i)
+          h2 = \i : Fin n => eqInd2 {_} {_} {_} {hHalf i}
+                 {\h =>  Equal ZZ h 
+                                  (at {_} {_} i (twiddleRow {f} (plus n n) tw (double (finToNat {n} k)) n))
+                 } (h1 i)
+      in eqForAllIndices n {ZZ}
+           (twiddleRow {f} n (halfTwiddles {f} {n} tw) (finToNat {n} k) n)
+           (twiddleRow {f} (plus n n) tw (double (finToNat {n} k)) n)
+           h2
