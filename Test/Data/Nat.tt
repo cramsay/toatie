@@ -35,6 +35,14 @@ pat x : Nat =>
 pat i, x : Nat =>
   pow x (S i) = mul x (pow x i)
 
+-- Specialised double function
+-- Easier to work with when iterating over pairs since there's no need for
+-- plusSuccRightSucc rewrites.
+double' : Nat -> Nat
+double' Z = Z
+pat k =>
+  double' (S k) = S (S (double' k))
+
 eqNat : (x,y : Nat) -> Bool
 eqNat Z Z = True
 pat x, y =>

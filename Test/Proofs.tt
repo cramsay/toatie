@@ -410,3 +410,10 @@ maxZeroLeftNeutral : (n : Nat) -> Equal Nat (max 0 n) n
 maxZeroLeftNeutral Z = Refl {_} {_}
 pat n =>
   maxZeroLeftNeutral (S n) = Refl {_} {_}
+
+eqDoublePlusSelf : (n : Nat) -> Equal Nat (plus n n) (double' n)
+eqDoublePlusSelf Z = Refl {_} {_}
+pat n =>
+  eqDoublePlusSelf (S n) = eqInd2 {_} {_} {_} {plusSuccRightSucc (S n) n}
+                             {\h => Equal Nat h (S (S (double' n)))}
+                             (eqCong {_} {_} {\x => S (S x)} {_} {_} (eqDoublePlusSelf n))

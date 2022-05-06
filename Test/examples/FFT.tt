@@ -10,7 +10,7 @@ import FFT.Twiddles
 -- Witness that a `Nat` is a power of two
 data Pow2 : Nat -> Type where
   POne : Pow2 1
-  PDouble : (n : Nat) -> Pow2 n -> Pow2 (plus n n)
+  PDouble : (n : Nat) -> Pow2 n -> Pow2 (double' n)
 
 -- Let's describe the plain, mathematical DFT equation to direct our optimised structure's type
 -- See first eqn @ https://en.wikipedia.org/wiki/Cooley%E2%80%93Tukey_FFT_algorithm#The_radix-2_DIT_case
@@ -31,30 +31,23 @@ pat n, f, tw, xs =>
 -- Let's see if we can make a non-synthesisable dit description and prove its equivalence
 
 dit : {n : Nat} -> {f : Nat -> Nat -> ZZ} -> Twiddles f n -> Pow2 n -> Vect n ZZ -> Vect n ZZ
-
--- Helper for split inputs (helps with our proofs a little bit to be able to refer to this by name)
-dit' : (n : Nat) -> {f : Nat -> Nat -> ZZ} -> Twiddles f (plus n n) -> Pow2 n -> Vect 2 (Vect n ZZ) -> Vect (plus n n) ZZ
-pat n, f, tw, prec, es, os =>
-  dit' n {f} tw prec [es, os]
+pat f, tw, xs =>
+  dit {1} {f} tw POne xs = xs
+pat n, f, tw, prec, xs =>
+  dit {double' n} {f} tw (PDouble n prec) xs
     = let halfTw = halfTwiddles {f} {n} tw
           -- Recurse on evens
-          es' = dit {n} {f} halfTw prec es
+          es' = dit {n} {f} halfTw prec (evens n {_} xs)
           -- Recurse on odds
-          os' = dit {n} {f} halfTw prec os
+          os' = dit {n} {f} halfTw prec (odds  n {_} xs)
           -- Get odds, multipied by twiddles
-          tws = twiddleRow {f} (plus n n) tw 1 n
+          tws = twiddleRow {f} (double' n) tw 1 n
           os'' = zipWith n {_} {_} {_} multZ tws os' -- ^ For our circuit, we should use
                                                      -- our signed constant nat mult fn but
                                                      -- subtract when or twiddle's negative
           -- Append evens + odds and evens - odds
           outEs = zipWith n {_} {_} {_} plusZ es' os''
           outOs = zipWith n {_} {_} {_} subZ  es' os''
-          outs = append {_} {_} {_} outEs outOs
+          outs = appendHalves {_} {_} outEs outOs
       in outs
-
-pat f, tw, xs =>
-  dit {1} {f} tw POne xs = xs
-pat n, f, tw, prec, xs =>
-  dit {plus n n} {f} tw (PDouble n prec) xs
-    = dit' n {f} tw prec (deinterleave n {_} xs)
 

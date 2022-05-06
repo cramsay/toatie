@@ -8,144 +8,243 @@ import Proofs
 import FFT
 import FFT.Twiddles
 
+lemmaGatherEvenElem :
+  {n : Nat} ->
+  {f : Nat -> Nat -> ZZ} ->
+  (tw : Twiddles f (double' n)) ->
+  (es : (Vect n ZZ)) ->
+  (k, i : Fin n) ->
+  Equal ZZ (at {ZZ} {n} i (zipWith n {Fin n} {_} {_}
+                             (\j => \x => (multZ (twiddle {f} {double' n} tw (double (finToNat {n} k)) (finToNat {n} j)) x))
+                             (indices n) es))
+           (at {ZZ} {n} i (zipWith n {Fin n} {_} {_}
+                             (\j => \x => (multZ (twiddle {f} {double' n} tw (finToNat {n} k) (finToNat {_} (finDouble' {n} j))) x))
+                             (indices n) es))
+pat n, f, nz, p1, p2, p3, p4, es, k, i =>
+  lemmaGatherEvenElem {n} {f} (MkTwiddles f (double' n) nz p1 p2 p3 p4) es k i
+    = let h1 = eqInd2 {_} {_} {_} {atCommutesZipWithIndices n {_} {_} i
+                   (\j => \x => (multZ (twiddle {f} {double' n} (MkTwiddles f (double' n) nz p1 p2 p3 p4) (double (finToNat {n} k)) (finToNat {n} j)) x)) es}
+                 {\h => Equal ZZ
+                          (at {ZZ} {n} i (zipWith n {Fin n} {_} {_}
+                             (\j => \x => (multZ (twiddle {f} {double' n} (MkTwiddles f (double' n) nz p1 p2 p3 p4) (double (finToNat {n} k)) (finToNat {n} j)) x))
+                             (indices n) es))
+
+                          h
+                 } (Refl {_} {_})
+          h2 = eqInd2 {_} {_} {_} {mulDistributesOverPlusLeft (finToNat {n} k) (finToNat {n} k) (finToNat {n} i)}
+                 {\h => Equal ZZ
+                          (at {ZZ} {n} i (zipWith n {Fin n} {_} {_}
+                             (\j => \x => (multZ (twiddle {f} {double' n} (MkTwiddles f (double' n) nz p1 p2 p3 p4) (double (finToNat {n} k)) (finToNat {n} j)) x))
+                             (indices n) es))
+                          (multZ (f h (double' n)) (at {ZZ} {n} i es))
+                 } h1
+          h3 = eqInd2 {_} {_} {_} {eqSym {_} {_} {_} (mulDistributesOverPlusRight (finToNat {n} k) (finToNat {n} i) (finToNat {n} i))}
+                 {\h => Equal ZZ
+                          (at {ZZ} {n} i (zipWith n {Fin n} {_} {_}
+                             (\j => \x => (multZ (twiddle {f} {double' n} (MkTwiddles f (double' n) nz p1 p2 p3 p4) (double (finToNat {n} k)) (finToNat {n} j)) x))
+                             (indices n) es))
+                          (multZ (f h (double' n)) (at {ZZ} {n} i es))
+                 } h2
+          h4 = eqInd2 {_} {_} {_} {eqFinDoubleVal {_} i}
+                 {\h => Equal ZZ
+                          (at {ZZ} {n} i (zipWith n {Fin n} {_} {_}
+                             (\j => \x => (multZ (twiddle {f} {double' n} (MkTwiddles f (double' n) nz p1 p2 p3 p4) (double (finToNat {n} k)) (finToNat {n} j)) x))
+                             (indices n) es))
+                          (multZ (f (mul (finToNat {n} k) h) (double' n)) (at {ZZ} {n} i es))
+                 } h3
+          h5 = eqInd2 {_} {_} {_} {eqSym {_} {_} {_} (atCommutesZipWithIndices n {_} {_} i
+                                     (\j => \x => (multZ (twiddle {f} {double' n} (MkTwiddles f (double' n) nz p1 p2 p3 p4) (finToNat {n} k) (finToNat {_} (finDouble' {n} j))) x))
+                                     es
+                                  )}
+                 {\h => Equal ZZ
+                          (at {ZZ} {n} i (zipWith n {Fin n} {_} {_}
+                             (\j => \x => (multZ (twiddle {f} {double' n} (MkTwiddles f (double' n) nz p1 p2 p3 p4) (double (finToNat {n} k)) (finToNat {n} j)) x))
+                             (indices n) es))
+                          h
+                 } h4
+          in h5
+
+{-
+(multZ (f (mul (plus (finToNat {n} k) (finToNat {n} k)) (finToNat {n} i)) (double' n)) (at {ZZ} {n} i es)))
+-}
+
 lemmaGatherOddElem :
   {n : Nat} ->
   {f : Nat -> Nat -> ZZ} ->
-  (tw : Twiddles f (plus n n)) ->
+  (tw : Twiddles f (double' n)) ->
   (os : (Vect n ZZ)) ->
   (k, i : Fin n) ->
   Equal ZZ (at {ZZ} {n} i (zipWith n {Fin n} {_} {_}
-                             (\j => \x => (multZ (twiddle {f} {plus n n} tw 1 (finToNat {n} k))
-                                                 (multZ (twiddle {f} {plus n n} tw (double (finToNat {n} k)) (finToNat {n} j)) x)))
+                             (\j => \x => (multZ (twiddle {f} {double' n} tw 1 (finToNat {n} k))
+                                                 (multZ (twiddle {f} {double' n} tw (double (finToNat {n} k)) (finToNat {n} j)) x)))
                              (indices n) os))
            (at {ZZ} {n} i (zipWith n {Fin n} {_} {_}
-                             (\j => \x => (multZ (twiddle {f} {plus n n} tw (finToNat {n} k) (plus 1 (double (finToNat {n} j))))  x))
+                             (\j => \x => (multZ (twiddle {f} {double' n} tw (finToNat {n} k) (finToNat {_} (finSuccDouble' {n} j)))  x))
                              (indices n) os))
 pat n, f, nz, p1, p2, p3, p4, os, k, i =>
-  lemmaGatherOddElem {n} {f} (MkTwiddles f (plus n n) nz p1 p2 p3 p4) os k i
+  lemmaGatherOddElem {n} {f} (MkTwiddles f (double' n) nz p1 p2 p3 p4) os k i
     = let h1 = eqInd2 {_} {_} {_} {atCommutesZipWithIndices n {_} {_} i
-                   (\j => \x => (multZ (twiddle {f} {plus n n} (MkTwiddles f (plus n n) nz p1 p2 p3 p4) 1 (finToNat {n} k))
-                                       (multZ (twiddle {f} {plus n n} (MkTwiddles f (plus n n) nz p1 p2 p3 p4) (double (finToNat {n} k)) (finToNat {n} j)) x)))
+                   (\j => \x => (multZ (twiddle {f} {double' n} (MkTwiddles f (double' n) nz p1 p2 p3 p4) 1 (finToNat {n} k))
+                                       (multZ (twiddle {f} {double' n} (MkTwiddles f (double' n) nz p1 p2 p3 p4) (double (finToNat {n} k)) (finToNat {n} j)) x)))
                    os}
                  {\h => Equal ZZ
                           (at {ZZ} {n} i (zipWith n {Fin n} {_} {_}
-                                           (\j => \x => (multZ (twiddle {f} {plus n n} (MkTwiddles f (plus n n) nz p1 p2 p3 p4) 1 (finToNat {n} k))
-                                                               (multZ (twiddle {f} {plus n n} (MkTwiddles f (plus n n) nz p1 p2 p3 p4) (double (finToNat {n} k)) (finToNat {n} j)) x)))
+                                           (\j => \x => (multZ (twiddle {f} {double' n} (MkTwiddles f (double' n) nz p1 p2 p3 p4) 1 (finToNat {n} k))
+                                                               (multZ (twiddle {f} {double' n} (MkTwiddles f (double' n) nz p1 p2 p3 p4) (double (finToNat {n} k)) (finToNat {n} j)) x)))
                                            (indices n) os))
                           h
                  } (Refl {_} {_})
-          h2 = eqInd2 {_} {_} {_} {multAssociativeZ (twiddle {f} {(plus n n)} (MkTwiddles f (plus n n) nz p1 p2 p3 p4) 1 (finToNat {n} k))
-                                                    (twiddle {f} {(plus n n)} (MkTwiddles f (plus n n) nz p1 p2 p3 p4) (plus (finToNat {n} k) (finToNat {n} k)) (finToNat {n} i))
+          h2 = eqInd2 {_} {_} {_} {multAssociativeZ (twiddle {f} {(double' n)} (MkTwiddles f (double' n) nz p1 p2 p3 p4) 1 (finToNat {n} k))
+                                                    (twiddle {f} {(double' n)} (MkTwiddles f (double' n) nz p1 p2 p3 p4) (plus (finToNat {n} k) (finToNat {n} k)) (finToNat {n} i))
                                                     (at {ZZ} {n} i os)}
                  {\h => Equal ZZ
                           (at {ZZ} {n} i (zipWith n {Fin n} {_} {_}
-                                           (\j => \x => (multZ (twiddle {f} {plus n n} (MkTwiddles f (plus n n) nz p1 p2 p3 p4) 1 (finToNat {n} k))
-                                                               (multZ (twiddle {f} {plus n n} (MkTwiddles f (plus n n) nz p1 p2 p3 p4) (double (finToNat {n} k)) (finToNat {n} j)) x)))
+                                           (\j => \x => (multZ (twiddle {f} {double' n} (MkTwiddles f (double' n) nz p1 p2 p3 p4) 1 (finToNat {n} k))
+                                                               (multZ (twiddle {f} {double' n} (MkTwiddles f (double' n) nz p1 p2 p3 p4) (double (finToNat {n} k)) (finToNat {n} j)) x)))
                                            (indices n) os))
                           h
                  } h1
-          h3 = eqInd2 {_} {_} {_} {p3 (mul 1 (finToNat {n} k)) (mul (double (finToNat {n} k)) (finToNat {n} i)) (plus n n) (lteRefl (plus n n)) nz}
+          h3 = eqInd2 {_} {_} {_} {p3 (mul 1 (finToNat {n} k)) (mul (double (finToNat {n} k)) (finToNat {n} i)) (double' n) (lteRefl (double' n)) nz}
                  {\h => Equal ZZ
                           (at {ZZ} {n} i (zipWith n {Fin n} {_} {_}
-                                           (\j => \x => (multZ (twiddle {f} {plus n n} (MkTwiddles f (plus n n) nz p1 p2 p3 p4) 1 (finToNat {n} k))
-                                                               (multZ (twiddle {f} {plus n n} (MkTwiddles f (plus n n) nz p1 p2 p3 p4) (double (finToNat {n} k)) (finToNat {n} j)) x)))
+                                           (\j => \x => (multZ (twiddle {f} {double' n} (MkTwiddles f (double' n) nz p1 p2 p3 p4) 1 (finToNat {n} k))
+                                                               (multZ (twiddle {f} {double' n} (MkTwiddles f (double' n) nz p1 p2 p3 p4) (double (finToNat {n} k)) (finToNat {n} j)) x)))
                                            (indices n) os))
                           (multZ h (at {_} {_} i os))
                  } h2
           h4 = eqInd2 {_} {_} {_} {plusZeroRightNeutral (finToNat {_} k)}
                  {\h => Equal ZZ
                           (at {ZZ} {n} i (zipWith n {Fin n} {_} {_}
-                                           (\j => \x => (multZ (twiddle {f} {plus n n} (MkTwiddles f (plus n n) nz p1 p2 p3 p4) 1 (finToNat {n} k))
-                                                               (multZ (twiddle {f} {plus n n} (MkTwiddles f (plus n n) nz p1 p2 p3 p4) (double (finToNat {n} k)) (finToNat {n} j)) x)))
+                                           (\j => \x => (multZ (twiddle {f} {double' n} (MkTwiddles f (double' n) nz p1 p2 p3 p4) 1 (finToNat {n} k))
+                                                               (multZ (twiddle {f} {double' n} (MkTwiddles f (double' n) nz p1 p2 p3 p4) (double (finToNat {n} k)) (finToNat {n} j)) x)))
                                            (indices n) os))
-                          (multZ (f (plus h (mul (double (finToNat {_} k)) (finToNat {_} i))) (plus n n)) (at {_} {_} i os))
+                          (multZ (f (plus h (mul (double (finToNat {_} k)) (finToNat {_} i))) (double' n)) (at {_} {_} i os))
                  } h3
           h5 = eqInd2 {_} {_} {_} {mulDistributesOverPlusLeft (finToNat {_} k) (finToNat {_} k) (finToNat {_} i)}
                  {\h => Equal ZZ
                           (at {ZZ} {n} i (zipWith n {Fin n} {_} {_}
-                                           (\j => \x => (multZ (twiddle {f} {plus n n} (MkTwiddles f (plus n n) nz p1 p2 p3 p4) 1 (finToNat {n} k))
-                                                               (multZ (twiddle {f} {plus n n} (MkTwiddles f (plus n n) nz p1 p2 p3 p4) (double (finToNat {n} k)) (finToNat {n} j)) x)))
+                                           (\j => \x => (multZ (twiddle {f} {double' n} (MkTwiddles f (double' n) nz p1 p2 p3 p4) 1 (finToNat {n} k))
+                                                               (multZ (twiddle {f} {double' n} (MkTwiddles f (double' n) nz p1 p2 p3 p4) (double (finToNat {n} k)) (finToNat {n} j)) x)))
                                            (indices n) os))
-                          (multZ (f (plus (finToNat {_} k) h) (plus n n)) (at {_} {_} i os))
+                          (multZ (f (plus (finToNat {_} k) h) (double' n)) (at {_} {_} i os))
                  } h4
           h6 = eqInd2 {_} {_} {_} {eqSym {_} {_} {_} (mulDistributesOverPlusRight (finToNat {_} k) (finToNat {_} i) (finToNat {_} i))}
                  {\h => Equal ZZ
                           (at {ZZ} {n} i (zipWith n {Fin n} {_} {_}
-                                           (\j => \x => (multZ (twiddle {f} {plus n n} (MkTwiddles f (plus n n) nz p1 p2 p3 p4) 1 (finToNat {n} k))
-                                                               (multZ (twiddle {f} {plus n n} (MkTwiddles f (plus n n) nz p1 p2 p3 p4) (double (finToNat {n} k)) (finToNat {n} j)) x)))
+                                           (\j => \x => (multZ (twiddle {f} {double' n} (MkTwiddles f (double' n) nz p1 p2 p3 p4) 1 (finToNat {n} k))
+                                                               (multZ (twiddle {f} {double' n} (MkTwiddles f (double' n) nz p1 p2 p3 p4) (double (finToNat {n} k)) (finToNat {n} j)) x)))
                                            (indices n) os))
-                          (multZ (f (plus (finToNat {_} k) h) (plus n n)) (at {_} {_} i os))
+                          (multZ (f (plus (finToNat {_} k) h) (double' n)) (at {_} {_} i os))
                  } h5
           h7 = eqInd2 {_} {_} {_} {mulCommutative (finToNat {_} k) (plus (finToNat {_} i) (finToNat {_} i))}
                  {\h => Equal ZZ
                           (at {ZZ} {n} i (zipWith n {Fin n} {_} {_}
-                                           (\j => \x => (multZ (twiddle {f} {plus n n} (MkTwiddles f (plus n n) nz p1 p2 p3 p4) 1 (finToNat {n} k))
-                                                               (multZ (twiddle {f} {plus n n} (MkTwiddles f (plus n n) nz p1 p2 p3 p4) (double (finToNat {n} k)) (finToNat {n} j)) x)))
+                                           (\j => \x => (multZ (twiddle {f} {double' n} (MkTwiddles f (double' n) nz p1 p2 p3 p4) 1 (finToNat {n} k))
+                                                               (multZ (twiddle {f} {double' n} (MkTwiddles f (double' n) nz p1 p2 p3 p4) (double (finToNat {n} k)) (finToNat {n} j)) x)))
                                            (indices n) os))
-                          (multZ (f (plus (finToNat {_} k) h) (plus n n)) (at {_} {_} i os))
+                          (multZ (f (plus (finToNat {_} k) h) (double' n)) (at {_} {_} i os))
                  } h6
           h8 = eqInd2 {_} {_} {_} {mulCommutative (S (plus (finToNat {_} i) (finToNat {_} i))) (finToNat {_} k) }
                  {\h => Equal ZZ
                           (at {ZZ} {n} i (zipWith n {Fin n} {_} {_}
-                                           (\j => \x => (multZ (twiddle {f} {plus n n} (MkTwiddles f (plus n n) nz p1 p2 p3 p4) 1 (finToNat {n} k))
-                                                               (multZ (twiddle {f} {plus n n} (MkTwiddles f (plus n n) nz p1 p2 p3 p4) (double (finToNat {n} k)) (finToNat {n} j)) x)))
+                                           (\j => \x => (multZ (twiddle {f} {double' n} (MkTwiddles f (double' n) nz p1 p2 p3 p4) 1 (finToNat {n} k))
+                                                               (multZ (twiddle {f} {double' n} (MkTwiddles f (double' n) nz p1 p2 p3 p4) (double (finToNat {n} k)) (finToNat {n} j)) x)))
                                            (indices n) os))
-                          (multZ (f h (plus n n)) (at {_} {_} i os))
+                          (multZ (f h (double' n)) (at {_} {_} i os))
                  } h7
-          h9 = eqInd2 {_} {_} {_} {eqSym {_} {_} {_} (atCommutesZipWithIndices n {_} {_} i
-                   (\j => \x => (multZ (f (mul (finToNat {n} k) (S (plus (finToNat {n} j) (finToNat {n} j)))) (plus n n)) x))
+          h9 = eqInd2 {_} {_} {_} {eqFinSuccDoubleVal {_} i}
+                 {\h => Equal ZZ
+                          (at {ZZ} {n} i (zipWith n {Fin n} {_} {_}
+                                           (\j => \x => (multZ (twiddle {f} {double' n} (MkTwiddles f (double' n) nz p1 p2 p3 p4) 1 (finToNat {n} k))
+                                                               (multZ (twiddle {f} {double' n} (MkTwiddles f (double' n) nz p1 p2 p3 p4) (double (finToNat {n} k)) (finToNat {n} j)) x)))
+                                           (indices n) os))
+                          (multZ (f (mul (finToNat {_} k) h) (double' n)) (at {_} {_} i os))
+                 } h8
+          h10 = eqInd2 {_} {_} {_} {eqSym {_} {_} {_} (atCommutesZipWithIndices n {_} {_} i
+                   (\j => \x => (multZ (f (mul (finToNat {n} k) (finToNat {_} (finSuccDouble' {n} j))) (double' n)) x))
                    os)}
                  {\h => Equal ZZ
                           (at {ZZ} {n} i (zipWith n {Fin n} {_} {_}
-                                           (\j => \x => (multZ (twiddle {f} {plus n n} (MkTwiddles f (plus n n) nz p1 p2 p3 p4) 1 (finToNat {n} k))
-                                                               (multZ (twiddle {f} {plus n n} (MkTwiddles f (plus n n) nz p1 p2 p3 p4) (double (finToNat {n} k)) (finToNat {n} j)) x)))
+                                           (\j => \x => (multZ (twiddle {f} {double' n} (MkTwiddles f (double' n) nz p1 p2 p3 p4) 1 (finToNat {n} k))
+                                                               (multZ (twiddle {f} {double' n} (MkTwiddles f (double' n) nz p1 p2 p3 p4) (double (finToNat {n} k)) (finToNat {n} j)) x)))
                                            (indices n) os))
                           h
-                 } h8
-      in h9
+                 } h9
+      in h10
+
+lemmaEvensEqual : {n : Nat} ->
+                  {f : Nat -> Nat -> ZZ} ->
+                  (tw : Twiddles f (double' n)) ->
+                  (k : Fin n) ->
+                  (es : Vect n ZZ) ->
+                  (xs : Vect (double' n) ZZ) ->
+                  Equal (Vect n ZZ) (evens n {ZZ} xs) es ->
+                  (i : Fin n) ->
+                  Equal ZZ (at {ZZ} {n} i (zipWith n {_} {_} {_}
+                                             (\j => \x => multZ (twiddle {f} {(double' n)} tw (finToNat {_} k) (finToNat {_} (finDouble' {n} j))) x)
+                                             (indices n) es))
+                           (at {ZZ} {double' n} (finDouble' {n} i) (zipWith (double' n) {(Fin (double' n))} {ZZ} {ZZ}
+                                                                  (\j => \x => (multZ (twiddle {f} {(double' n)} tw (finToNat {(double' n)} (finWeakenToDouble n k)) (finToNat {(double' n)} j)) x))
+                                                                  (indices (double' n)) xs))
+
+lemmaOddsEqual : {n : Nat} ->
+                 {f : Nat -> Nat -> ZZ} ->
+                 (tw : Twiddles f (double' n)) ->
+                 (k : Fin n) ->
+                 (os : Vect n ZZ) ->
+                 (xs : Vect (double' n) ZZ) ->
+                 Equal (Vect n ZZ) (odds n {ZZ} xs) os ->
+                 (i : Fin n) ->
+                 Equal ZZ (at {ZZ} {n} i (zipWith n {_} {_} {_}
+                                            (\j => \x => multZ (twiddle {f} {(double' n)} tw (finToNat {_} k) (finToNat {_} (finSuccDouble' {n} j))) x)
+                                            (indices n) os))
+                          (at {ZZ} {double' n} (finSuccDouble' {n} i) (zipWith (double' n) {(Fin (double' n))} {ZZ} {ZZ}
+                                                                 (\j => \x => (multZ (twiddle {f} {(double' n)} tw (finToNat {(double' n)} (finWeakenToDouble n k)) (finToNat {(double' n)} j)) x))
+                                                                 (indices (double' n)) xs))
 
 -- Prove that X_k xs = X_k (evens xs) + w^k * X_k (odds xs)
 -- for all 0 <= k < N/2
 eqDitRecLower : {n : Nat} ->
                 {f : Nat -> Nat -> ZZ} ->
-                (tw : Twiddles f (plus n n)) ->
-                (xs : Vect (plus n n) ZZ) ->
+                (tw : Twiddles f (double' n)) ->
+                (xs : Vect (double' n) ZZ) ->
                 (es : (Vect n ZZ)) ->
                 (os : (Vect n ZZ)) ->
-                Equal (Vect 2 (Vect n ZZ)) (deinterleave n {ZZ} xs) [es,os] ->
+                Equal (Vect n ZZ) (evens n {ZZ} xs) es ->
+                Equal (Vect n ZZ) (odds  n {ZZ} xs) os ->
                 (k : Fin n) ->
                 -- ^ For index `k` only
                 Equal ZZ
                   (at {ZZ} {n} k
                       (zipWith n {ZZ} {ZZ} {ZZ} plusZ
                         (dft n {f} (halfTwiddles {f} {n} tw) es)
-                        (zipWith n {ZZ} {ZZ} {ZZ} multZ (twiddleRow {f} (plus n n) tw 1 n)
+                        (zipWith n {ZZ} {ZZ} {ZZ} multZ (twiddleRow {f} (double' n) tw 1 n)
                                                         (dft n {f} (halfTwiddles {f} {n} tw) os))))
-                  (at {ZZ} {plus n n} (finWeakenN' n {n} k)
-                      (dft (plus n n) {f} tw xs))
-pat n, f, tw, xs, es, os, prfInter k =>
-  eqDitRecLower {n} {f} tw xs es os prfInter k
+                  (at {ZZ} {double' n} (finWeakenToDouble n k)
+                      (dft (double' n) {f} tw xs))
+pat n, f, tw, xs, es, os, prfEven, prfOdd, k =>
+  eqDitRecLower {n} {f} tw xs es os prfEven prfOdd k
     = let -- Push the `at` down as far as possible
           h1 = eqInd2 {_} {_} {_} {atCommutesZipWith n {ZZ} {ZZ} {ZZ} k plusZ
                                      (dft n {f} (halfTwiddles {f} {n} tw) es)
-                                     (zipWith n {ZZ} {ZZ} {ZZ} multZ (twiddleRow {f} (plus n n) tw 1 n)
+                                     (zipWith n {ZZ} {ZZ} {ZZ} multZ (twiddleRow {f} (double' n) tw 1 n)
                                                                      (dft n {f} (halfTwiddles {f} {n} tw) os))}
                  {\h => Equal ZZ
                           (at {ZZ} {n} k
                               (zipWith n {ZZ} {ZZ} {ZZ} plusZ
                                 (dft n {f} (halfTwiddles {f} {n} tw) es)
-                                (zipWith n {ZZ} {ZZ} {ZZ} multZ (twiddleRow {f} (plus n n) tw 1 n)
+                                (zipWith n {ZZ} {ZZ} {ZZ} multZ (twiddleRow {f} (double' n) tw 1 n)
                                                                 (dft n {f} (halfTwiddles {f} {n} tw) os))))
                           h
                  } (Refl {_} {_})
           h2 = eqInd2 {_} {_} {_} {atCommutesZipWith n {ZZ} {ZZ} {ZZ} k multZ
-                                     (twiddleRow {f} (plus n n) tw 1 n)
+                                     (twiddleRow {f} (double' n) tw 1 n)
                                      (dft n {f} (halfTwiddles {f} {n} tw) os)}
                  {\h => Equal ZZ
                           (at {ZZ} {n} k
                               (zipWith n {ZZ} {ZZ} {ZZ} plusZ
                                 (dft n {f} (halfTwiddles {f} {n} tw) es)
-                                (zipWith n {ZZ} {ZZ} {ZZ} multZ (twiddleRow {f} (plus n n) tw 1 n)
+                                (zipWith n {ZZ} {ZZ} {ZZ} multZ (twiddleRow {f} (double' n) tw 1 n)
                                                                 (dft n {f} (halfTwiddles {f} {n} tw) os))))
                           (plusZ (at {ZZ} {n} k (dft n {f} (halfTwiddles {f} {n} tw) es))
                                  h
@@ -158,7 +257,7 @@ pat n, f, tw, xs, es, os, prfInter k =>
                           (at {ZZ} {n} k
                               (zipWith n {ZZ} {ZZ} {ZZ} plusZ
                                 (dft n {f} (halfTwiddles {f} {n} tw) es)
-                                (zipWith n {ZZ} {ZZ} {ZZ} multZ (twiddleRow {f} (plus n n) tw 1 n)
+                                (zipWith n {ZZ} {ZZ} {ZZ} multZ (twiddleRow {f} (double' n) tw 1 n)
                                                                 (dft n {f} (halfTwiddles {f} {n} tw) os))))
                           (plusZ (at {ZZ} {n} k (dft n {f} (halfTwiddles {f} {n} tw) es))
                                  (multZ h
@@ -172,10 +271,10 @@ pat n, f, tw, xs, es, os, prfInter k =>
                           (at {ZZ} {n} k
                               (zipWith n {ZZ} {ZZ} {ZZ} plusZ
                                 (dft n {f} (halfTwiddles {f} {n} tw) es)
-                                (zipWith n {ZZ} {ZZ} {ZZ} multZ (twiddleRow {f} (plus n n) tw 1 n)
+                                (zipWith n {ZZ} {ZZ} {ZZ} multZ (twiddleRow {f} (double' n) tw 1 n)
                                                                 (dft n {f} (halfTwiddles {f} {n} tw) os))))
                           (plusZ h -- (dftK n {f} (halfTwiddles {f} {n} tw) k es)
-                                 (multZ (twiddle {f} {plus n n} tw 1 (finToNat {_} k))
+                                 (multZ (twiddle {f} {double' n} tw 1 (finToNat {_} k))
                                         (at {_} {_} k (dft n {f} (halfTwiddles {f} {n} tw) os)))
                           )
                  } h3
@@ -184,10 +283,10 @@ pat n, f, tw, xs, es, os, prfInter k =>
                           (at {ZZ} {n} k
                               (zipWith n {ZZ} {ZZ} {ZZ} plusZ
                                 (dft n {f} (halfTwiddles {f} {n} tw) es)
-                                (zipWith n {ZZ} {ZZ} {ZZ} multZ (twiddleRow {f} (plus n n) tw 1 n)
+                                (zipWith n {ZZ} {ZZ} {ZZ} multZ (twiddleRow {f} (double' n) tw 1 n)
                                                                 (dft n {f} (halfTwiddles {f} {n} tw) os))))
                           (plusZ (dftK n {f} (halfTwiddles {f} {n} tw) k es)
-                                 (multZ (twiddle {f} {plus n n} tw 1 (finToNat {_} k))
+                                 (multZ (twiddle {f} {double' n} tw 1 (finToNat {_} k))
                                         h)
                           )
                  } h4
@@ -198,62 +297,62 @@ pat n, f, tw, xs, es, os, prfInter k =>
                           (at {ZZ} {n} k
                               (zipWith n {ZZ} {ZZ} {ZZ} plusZ
                                 (dft n {f} (halfTwiddles {f} {n} tw) es)
-                                (zipWith n {ZZ} {ZZ} {ZZ} multZ (twiddleRow {f} (plus n n) tw 1 n)
+                                (zipWith n {ZZ} {ZZ} {ZZ} multZ (twiddleRow {f} (double' n) tw 1 n)
                                                                 (dft n {f} (halfTwiddles {f} {n} tw) os))))
                           (plusZ (sumZ n (zipWith n {_} {_} {_} multZ h es))
-                                 (multZ (twiddle {f} {plus n n} tw 1 (finToNat {_} k))
+                                 (multZ (twiddle {f} {double' n} tw 1 (finToNat {_} k))
                                         (sumZ n (zipWith n {_} {_} {_} multZ h os)))
                           )
                  } h5
 
           -- Move twiddle factor const multiplication into sum and dot product
-          h7 = eqInd2 {_} {_} {_} {multDistributesOverSumZ n (twiddle {f} {plus n n} tw 1 (finToNat {_} k))
+          h7 = eqInd2 {_} {_} {_} {multDistributesOverSumZ n (twiddle {f} {double' n} tw 1 (finToNat {_} k))
                                      (zipWith n {_} {_} {_} multZ
-                                        (twiddleRow {f} (plus n n) tw (double (finToNat {_} k)) n)
+                                        (twiddleRow {f} (double' n) tw (double (finToNat {_} k)) n)
                                         os)
                                   }
                  {\h => Equal ZZ
                           (at {ZZ} {n} k
                               (zipWith n {ZZ} {ZZ} {ZZ} plusZ
                                 (dft n {f} (halfTwiddles {f} {n} tw) es)
-                                (zipWith n {ZZ} {ZZ} {ZZ} multZ (twiddleRow {f} (plus n n) tw 1 n)
+                                (zipWith n {ZZ} {ZZ} {ZZ} multZ (twiddleRow {f} (double' n) tw 1 n)
                                                                 (dft n {f} (halfTwiddles {f} {n} tw) os))))
                           (plusZ (sumZ n (zipWith n {_} {_} {_} multZ
-                                            (twiddleRow {f} (plus n n) tw (double (finToNat {_} k)) n)
+                                            (twiddleRow {f} (double' n) tw (double (finToNat {_} k)) n)
                                             es))
                                  h
                           )
                  } h6
           h8 = eqInd2 {_} {_} {_} {mapDistributesOverZipWith n _ _ _ _
-                                     (multZ (twiddle {f} {plus n n} tw 1 (finToNat {n} k)))
+                                     (multZ (twiddle {f} {double' n} tw 1 (finToNat {n} k)))
                                      multZ
-                                     (twiddleRow {f} (plus n n) tw (double (finToNat {_} k)) n)
+                                     (twiddleRow {f} (double' n) tw (double (finToNat {_} k)) n)
                                      os}
                  {\h => Equal ZZ
                           (at {ZZ} {n} k
                               (zipWith n {ZZ} {ZZ} {ZZ} plusZ
                                 (dft n {f} (halfTwiddles {f} {n} tw) es)
-                                (zipWith n {ZZ} {ZZ} {ZZ} multZ (twiddleRow {f} (plus n n) tw 1 n)
+                                (zipWith n {ZZ} {ZZ} {ZZ} multZ (twiddleRow {f} (double' n) tw 1 n)
                                                                 (dft n {f} (halfTwiddles {f} {n} tw) os))))
                           (plusZ (sumZ n (zipWith n {_} {_} {_} multZ
-                                            (twiddleRow {f} (plus n n) tw (double (finToNat {_} k)) n)
+                                            (twiddleRow {f} (double' n) tw (double (finToNat {_} k)) n)
                                             es))
                                  (sumZ n h)
                           )
                  } h7
           h9 = eqInd2 {_} {_} {_} {mapReducesZipWith n (Fin n) ZZ ZZ ZZ
-                                     (\ind => twiddle {f} {plus n n} tw (double (finToNat {n} k)) (finToNat {n} ind))
-                                     (\w => \x => multZ (twiddle {f} {plus n n} tw 1 (finToNat {n} k)) (multZ w x))
+                                     (\ind => twiddle {f} {double' n} tw (double (finToNat {n} k)) (finToNat {n} ind))
+                                     (\w => \x => multZ (twiddle {f} {double' n} tw 1 (finToNat {n} k)) (multZ w x))
                                      (indices n)
                                      os}
                  {\h => Equal ZZ
                           (at {ZZ} {n} k
                               (zipWith n {ZZ} {ZZ} {ZZ} plusZ
                                 (dft n {f} (halfTwiddles {f} {n} tw) es)
-                                (zipWith n {ZZ} {ZZ} {ZZ} multZ (twiddleRow {f} (plus n n) tw 1 n)
+                                (zipWith n {ZZ} {ZZ} {ZZ} multZ (twiddleRow {f} (double' n) tw 1 n)
                                                                 (dft n {f} (halfTwiddles {f} {n} tw) os))))
                           (plusZ (sumZ n (zipWith n {_} {_} {_} multZ
-                                            (twiddleRow {f} (plus n n) tw (double (finToNat {_} k)) n)
+                                            (twiddleRow {f} (double' n) tw (double (finToNat {_} k)) n)
                                             es))
                                  (sumZ n h)
                           )
@@ -269,62 +368,124 @@ pat n, f, tw, xs, es, os, prfInter k =>
                           (at {ZZ} {n} k
                               (zipWith n {ZZ} {ZZ} {ZZ} plusZ
                                 (dft n {f} (halfTwiddles {f} {n} tw) es)
-                                (zipWith n {ZZ} {ZZ} {ZZ} multZ (twiddleRow {f} (plus n n) tw 1 n)
+                                (zipWith n {ZZ} {ZZ} {ZZ} multZ (twiddleRow {f} (double' n) tw 1 n)
                                                                 (dft n {f} (halfTwiddles {f} {n} tw) os))))
                           (plusZ (sumZ n (zipWith n {_} {_} {_} multZ
-                                            (twiddleRow {f} (plus n n) tw (double (finToNat {_} k)) n)
+                                            (twiddleRow {f} (double' n) tw (double (finToNat {_} k)) n)
                                             es))
                                  (sumZ n h)
                           )
                  } h9
 
-         -- Rearrange odd side to match dftK definition
-          h11 = eqInd2 {_} {_} {_} {eqSym {_} {_} {_} (mapReducesZipWith n (Fin n) ZZ ZZ ZZ
-                                      (\j => twiddle {f} {(plus n n)} tw (finToNat {n} k) (S (plus (finToNat {n} j) (finToNat {n} j))))
+          -- Rearrange even side to be indexed by `finDouble' n`
+          h11 = eqInd2 {_} {_} {_} {mapReducesZipWith n (Fin n) ZZ ZZ ZZ
+                                      (\j => twiddle {f} {(double' n)} tw (plus (finToNat {n} k) (finToNat {n} k)) (finToNat {_} j))
                                       multZ
                                       (indices n)
-                                      os)}
+                                      es}
                  {\h => Equal ZZ
                           (at {ZZ} {n} k
                               (zipWith n {ZZ} {ZZ} {ZZ} plusZ
                                 (dft n {f} (halfTwiddles {f} {n} tw) es)
-                                (zipWith n {ZZ} {ZZ} {ZZ} multZ (twiddleRow {f} (plus n n) tw 1 n)
+                                (zipWith n {ZZ} {ZZ} {ZZ} multZ (twiddleRow {f} (double' n) tw 1 n)
                                                                 (dft n {f} (halfTwiddles {f} {n} tw) os))))
-                          (plusZ (sumZ n (zipWith n {_} {_} {_} multZ
-                                            (twiddleRow {f} (plus n n) tw (double (finToNat {_} k)) n)
-                                            es))
-                                 (sumZ n h)
+                          (plusZ (sumZ n h)
+                                 (sumZ n (zipWith n {_} {_} {_} (\j => \x => multZ (twiddle {f} {(double' n)} tw (finToNat {_} k) (finToNat {_} (finSuccDouble' {n} j))) x) (indices n) os))
                           )
                  } h10
+          h12 = eqInd2 {_} {_} {_} {eqForAllIndices n {ZZ} _ _
+                                      (lemmaGatherEvenElem {n} {f} tw es k)}
+                 {\h => Equal ZZ
+                          (at {ZZ} {n} k
+                              (zipWith n {ZZ} {ZZ} {ZZ} plusZ
+                                (dft n {f} (halfTwiddles {f} {n} tw) es)
+                                (zipWith n {ZZ} {ZZ} {ZZ} multZ (twiddleRow {f} (double' n) tw 1 n)
+                                                                (dft n {f} (halfTwiddles {f} {n} tw) os))))
+                          (plusZ (sumZ n h)
+                                 (sumZ n (zipWith n {_} {_} {_} (\j => \x => multZ (twiddle {f} {(double' n)} tw (finToNat {_} k) (finToNat {_} (finSuccDouble' {n} j))) x) (indices n) os))
+                          )
+                 } h11
 
-    in _
+          -- Rewrite in terms of `xs` only (eliminate references to `es` and `os`
+          h13 = eqInd2 {_} {_} {_} {eqForEvens n {ZZ} _ _ (lemmaEvensEqual {n} {f} tw k es xs prfEven)}
+                 {\h => Equal ZZ
+                          (at {ZZ} {n} k
+                              (zipWith n {ZZ} {ZZ} {ZZ} plusZ
+                                (dft n {f} (halfTwiddles {f} {n} tw) es)
+                                (zipWith n {ZZ} {ZZ} {ZZ} multZ (twiddleRow {f} (double' n) tw 1 n)
+                                                                (dft n {f} (halfTwiddles {f} {n} tw) os))))
+                          (plusZ (sumZ n h)
+                                 (sumZ n (zipWith n {_} {_} {_} (\j => \x => multZ (twiddle {f} {(double' n)} tw (finToNat {_} k) (finToNat {_} (finSuccDouble' {n} j))) x) (indices n) os))
+                          )
+                 } h12
+          h14 = eqInd2 {_} {_} {_} {eqForOdds n {ZZ} _ _ (lemmaOddsEqual {n} {f} tw k os xs prfOdd)}
+                 {\h => Equal ZZ
+                          (at {ZZ} {n} k
+                              (zipWith n {ZZ} {ZZ} {ZZ} plusZ
+                                (dft n {f} (halfTwiddles {f} {n} tw) es)
+                                (zipWith n {ZZ} {ZZ} {ZZ} multZ (twiddleRow {f} (double' n) tw 1 n)
+                                                                (dft n {f} (halfTwiddles {f} {n} tw) os))))
+                          (plusZ (sumZ n (evens n {_} (zipWith (double' n) {(Fin (double' n))} {_} {_}
+                                    (\j => \x => (multZ (twiddle {_} {(double' n)} tw (finToNat {(double' n)} (finWeakenToDouble n k)) (finToNat {(double' n)} j)) x))
+                                    (indices (double' n)) xs)))
+                                 (sumZ n h)
+                          )
+                 } h13
+          h15 = eqInd2 {_} {_} {_} {eqSumEvenOdds n _}
+                 {\h => Equal ZZ
+                          (at {ZZ} {n} k
+                              (zipWith n {ZZ} {ZZ} {ZZ} plusZ
+                                (dft n {f} (halfTwiddles {f} {n} tw) es)
+                                (zipWith n {ZZ} {ZZ} {ZZ} multZ (twiddleRow {f} (double' n) tw 1 n)
+                                                                (dft n {f} (halfTwiddles {f} {n} tw) os))))
+                          h
+                 } h14
 
-{-
+          -- Starting from RHS now
+          g1 = Refl {_} {at {ZZ} {double' n} (finWeakenToDouble n k) (dft (double' n) {f} tw xs)}
 
-plusZ (sumZ n (zipWith n {ZZ} {ZZ} {ZZ} multZ (map n {(Fin n)} {ZZ} \i :_0 (Fin n) => (twiddle {f} {(plus n n)} tw (plus (finToNat {n} k) (finToNat {n} k)) (         finToNat {n} i))                    (indices n)) es))
-      (sumZ n (zipWith n {ZZ} {ZZ} {ZZ} multZ (map n {(Fin n)} {ZZ} \j :_0 (Fin n) => (twiddle {f} {(plus n n)} tw (      finToNat {n} k)                   (S (plus (finToNat {n} j) (finToNat {n} j)))) (indices n)) os))
+          -- Reduce dft calls for our index
+          g2 : Equal ZZ (dftK (double' n) {f} tw (finWeakenToDouble n k) xs)
+                        (at {ZZ} {double' n} (finWeakenToDouble n k) (dft (double' n) {f} tw xs))
 
--}
+             = eqInd2 {_} {_} {_} {atCommutesImap (double' n) {_} {_} (finWeakenToDouble n k) (\i => \x=> dftK (double' n) {f} tw i xs) xs}
+                 {\h => Equal ZZ
+                          h
+                          (at {ZZ} {double' n} (finWeakenToDouble n k) (dft (double' n) {f} tw xs))} g1
+
+          g3 = eqInd2 {_} {_} {_} {mapReducesZipWith (double' n) (Fin (double' n)) ZZ ZZ ZZ
+                                      (\i : Fin (double' n) => twiddle {f} {double' n} tw (finToNat {_} (finWeakenToDouble n k)) (finToNat {_} i))
+                                      multZ
+                                      (indices (double' n))
+                                      xs
+                                   }
+                 {\h => Equal ZZ
+                          (sumZ (double' n) h)
+                          (at {ZZ} {double' n} (finWeakenToDouble n k) (dft (double' n) {f} tw xs))} g2
+
+
+    in eqTrans {_} {_} {_} {_} h15 g3
 
 -- Prove that X_k xs = X_k (evens xs) - w^k * X_k (odds xs)
 -- for all N/2 <= k < N
 eqDitRecUpper : {n : Nat} ->
                 {f : Nat -> Nat -> ZZ} ->
-                (tw : Twiddles f (plus n n)) ->
-                (xs : Vect (plus n n) ZZ) ->
+                (tw : Twiddles f (double' n)) ->
+                (xs : Vect (double' n) ZZ) ->
                 (es : (Vect n ZZ)) ->
                 (os : (Vect n ZZ)) ->
-                Equal (Vect 2 (Vect n ZZ)) (deinterleave n {ZZ} xs) [es,os] ->
+                Equal (Vect n ZZ) (evens n {ZZ} xs) es ->
+                Equal (Vect n ZZ) (odds  n {ZZ} xs) os ->
                 (k : Fin n) ->
                 -- ^ For index `k` only
                 Equal ZZ
                   (at {ZZ} {n} k
                       (zipWith n {ZZ} {ZZ} {ZZ} subZ
                         (dft n {f} (halfTwiddles {f} {n} tw) es)
-                        (zipWith n {ZZ} {ZZ} {ZZ} multZ (twiddleRow {f} (plus n n) tw 1 n)
+                        (zipWith n {ZZ} {ZZ} {ZZ} multZ (twiddleRow {f} (double' n) tw 1 n)
                                                         (dft n {f} (halfTwiddles {f} {n} tw) os))))
-                  (at {ZZ} {plus n n} (finShift n {n} k)
-                      (dft (plus n n) {f} tw xs))
+                  (at {ZZ} {double' n} (finPlusBound n k)
+                      (dft (double' n) {f} tw xs))
 
 
 -- Prove our DIT's base case is equivalent to a 1-input DFT
@@ -343,70 +504,83 @@ pat f, nz, p1, p2, p3, p4, x =>
                                  [h]
                  } h1
       in h2
-
 -- Prove DIT/DFT equivalence in general
 
 eqDit : {n : Nat} -> {f : Nat -> Nat -> ZZ} -> (tw : Twiddles f n) -> (isPow2 : Pow2 n)  ->
         (xs : Vect n ZZ) ->
         Equal (Vect n ZZ) (dft n {f} tw xs) (dit {n} {f} tw isPow2 xs)
 
-eqDitRec : {n : Nat} -> {f : Nat -> Nat -> ZZ} -> (tw : Twiddles f (plus n n)) -> (isPow2 : Pow2 (plus n n))  ->
-           (xs : Vect (plus n n) ZZ) ->
-           (split : Vect 2 (Vect n ZZ)) ->
-           Equal (Vect 2 (Vect n ZZ)) (deinterleave n {ZZ} xs) split ->
-           Equal (Vect (plus n n) ZZ) (dft (plus n n) {f} tw xs) (dit {plus n n} {f} tw isPow2 xs)
+eqDitRec : {n : Nat} -> {f : Nat -> Nat -> ZZ} -> (tw : Twiddles f (double' n)) -> (isPow2 : Pow2 (double' n))  ->
+           (xs : Vect (double' n) ZZ) ->
+           (es, os : Vect n ZZ) ->
+           Equal (Vect n ZZ) (evens n {ZZ} xs) es ->
+           Equal (Vect n ZZ) (odds  n {ZZ} xs) os ->
+           Equal (Vect (double' n) ZZ) (dft (double' n) {f} tw xs) (dit {double' n} {f} tw isPow2 xs)
 
 pat f, tw, xs =>
   eqDit {1} {f} tw POne xs = eqDitBase {f} tw xs
 pat n, f, tw, prec, xs =>
-  eqDit {plus n n} {f} tw (PDouble n prec) xs
-    = eqDitRec {n} {f} tw (PDouble n prec) xs (deinterleave n {ZZ} xs) (Refl {_} {_})
+  eqDit {double' n} {f} tw (PDouble n prec) xs
+    = eqDitRec {n} {f} tw (PDouble n prec) xs (evens n {ZZ} xs) (odds n {ZZ} xs) (Refl {_} {_}) (Refl {_} {_})
 
-pat n, f, tw, prec, xs, es, os, prfSplit =>
-  eqDitRec {n} {f} tw (PDouble n prec) xs [es,os] prfSplit
-    = let h1 = Refl {_} {dit' n {f} tw prec (deinterleave n {_} xs)}
+pat n, f, tw, prec, xs, es, os, prfEven, prfOdd =>
+  eqDitRec {n} {f} tw (PDouble n prec) xs es os prfEven prfOdd
+    = let h1 = Refl {_} {dit {double' n} {f} tw (PDouble n prec) xs}
 
           -- Apply our proof of deinterleved xs
-          h2 : Equal (Vect (plus n n) ZZ)
-                          (dit' n {f} tw prec [es,os])
-                          (dit' n {f} tw prec (deinterleave n {_} xs))
-             = eqInd2 {_} {_} {_} {prfSplit}
-                 {\h => Equal (Vect (plus n n) ZZ)
-                          (dit' n {f} tw prec h)
-                          (dit' n {f} tw prec (deinterleave n {_} xs))
-                 } h1
-
+          h2 = eqInd2 {_} {_} {_} {prfEven}
+                 {\h => Equal (Vect (double' n) ZZ)
+                          (appendHalves {_} {_}
+                              (zipWith n {_} {_} {_} plusZ (dit {_} {_} (halfTwiddles {_} {_} tw) prec h)
+                                                           (zipWith n {_} {_} {_} multZ (map n {(Fin n)} {_} (\i : (Fin n) => (twiddle {_} {(double' n)} tw 1 (finToNat {_} i))) (indices n))
+                                                                                        (dit {_} {_} (halfTwiddles {_} {_} tw) prec (odds n {_} xs))))
+                              (zipWith n {_} {_} {_} subZ (dit {_} {_} (halfTwiddles {_} {_} tw) prec h)
+                                                          (zipWith n {_} {_} {_} multZ (map n {(Fin n)} {_} (\i : (Fin n) => (twiddle {_} {(double' n)} tw 1 (finToNat {_} i))) (indices n))
+                                                                                        (dit {_} {_} (halfTwiddles {_} {_} tw) prec (odds n {_} xs)))))
+                          (dit {double' n} {f} tw (PDouble n prec) xs)
+                          } h1
+          h3 = eqInd2 {_} {_} {_} {prfOdd}
+                 {\h => Equal (Vect (double' n) ZZ)
+                          (appendHalves {_} {_}
+                              (zipWith n {_} {_} {_} plusZ (dit {_} {_} (halfTwiddles {_} {_} tw) prec es)
+                                                           (zipWith n {_} {_} {_} multZ (map n {(Fin n)} {_} (\i : (Fin n) => (twiddle {_} {(double' n)} tw 1 (finToNat {_} i))) (indices n))
+                                                                                        (dit {_} {_} (halfTwiddles {_} {_} tw) prec h)))
+                              (zipWith n {_} {_} {_} subZ (dit {_} {_} (halfTwiddles {_} {_} tw) prec es)
+                                                          (zipWith n {_} {_} {_} multZ (map n {(Fin n)} {_} (\i : (Fin n) => (twiddle {_} {(double' n)} tw 1 (finToNat {_} i))) (indices n))
+                                                                                        (dit {_} {_} (halfTwiddles {_} {_} tw) prec h))))
+                          (dit {double' n} {f} tw (PDouble n prec) xs)
+                          } h2
           -- Recurse on our proof for odd and even sub-dfts
-          h3 = eqInd2 {_} {_} {_} {eqSym {_} {_} {_} (eqDit {n} {f} (halfTwiddles {f} {n} tw) prec es)}
-                 {\h => Equal (Vect (plus n n) ZZ)
-                          (append {ZZ} {n} {n}
-                             (zipWith n {ZZ} {ZZ} {ZZ} plusZ
-                                 h (zipWith n {ZZ} {ZZ} {ZZ} multZ (twiddleRow {f} (plus n n) tw 1 n)
-                                                                   (dit {n} {f} (halfTwiddles {f} {n} tw) prec os)))
-                             (zipWith n {ZZ} {ZZ} {ZZ} subZ
-                                 h (zipWith n {ZZ} {ZZ} {ZZ} multZ (twiddleRow {f} (plus n n) tw 1 n)
-                                                                   (dit {n} {f} (halfTwiddles {f} {n} tw) prec os))))
-                          (dit' n {f} tw prec (deinterleave n {_} xs))
-                 } h2
-          h4 = eqInd2 {_} {_} {_} {eqSym {_} {_} {_} (eqDit {n} {f} (halfTwiddles {f} {n} tw) prec os)}
-                 {\h => Equal (Vect (plus n n) ZZ)
-                          (append {ZZ} {n} {n}
-                             (zipWith n {ZZ} {ZZ} {ZZ} plusZ
-                                 (dft n {f} (halfTwiddles {f} {n} tw) es)
-                                 (zipWith n {ZZ} {ZZ} {ZZ} multZ (twiddleRow {f} (plus n n) tw 1 n) h))
-                             (zipWith n {ZZ} {ZZ} {ZZ} subZ
-                                 (dft n {f} (halfTwiddles {f} {n} tw) es)
-                                 (zipWith n {ZZ} {ZZ} {ZZ} multZ (twiddleRow {f} (plus n n) tw 1 n) h)))
-                          (dit' n {f} tw prec (deinterleave n {_} xs))
-                 } h3
+          h4 = eqInd2 {_} {_} {_} {eqSym {_} {_} {_} (eqDit {n} {f} (halfTwiddles {f} {n} tw) prec es)}
+                 {\h => Equal (Vect (double' n) ZZ)
+                          (appendHalves {_} {_}
+                              (zipWith n {_} {_} {_} plusZ h
+                                                           (zipWith n {_} {_} {_} multZ (map n {(Fin n)} {_} (\i : (Fin n) => (twiddle {_} {(double' n)} tw 1 (finToNat {_} i))) (indices n))
+                                                                                        (dit {_} {_} (halfTwiddles {_} {_} tw) prec os)))
+                              (zipWith n {_} {_} {_} subZ h
+                                                          (zipWith n {_} {_} {_} multZ (map n {(Fin n)} {_} (\i : (Fin n) => (twiddle {_} {(double' n)} tw 1 (finToNat {_} i))) (indices n))
+                                                                                        (dit {_} {_} (halfTwiddles {_} {_} tw) prec os))))
+                          (dit {double' n} {f} tw (PDouble n prec) xs)
+                          } h3
+          h5 = eqInd2 {_} {_} {_} {eqSym {_} {_} {_} (eqDit {n} {f} (halfTwiddles {f} {n} tw) prec os)}
+                 {\h => Equal (Vect (double' n) ZZ)
+                          (appendHalves {_} {_}
+                              (zipWith n {_} {_} {_} plusZ (dft _ {_} (halfTwiddles {_} {_} tw) es)
+                                                           (zipWith n {_} {_} {_} multZ (map n {(Fin n)} {_} (\i : (Fin n) => (twiddle {_} {(double' n)} tw 1 (finToNat {_} i))) (indices n))
+                                                                                        h))
+                              (zipWith n {_} {_} {_} subZ (dft _ {_} (halfTwiddles {_} {_} tw) es)
+                                                          (zipWith n {_} {_} {_} multZ (map n {(Fin n)} {_} (\i : (Fin n) => (twiddle {_} {(double' n)} tw 1 (finToNat {_} i))) (indices n))
+                                                                                        h)))
+                          (dit {double' n} {f} tw (PDouble n prec) xs)
+                          } h4
 
           -- Combine proofs of equality for lower and upper halfs
-          h5 = eqInd2 {_} {_} {_} {eqForSplit n n {ZZ} _ _ (dft (plus n n) {f} tw xs)
-                                     (eqDitRecLower {n} {f} tw xs es os prfSplit)
-                                     (eqDitRecUpper {n} {f} tw xs es os prfSplit)
+          h6 = eqInd2 {_} {_} {_} {eqForHalves n n {ZZ} _ _ (dft (double' n) {f} tw xs)
+                                     (eqDitRecLower {n} {f} tw xs es os prfEven prfOdd)
+                                     (eqDitRecUpper {n} {f} tw xs es os prfEven prfOdd)
                                   }
-                 {\h => Equal (Vect (plus n n) ZZ)
+                 {\h => Equal (Vect (double' n) ZZ)
                           h
-                          (dit' n {f} tw prec (deinterleave n {_} xs))
-                 } h4
-      in h5
+                          (dit {double' n} {f} tw prec xs)
+                 } h5
+      in _

@@ -34,6 +34,20 @@ pat m, n =>
 pat m, n, fin =>
   finWeakenN' m {S n} (FS n fin) = FS (plus n m) (finWeakenN' m {n} fin)
 
+finWeakenToDouble : (n : Nat) -> Fin n -> Fin (double' n)
+pat n =>
+  finWeakenToDouble (S n) (FZ n) = FZ _
+pat n, fin =>
+  finWeakenToDouble (S (S n)) (FS (S n) fin) = finWeaken {_} (FS _ (finWeakenToDouble (S n) fin))
+
+-- Add a `Fin`s bound to its value
+finPlusBound : (n : Nat) -> Fin n -> Fin (double' n)
+finPlusBound 1 (FZ 0) = FS _ (FZ 0) 
+pat n =>
+  finPlusBound (S (S n)) (FZ (S n)) = FS _ (finWeaken {_} (finPlusBound (S n) (FZ n)))
+pat n, fin =>
+  finPlusBound (S (S n)) (FS (S n) fin) = FS _ (FS _ (finPlusBound (S n) fin))
+
 -- Add some natural number to a Fin, extending the bound accordingly
 finShift : (m : Nat) -> {n : Nat} -> Fin n -> Fin (plus m n)
 pat n, fin =>
@@ -53,6 +67,18 @@ pat n, fin =>
     = let ans = FS _ (FS _ (finDouble {n} fin))
       in eqInd2 {_} {_} {_} {plusSuccRightSucc (S n) n}
            {\h => Fin h} ans
+
+finDouble' : {n : Nat} -> Fin n -> Fin (double' n)
+pat n =>
+  finDouble' {S n} (FZ n) = FZ _
+pat n, fin =>
+  finDouble' {S (S n)} (FS (S n) fin) = (FS _ (FS _ (finDouble' {S n} fin)))
+
+finSuccDouble' : {n : Nat} -> Fin n -> Fin (double' n)
+pat n =>
+  finSuccDouble' {S n} (FZ n) = FS _ (FZ _)
+pat n, fin =>
+  finSuccDouble' {S (S n)} (FS (S n) fin) = (FS _ (FS _ (finSuccDouble' {S n} fin)))
 
 finPlus : {n, m : Nat} -> Fin n -> Fin m -> Fin (plus n m)
 pat m, finm =>
@@ -102,3 +128,25 @@ pat n, m =>
                           (finWeaken {plus (S n) (S m)} h)
                  } (Refl {_} {_})
       in h1
+
+eqFinDoubleVal : {n : Nat} -> (i : Fin n) ->
+                   Equal Nat (plus (finToNat {_} i) (finToNat {_} i))
+                             (finToNat {_} (finDouble' {_} i))
+pat n =>
+  eqFinDoubleVal {S n} (FZ n) = Refl {_} {_}
+pat n, fin =>
+  eqFinDoubleVal {S (S n)} (FS (S n) fin)
+    = eqInd2 {_} {_} {_} {plusSuccRightSucc (finToNat {_} fin) (finToNat {_} fin)}
+        {\h => Equal Nat (S h) (S (S (finToNat {_} (finDouble' {_} fin))))}
+        (eqCong {_} {_} {\x => (S (S x))} {_} {_} (eqFinDoubleVal {_} fin))
+
+eqFinSuccDoubleVal : {n : Nat} -> (i : Fin n) ->
+                   Equal Nat (S (plus (finToNat {_} i) (finToNat {_} i)))
+                             (finToNat {_} (finSuccDouble' {_} i))
+pat n =>
+  eqFinSuccDoubleVal {S n} (FZ n) = Refl {_} {_}
+pat n, fin =>
+  eqFinSuccDoubleVal {S (S n)} (FS (S n) fin)
+    = eqInd2 {_} {_} {_} {plusSuccRightSucc (finToNat {_} fin) (finToNat {_} fin)}
+        {\h => Equal Nat (S (S h)) (S (S (finToNat {_} (finSuccDouble' {_} fin))))}
+        (eqCong {_} {_} {\x => S (S x)} {_} {_} (eqFinSuccDoubleVal {_} fin))

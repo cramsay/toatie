@@ -93,6 +93,11 @@ pat x, y, lte =>
 pat x, y, lte, n =>
   lteWeakenN x y lte (S n) = lteWeaken x (plus n y) (lteWeakenN x y lte n)
 
+lteDoubleRight : (n : Nat) -> LTE n (double' n)
+lteDoubleRight Z = LTEZero {_}
+pat k =>
+  lteDoubleRight (S k) = LTESucc {k} {_} (lteWeaken k (double' k) (lteDoubleRight k))
+
 finToLTE : (n : Nat) -> (i : Fin n) -> LTE (finToNat {n} i) n
 pat n =>
   finToLTE (S n) (FZ n) = LTEZero {_}
