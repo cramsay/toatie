@@ -510,7 +510,7 @@ eqDit : {n : Nat} -> {f : Nat -> Nat -> ZZ} -> (tw : Twiddles f n) -> (isPow2 : 
         (xs : Vect n ZZ) ->
         Equal (Vect n ZZ) (dft n {f} tw xs) (dit {n} {f} tw isPow2 xs)
 
-eqDitRec : {n : Nat} -> {f : Nat -> Nat -> ZZ} -> (tw : Twiddles f (double' n)) -> (isPow2 : Pow2 (double' n))  ->
+eqDitRec : (n : Nat) -> {f : Nat -> Nat -> ZZ} -> (tw : Twiddles f (double' n)) -> (isPow2 : Pow2 (double' n))  ->
            (xs : Vect (double' n) ZZ) ->
            (es, os : Vect n ZZ) ->
            Equal (Vect n ZZ) (evens n {ZZ} xs) es ->
@@ -521,10 +521,10 @@ pat f, tw, xs =>
   eqDit {1} {f} tw POne xs = eqDitBase {f} tw xs
 pat n, f, tw, prec, xs =>
   eqDit {double' n} {f} tw (PDouble n prec) xs
-    = eqDitRec {n} {f} tw (PDouble n prec) xs (evens n {ZZ} xs) (odds n {ZZ} xs) (Refl {_} {_}) (Refl {_} {_})
+    = eqDitRec n {f} tw (PDouble n prec) xs (evens n {ZZ} xs) (odds n {ZZ} xs) (Refl {_} {_}) (Refl {_} {_})
 
 pat n, f, tw, prec, xs, es, os, prfEven, prfOdd =>
-  eqDitRec {n} {f} tw (PDouble n prec) xs es os prfEven prfOdd
+  eqDitRec n {f} tw (PDouble n prec) xs es os prfEven prfOdd
     = let h1 = Refl {_} {dit {double' n} {f} tw (PDouble n prec) xs}
 
           -- Apply our proof of deinterleved xs
@@ -575,12 +575,15 @@ pat n, f, tw, prec, xs, es, os, prfEven, prfOdd =>
                           } h4
 
           -- Combine proofs of equality for lower and upper halfs
-          h6 = eqInd2 {_} {_} {_} {eqForHalves n n {ZZ} _ _ (dft (double' n) {f} tw xs)
+          h6 : Equal (Vect (double' n) ZZ)
+                 (dft (double' n) {f} tw xs)
+                 (dit {double' n} {f} tw (PDouble n prec) xs)
+             = eqInd2 {_} {_} {_} {eqForHalves n {ZZ} _ _ (dft (double' n) {f} tw xs)
                                      (eqDitRecLower {n} {f} tw xs es os prfEven prfOdd)
                                      (eqDitRecUpper {n} {f} tw xs es os prfEven prfOdd)
                                   }
                  {\h => Equal (Vect (double' n) ZZ)
                           h
-                          (dit {double' n} {f} tw prec xs)
+                          (dit {double' n} {f} tw (PDouble n prec) xs)
                  } h5
-      in _
+      in h6

@@ -35,7 +35,7 @@ checkUndefineds
                                       (MkGlobalDef type (PMDef args treeCT _ _) _) => pure ()
                                       (MkGlobalDef type (DCon tag arity) _)        => pure ()
                                       (MkGlobalDef type (TCon x tag arity cons) _) => pure ()
-                                      (MkGlobalDef type _ _) => throw $ GenericMsg $ "Entry in context doesn't have a definition: " ++ show n
+                                      (MkGlobalDef type _ _) => throw $ GenericMsg $ "Entry in context doesn't have a definition: " ++ show n ++ " : " ++ show type
                           )
 
 export

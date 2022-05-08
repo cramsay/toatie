@@ -275,6 +275,60 @@ pat n, m, a, l, ls, rs, y, ys, prfLs, prfRs =>
                     (VCons {_} {_} h ys)}
            (eqCong {_} {_} {VCons {_} {_} l} {_} {_} rec)
 
+initDoubles : {a : Type} -> (n : Nat) -> (xs : Vect (S (double' n)) a) -> Vect (double' n) a
+pat a, x =>
+  initDoubles {a} Z [x] = []
+pat a, n, x, y, xs =>
+  initDoubles {a} (S n) (VCons {_} {_} x (VCons {_} {_} y xs))
+    = (VCons {_} {_} x (VCons {_} {_} y (initDoubles {a} n xs)))
+
+lemmaConsInit : {a : Type} -> (n : Nat) ->
+                (x, y : a) ->
+                (xs : Vect (S (double' n)) a) ->
+                Equal (Vect (double' (S n)) a)
+                  (VCons {_} {_} x (VCons {_} {_} y (initDoubles {_} n xs)))
+                  (initDoubles {_} (S n) (VCons {_} {_} x (VCons {_} {_} y xs)))
+pat a, x, y, z =>
+  lemmaConsInit {a} Z x y [z] = Refl {_} {_}
+pat a, n, x, y, z, zs =>
+  lemmaConsInit {a} (S n) x y (VCons {_} {_} z zs)
+    = Refl {_} {_}
+
+lemmaInitWeaken : 
+  {a : Type} ->
+  (n : Nat) ->
+  (ys : Vect (S (double' n)) a) ->
+  (i : Fin (double' n)) ->
+  Equal a (at {a} {_} i (initDoubles {a} n ys))
+          (at {a} {_} (finWeaken {_} i) ys)
+pat a, n, x, y, xs =>
+  lemmaInitWeaken {a} (S n) (VCons {_} {_} x (VCons {_} {_} y xs)) (FZ _)
+    = Refl {_} {_}
+pat a, n, x, y, xs =>
+  lemmaInitWeaken {a} (S n) (VCons {_} {_} x (VCons {_} {_} y xs)) (FS _ (FZ _))
+    = Refl {_} {_}
+pat a, n, x, y, xs, i =>
+  lemmaInitWeaken {a} (S n) (VCons {_} {_} x (VCons {_} {_} y xs)) (FS _ (FS _ i))
+    = lemmaInitWeaken {a} n xs i
+
+lemmaConsInitWeaken : 
+  {a : Type} ->
+  (n : Nat) ->
+  (y : a) ->
+  (ys : Vect (S (double' n)) a) ->
+  (i : Fin (S (double' n))) ->
+  Equal a (at {a} {_} i (VCons {_} {_} y (initDoubles {a} n ys)))
+          (at {a} {_} (finWeaken {_} i) (VCons {_} {_} y ys))
+pat a, n, head, x =>
+  lemmaConsInitWeaken {a} 0 head [x] (FZ _)
+    = Refl {_} {_}
+pat a, n, head, x, y, xs =>
+  lemmaConsInitWeaken {a} (S n) head (VCons {_} {_} x (VCons {_} {_} y xs)) (FZ _)
+    = Refl {_} {_}
+pat a, n, head, xs, i =>
+  lemmaConsInitWeaken {a} (S n) head xs (FS _ i)
+    = lemmaInitWeaken {a} (S n) xs i
+
 lemmaHalvesNextPrfL :
   {a : Type} ->
   (n : Nat) ->
@@ -297,7 +351,7 @@ lemmaHalvesNextPrfL :
 pat a, l1, l2, r1, y1, y2, y3, y4, ys, prfLs, prfRs =>
   lemmaHalvesNextPrfL {a} Z l1 l2 [] r1 y1 y2 y3 y4 ys prfLs prfRs (FZ 0) = prfRs
 
-pat a, n, l1, l2, lhead, ls, r1, r2, rs, y1, y2, y3, y4, ys, prfLs, prfRs =>
+pat a, n, l1, l2, lhead, ls, r1, y1, y2, y3, y4, ys, prfLs, prfRs =>
   lemmaHalvesNextPrfL {a} (S n) l1 l2 (VCons {_} {_} lhead ls) r1 y1 y2 y3 y4 ys prfLs prfRs (FZ (S n))
     = prfLs (FS _ (FS _ (FZ _)))
 
@@ -305,43 +359,19 @@ pat a, l1, l2, l3, r1, y1, y2, y3, y4, y5, y6, prfLs prfRs =>
   lemmaHalvesNextPrfL {a} 1 l1 l2 [l3] r1 y1 y2 y3 y4 [y5, y6] prfLs prfRs (FS 1 (FZ 0))
     = prfRs
 
-pat a, n, l1, l2, l3, l4, ls, r1, y1, y2, y3, y4, ys, prfLs, prfRs, fin =>
-  lemmaHalvesNextPrfL {a} (S (S n)) l1 l2 (VCons {_} {_} l3 (VCons {_} {_} l4 ls)) r1 y1 y2 y3 y4 ys prfLs prfRs (FS _ (FS (S n) fin))
-    = let rec = lemmaHalvesNextPrfL {a} n l3 l4 ls r1 _ _ _ _ _ _ (prfRs) fin
-      in _
-
-{-
-pat a, n, l1, l2, l3, l4, ls, r1, r2, r3, r4, rs, y1, y2, y3, y4, y5, y6, ys, prfLs prfRs, fin =>
-  lemmaHalvesNextPrfL {a} (S (S n)) l1 l2 (VCons {_} {_} l3 (VCons {_} {_} l4 ls))
-                                    r1 r2 (VCons {_} {_} r3 (VCons {_} {_} r4 rs))
-                                    y1 y2 y3 y4 (VCons {_} {_} y5 (VCons {_} {_} y6 ys))
+pat a, n, l1, l2, l3, ls, r1, y1, y2, y3, y4, y5, ys, prfLs prfRs, fin =>
+  lemmaHalvesNextPrfL {a} (S (S n)) l1 l2 (VCons {_} {_} l3 ls)
+                                    r1
+                                    y1 y2 y3 y4 (VCons {_} {_} y5 ys)
                                     prfLs prfRs (FS (S (S n)) (FS (S n) fin))
-    = let nextl = \i : Fin (S (S (S n))) => prfLs (FS _ i)
-          h1 = lemmaHalvesNextPrfL {a} (S n) l3 l4 (snoc {_} {_} ls r1) r2 r3 (VCons {_} {_} r4 rs) y3 y4 y5 y6 ys _ (\i => prfRs (FS _ i)) (FS (S n) fin) -- (\i => prfLs (FS _ i)) (\i => prfRs (FS _ i)) (FS (S n) fin)
-      in _
-      -}
-
-{-
-(Equal a (at {a} {(S (S (S n)))} i (VCons {a} {(S (S n))} l2 (VCons {a} {(S n)} l3 (VCons {a} {n} l4 ls)))) (at {a} {(S (S (S (S (S (S (S (double' n))))))))} (finWeaken {(S (S (S (S (S (S (double' n)))))))} (finWeakenToDouble (S (S (S n))) i)) (VCons {a} {(S (S (S (S (S (S (double' n)))))))} y2 (VCons {a} {(S (S (S (S (S (double' n))))))} y3 (VCons {a} {(S (S (S (S (double' n)))))} y4 (VCons {a} {(S (S (S (double' n))))} y5 (VCons {a} {(S (S (double' n)))} y6 ys))))))))
-i: (Fin (S (S (S n))))
---------------------------------
-(Equal a (at {a} {(S (S (S n)))} i (VCons {a} {(S (S n))} l3 (VCons {a} {(S n)} l4 (snoc {n} {a} ls r1)))) (at {a} {(S (S (S (S (S (S (double' n)))))))} (finWeakenToDouble (S (S (S n))) i) (VCons {a} {(S (S (S (S (S (double' n))))))} y3 (VCons {a} {(S (S (S (S (double' n)))))} y4 (VCons {a} {(S (S (S (double' n))))} y5 (VCons {a} {(S (S (double' n)))} y6 ys))))))
-
-
-
-Ref PrfL is
-(Equal a (at {a} {(S (S (S n)))} i
-             (VCons {a} {(S (S n))} l3 (VCons {a} {(S n)} l4 (snoc {n} {a} ls r1))))
-         (at {a} {(S (S (S (S (S (S (double' n)))))))} (finWeakenToDouble (S (S (S n))) i)
-             (VCons {a} {(S (S (S (S (S (double' n))))))} y3 (VCons {a} {(S (S (S (S (double' n)))))} y4 (VCons {a} {(S (S (S (double' n))))} y5 (VCons {a} {(S (S (double' n)))} y6 ys))))))
-
-(Equal a (at {a} {(S (S (S n)))} i
-             (VCons {a} {(S (S n))} l2 (VCons {a} {(S n)} l3 (VCons {a} {n} l4 ls))))
-         (at {a} {(S (S (S (S (S (S (S (double' n))))))))} (finWeaken {(S (S (S (S (S (S (double' n)))))))} (finWeakenToDouble (S (S (S n))) i))
-             (VCons {a} {(S (S (S (S (S (S (double' n)))))))} y2 (VCons {a} {(S (S (S (S (S (double' n))))))} y3 (VCons {a} {(S (S (S (S (double' n)))))} y4 (VCons {a} {(S (S (S (double' n))))} y5 (VCons {a} {(S (S (double' n)))} y6 ys))))))))
-
-
--}
+    = let recLs = \i : Fin (S (S (S n)))  => eqSym {_} {_} {_} (lemmaInitWeaken {a} (S (S (S  n))) (VCons {_} {_} y2 (VCons {_} {_} y3 (VCons {_} {_} y4 (VCons {_} {_} y5 ys)))) (finWeakenToDouble _ i))
+          recLs' = \i => eqTrans {_} {_} {_} {_} (prfLs (FS _i)) (recLs i)
+          recRs = eqSym {_} {_} {_} (lemmaInitWeaken {a} (S (S n)) (VCons {_} {_} y4 (VCons {_} {_} y5  ys)) (finWeaken {_} (finWeaken {_} (finPlusBound (S n) (FZ n)))))
+          recRs' = eqTrans {_} {_} {_} {_} prfRs recRs
+          h1 = lemmaHalvesNextPrfL {a} (S n) l2 l3 ls r1 y2 y3 y4 y5 (initDoubles {_} (S n) ys) recLs' recRs' (FS (S n) fin)
+          recH1 = lemmaConsInitWeaken {a} (S n) y5 ys (finWeaken {_} (finWeakenToDouble (S n) fin))
+          ans = eqTrans {_} {_} {_} {_} h1 recH1
+      in ans
 
 eqForHalves : (n : Nat) -> {a : Type} ->
               (ls, rs : Vect n a) ->
