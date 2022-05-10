@@ -150,3 +150,25 @@ pat n, fin =>
     = eqInd2 {_} {_} {_} {plusSuccRightSucc (finToNat {_} fin) (finToNat {_} fin)}
         {\h => Equal Nat (S (S h)) (S (S (finToNat {_} (finSuccDouble' {_} fin))))}
         (eqCong {_} {_} {\x => S (S x)} {_} {_} (eqFinSuccDoubleVal {_} fin))
+
+eqFinWeakenVal :
+  {n : Nat} -> (i : Fin n) ->
+  Equal Nat (finToNat {_} i) (finToNat {_} (finWeaken {_} i))
+pat n =>
+  eqFinWeakenVal {S n} (FZ n) = Refl {_} {_}
+pat n, i =>
+  eqFinWeakenVal {S (S n)} (FS (S n) i)
+    = eqCong {_} {_} {S} {_} {_} (eqFinWeakenVal {S n} i)
+
+eqFinWeakenToDoubleVal :
+  {n : Nat} -> (i : Fin n) ->
+  Equal Nat (finToNat {_} i) (finToNat {_} (finWeakenToDouble _ i))
+pat n =>
+  eqFinWeakenToDoubleVal {S n} (FZ n) = Refl {_} {_}
+pat n, i =>
+  eqFinWeakenToDoubleVal {S (S n)} (FS (S n) i)
+    = let rec = eqCong {_} {_} {S} {_} {_} (eqFinWeakenToDoubleVal {S n} i)
+      in eqInd2 {_} {_} {_} {eqFinWeakenVal {double' (S n)} (finWeakenToDouble (S n) i)}
+           {\h => Equal Nat (S (finToNat {_} i))
+                            (S h)
+           } rec

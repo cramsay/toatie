@@ -606,3 +606,10 @@ pat l, c, r =>
           h4 = eqInd2 {_} {_} {_} {multCommutativeZ r c}
                  {\h => Equal ZZ (multZ (plusZ l c) r) (plusZ (multZ l r) h)} h3
       in h4
+
+multNeg1LeftIsNegateZ : (x : ZZ) -> Equal ZZ (multZ (NegS 0) x) (negateZ x)
+multNeg1LeftIsNegateZ (Pos 0) = Refl {_} {_}
+pat x =>
+  multNeg1LeftIsNegateZ (Pos (S x)) = eqCong {_} {_} {NegS} {_} {_} (plusZeroRightNeutral x)
+pat x =>
+  multNeg1LeftIsNegateZ (NegS x) = eqCong {_} {_} {\x => Pos (S x)} {_} {_} (plusZeroRightNeutral x)

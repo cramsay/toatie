@@ -130,5 +130,9 @@ pat k, n', lteN, nz =>
                                                                        (oscilate (double k) (double (S (S (S n')))))
                                                              } n' lteN
 
+prfHalfMinus1 : (nBy2 : Nat) -> Equal Nat (plus nBy2 nBy2) 2 -> Equal ZZ (oscilate nBy2 2) (NegS 0)
+prfHalfMinus1 Z (Refl {_} {_}) impossible
+prfHalfMinus1 1 (Refl {_} {_}) = Refl {_} {_}
+
 twOscil2 : Twiddles oscilate 2
-twOscil2 = MkTwiddles oscilate 2 (SIsNonZero 1) (Refl {_} {_}) (Refl {_} {_}) prfTw2Pow prfTw2Scale
+twOscil2 = MkTwiddles oscilate 2 (SIsNonZero 1) (Refl {_} {_}) (Refl {_} {_}) prfHalfMinus1 prfTw2Pow prfTw2Scale

@@ -460,7 +460,7 @@ mapReducesZipWith :
   (xs : Vect n a) ->
   (ys : Vect n c) ->
   Equal (Vect n d) (zipWith n {_} {_} {_} fzip (map n {_} {_} fmap xs) ys)
-                   (zipWith n {_} {_} {_} (\j => \k => fzip (fmap j) k) xs ys)
+                   (zipWith n {_} {_} {_} (\j' => \k' => fzip (fmap j') k') xs ys)
 pat a, b, c, d, fmap, fzip =>
   mapReducesZipWith Z a b c d fmap fzip [] [] = Refl {_} {_}
 pat n, a, b, c, d, fmap, fzip, x, xs, y, ys =>
@@ -518,6 +518,91 @@ pat a, n, o, os, x, y, rest, prf =>
 pat a, n, o, os, x, y, rest, prf, fin =>
   atOddIndex {a} (S (S n)) (VCons {_} {_} o os) (VCons {_} {_} x (VCons {_} {_} y rest)) prf (FS (S n) fin)
     = atOddIndex {a} (S n) os rest (tailsEqual {a} (S n) y o (odds (S n) {a} rest) os prf) fin
+
+zipWithCommutesEvens :
+  {a,b,c : Type} ->
+  (n : Nat) ->
+  (f : a -> b -> c) ->
+  (xs : Vect (double' n) a) ->
+  (ys : Vect (double' n) b) ->
+  Equal (Vect n c)
+    (zipWith n {_} {_} {_} f (evens n {a} xs) (evens n {b} ys))
+    (evens n {c} (zipWith (double' n) {_} {_} {_} f xs ys))
+pat a, b, c, f =>
+  zipWithCommutesEvens {a} {b} {c} Z f [] [] = Refl {_} {_}
+pat a, b, c, n, f x1, x2, xs, y1, y2, ys =>
+  zipWithCommutesEvens {a} {b} {c} (S n) f (VCons {_} {_} x1 (VCons {_} {_} x2 xs))
+                                           (VCons {_} {_} y1 (VCons {_} {_} y2 ys))
+    = eqCong {_} {_} {VCons {_} {_} (f x1 y1)} {_} {_}
+        (zipWithCommutesEvens {a} {b} {c} n f xs ys)
+
+atEvenIndices : (n : Nat) ->
+                  (i : Fin n) ->
+                  Equal (Fin (double' n))
+                    (at {_} {_} i (map n {_} {_} (finDouble' {n}) (indices n)))
+                    (at {_} {_} i (evens n  {_} (indices (double' n))))
+pat n, i =>
+  atEvenIndices n i =
+    let h1 = Refl {_} {at {_} {_} (finDouble' {n} i) (indices (double' n))}
+        h2 = eqInd2 {_} {_} {_} {atIndicesNeutral (double' n) (finDouble' {n} i)}
+               {\h => Equal (Fin (double' n))
+                        h
+                        (at {_} {_} (finDouble' {n} i) (indices (double' n)))
+               } h1
+        h3 = eqInd2 {_} {_} {_} {atEvenIndex {Fin (double' n)} n (evens n {_} (indices (double' n))) (indices (double' n)) (Refl {_} {_}) i}
+               {\h => Equal (Fin (double' n))
+                        (finDouble' {n} i)
+                        h
+               } h2
+
+        g1 = Refl {_} {at {_} {_} i (map n {_} {_} (finDouble' {n}) (indices n))}
+        g2 = eqInd2 {_} {_} {_} {atCommutesMap n {_} {_} i (finDouble' {n}) (indices n)}
+               {\h => Equal (Fin (double' n))
+                        (at {_} {_} i (map n {_} {_} (finDouble' {n}) (indices n)))
+                        h
+               } g1
+        g3 = eqInd2 {_} {_} {_} {atIndicesNeutral n i}
+               {\h => Equal (Fin (double' n))
+                        (at {_} {_} i (map n {_} {_} (finDouble' {n}) (indices n)))
+                        (finDouble' {n} h)
+               } g2
+
+    in eqTrans {_} {_} {_} {_} g3 h3
+                                   
+atOddIndices : (n : Nat) ->
+                  (i : Fin n) ->
+                  Equal (Fin (double' n))
+                    (at {_} {_} i (map n {_} {_} (finSuccDouble' {n}) (indices n)))
+                    (at {_} {_} i (odds n  {_} (indices (double' n))))
+pat n, i =>
+  atOddIndices n i =
+    let h1 = Refl {_} {at {_} {_} (finSuccDouble' {n} i) (indices (double' n))}
+        h2 = eqInd2 {_} {_} {_} {atIndicesNeutral (double' n) (finSuccDouble' {n} i)}
+               {\h => Equal (Fin (double' n))
+                        h
+                        (at {_} {_} (finSuccDouble' {n} i) (indices (double' n)))
+               } h1
+        h3 = eqInd2 {_} {_} {_} {atOddIndex {Fin (double' n)} n (odds n {_} (indices (double' n))) (indices (double' n)) (Refl {_} {_}) i}
+               {\h => Equal (Fin (double' n))
+                        (finSuccDouble' {n} i)
+                        h
+               } h2
+
+        g1 = Refl {_} {at {_} {_} i (map n {_} {_} (finSuccDouble' {n}) (indices n))}
+        g2 = eqInd2 {_} {_} {_} {atCommutesMap n {_} {_} i (finSuccDouble' {n}) (indices n)}
+               {\h => Equal (Fin (double' n))
+                        (at {_} {_} i (map n {_} {_} (finSuccDouble' {n}) (indices n)))
+                        h
+               } g1
+        g3 = eqInd2 {_} {_} {_} {atIndicesNeutral n i}
+               {\h => Equal (Fin (double' n))
+                        (at {_} {_} i (map n {_} {_} (finSuccDouble' {n}) (indices n)))
+                        (finSuccDouble' {n} h)
+               } g2
+
+    in eqTrans {_} {_} {_} {_} g3 h3
+                                   
+
 
 eqForEvens : (n : Nat) -> {a : Type} ->
              (es : Vect n a) ->

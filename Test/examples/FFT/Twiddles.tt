@@ -15,6 +15,9 @@ data Twiddles : (f : Nat -> Nat -> ZZ) -> (n : Nat) -> Type where
                -- ^ function to generate twiddle factors
                (prfMZeroOne : Equal ZZ (f 0 n) (Pos 1)) ->
                (prfMNOne    : Equal ZZ (f n n) (Pos 1)) ->
+               (prfMHalf    : (nBy2 : Nat) ->
+                              Equal Nat (plus nBy2 nBy2) n ->
+                              Equal ZZ (f nBy2 n) (NegS 0)) ->
                (prfPow      : (k, m, n' : Nat) ->
                               LTE n' n ->
                               NonZero n' ->
@@ -29,34 +32,43 @@ data Twiddles : (f : Nat -> Nat -> ZZ) -> (n : Nat) -> Type where
 
 -- Prove that we can always half N in our twiddle factors to get a new set of factors
 
+lemmaDoubleNatEq : (a, b : Nat) -> Equal Nat a b -> Equal Nat (plus a a) (double' b)
+pat a, b, prf =>
+  lemmaDoubleNatEq a b prf
+    = let h1 = eqCong {_} {_} {double'} {_} {_} prf
+      in eqInd2 {_} {_} {_} {eqSym {_} {_} {_} (eqDoublePlusSelf a)}
+           {\h => Equal Nat h (double' b)} h1
+
 halfTwiddles : {f : Nat -> Nat -> ZZ} -> {n : Nat} -> Twiddles f (double' n) -> Twiddles f n
-pat f, p1, p2, p3, p4 =>
-  halfTwiddles {f} {Z} (MkTwiddles f Z (SIsNonZero _) p1 p2 p3 p4) impossible
-pat f, n, nz, p1, p2, p3, p4 =>
-  halfTwiddles {f} {S n} (MkTwiddles f _ nz p1 p2 p3 p4)
-    = let p4Double = \k => eqInd2 {_} {_} {_} {eqDoublePlusSelf (S n)}
+pat f, p1, p2, p3, p4, p5 =>
+  halfTwiddles {f} {Z} (MkTwiddles f Z (SIsNonZero _) p1 p2 p3 p4 p5) impossible
+pat f, n, nz, p1, p2, p3, p4, p5 =>
+  halfTwiddles {f} {S n} (MkTwiddles f _ nz p1 p2 p3 p4 p5)
+    = let p5Double = \k => eqInd2 {_} {_} {_} {eqDoublePlusSelf (S n)}
                               {\h => Equal ZZ (f k (S n)) (f (plus k k) h)}
-                              (p4 k (S n) (lteDoubleRight (S n)) (SIsNonZero n))
-          p1' = eqInd2 {_} {_} {_} {eqSym {_} {_} {_} (p4Double 0)}
+                              (p5 k (S n) (lteDoubleRight (S n)) (SIsNonZero n))
+          p1' = eqInd2 {_} {_} {_} {eqSym {_} {_} {_} (p5Double 0)}
                      {\h => Equal ZZ h (Pos 1)} p1
-          p2' = eqInd2 {_} {_} {_} {eqSym {_} {_} {_} (p4Double (S n))}
+          p2' = eqInd2 {_} {_} {_} {eqSym {_} {_} {_} (p5Double (S n))}
                      {\h => Equal ZZ h (Pos 1)}
                      (eqInd2 {_} {_} {_} {eqSym {_} {_} {_} (eqDoublePlusSelf (S n))}
                         {\h => Equal ZZ (f h (double' (S n))) (Pos 1)}
                         p2)
-          p3' = \k => \m => \n' => \lteN => \nz =>
-                   p3 k m n' (eqInd2 {_} {_} {_} {eqDoublePlusSelf (S n)}
+          p3' = \nBy2 => \prf => eqInd2 {_} {_} {_} {eqSym {_} {_} {_} (p5Double nBy2)}
+                     {\h => Equal ZZ h (NegS 0)} (p3 (plus nBy2 nBy2) (lemmaDoubleNatEq (plus nBy2 nBy2) (S n) prf))
+          p4' = \k => \m => \n' => \lteN => \nz =>
+                   p4 k m n' (eqInd2 {_} {_} {_} {eqDoublePlusSelf (S n)}
                                 {\h => LTE n' h} (lteWeakenN n' (S n) lteN (S n))) nz
-          p4' = \k => \n' => \lteN => \nz =>
-                   p4 k n' (eqInd2 {_} {_} {_} {eqDoublePlusSelf (S n)}
+          p5' = \k => \n' => \lteN => \nz =>
+                   p5 k n' (eqInd2 {_} {_} {_} {eqDoublePlusSelf (S n)}
                                 {\h => LTE n' h} (lteWeakenN n' (S n) lteN (S n))) nz
-      in MkTwiddles f (S n) (SIsNonZero n) p1' p2' p3' p4'
+      in MkTwiddles f (S n) (SIsNonZero n) p1' p2' p3' p4' p5'
 
 -- Generate a single twiddle factor of the form w^{km}_n
 
 twiddle : {f : Nat -> Nat -> ZZ} -> {n : Nat} -> Twiddles f n -> (k, m : Nat) -> ZZ
-pat f, n, k, m, nz, p1, p2, p3, p4 =>
-  twiddle {f} {n} (MkTwiddles f n nz p1 p2 p3 p4) k m = f (mul k m) n
+pat f, n, k, m, nz, p1, p2, p3, p4, p5 =>
+  twiddle {f} {n} (MkTwiddles f n nz p1 p2 p3 p4 p5) k m = f (mul k m) n
 
 -- Generate a row of twiddle factors
 -- Returns w^{km}_n for all m <- [0 .. M-1]
@@ -110,31 +122,31 @@ lemmaHalfTwiddleScale :
   (k, i : Fin n) ->
   Equal ZZ (twiddle {f} {n} (halfTwiddles {f} {n} tw) (finToNat {n} k) (finToNat {n} i))
            (twiddle {f} {double' n} tw (double (finToNat {n} k)) (finToNat {n} i))
-pat f, n, nz, p1, p2, p3, p4, nz', p1', p2', p3', p4', prf, k, i =>
-  lemmaHalfTwiddleScale {f} n (MkTwiddles f (double' n) nz p1 p2 p3 p4) (MkTwiddles f n nz' p1' p2' p3' p4') prf k i
-    = let h1 : Equal ZZ (twiddle {f} {n} (halfTwiddles {f} {n} (MkTwiddles f (double' n) nz p1 p2 p3 p4))
+pat f, n, nz, p1, p2, p3, p4, p5, nz', p1', p2', p3', p4', p5', prf, k, i =>
+  lemmaHalfTwiddleScale {f} n (MkTwiddles f (double' n) nz p1 p2 p3 p4 p5) (MkTwiddles f n nz' p1' p2' p3' p4' p5') prf k i
+    = let h1 : Equal ZZ (twiddle {f} {n} (halfTwiddles {f} {n} (MkTwiddles f (double' n) nz p1 p2 p3 p4 p5))
                                  (finToNat {n} k) (finToNat {n} i))
-                        (twiddle {f} {n} (MkTwiddles f n nz' p1' p2' p3' p4')
+                        (twiddle {f} {n} (MkTwiddles f n nz' p1' p2' p3' p4' p5')
                                  (finToNat {n} k)  (finToNat {n} i))
              = eqInd2 {_} {_} {_} {prf}
-                 {\h => Equal ZZ (twiddle {f} {n} (halfTwiddles {f} {n} (MkTwiddles f (double' n) nz p1 p2 p3 p4))
+                 {\h => Equal ZZ (twiddle {f} {n} (halfTwiddles {f} {n} (MkTwiddles f (double' n) nz p1 p2 p3 p4 p5))
                                           (finToNat {n} k)  (finToNat {n} i))
                                  (twiddle {f} {n} h (finToNat {n} k)  (finToNat {n} i))}
                  (Refl {_} {_})
           h2 = eqInd2 {_} {_} {_} {
-                   p4 (mul (finToNat {n} k) (finToNat {n} i)) n (lteDoubleRight n) nz'
+                   p5 (mul (finToNat {n} k) (finToNat {n} i)) n (lteDoubleRight n) nz'
                  }
-                 {\h => Equal ZZ (twiddle {f} {n} (halfTwiddles {f} {n} (MkTwiddles f (double' n) nz p1 p2 p3 p4))
+                 {\h => Equal ZZ (twiddle {f} {n} (halfTwiddles {f} {n} (MkTwiddles f (double' n) nz p1 p2 p3 p4 p5))
                                           (finToNat {n} k)  (finToNat {n} i))
                                  h}
                  h1
           h3 = eqInd2 {_} {_} {_} {eqSym {_} {_} {_} (mulDistributesOverPlusLeft (finToNat {n} k) (finToNat {n} k) (finToNat {n} i))}
-                 {\h => Equal ZZ (twiddle {f} {n} (halfTwiddles {f} {n} (MkTwiddles f (double' n) nz p1 p2 p3 p4))
+                 {\h => Equal ZZ (twiddle {f} {n} (halfTwiddles {f} {n} (MkTwiddles f (double' n) nz p1 p2 p3 p4 p5))
                                           (finToNat {n} k)  (finToNat {n} i))
                                  (f h (plus n n))}
                  h2
       in eqInd2 {_} {_} {_} {eqDoublePlusSelf n}
-           {\h => Equal ZZ (twiddle {f} {n} (halfTwiddles {f} {n} (MkTwiddles f (double' n) nz p1 p2 p3 p4))
+           {\h => Equal ZZ (twiddle {f} {n} (halfTwiddles {f} {n} (MkTwiddles f (double' n) nz p1 p2 p3 p4 p5))
                                     (finToNat {n} k)  (finToNat {n} i))
                            (f (mul (plus (finToNat {n} k) (finToNat {n} k)) (finToNat {n} i)) h)}
            h3
@@ -160,3 +172,55 @@ pat f, n, tw, k =>
            (twiddleRow {f} n (halfTwiddles {f} {n} tw) (finToNat {n} k) n)
            (twiddleRow {f} (double' n) tw (double (finToNat {n} k)) n)
            h2
+
+lemmaPlusNsNeutralTw : {f : Nat -> Nat -> ZZ} -> {n : Nat} -> (k,c : Nat) -> Twiddles f n ->
+                     Equal ZZ
+                       (f k n)
+                       (f (plus k (mul c n)) n)
+pat f, n, k, nz, p1, p2, p3, p4, p5 =>
+  lemmaPlusNsNeutralTw {f} {n} k Z (MkTwiddles f n nz p1 p2 p3 p4 p5)
+    = eqInd2 {_} {_} {_} {plusZeroRightNeutral k}
+        {\h => Equal ZZ
+                 (f h n)
+                 (f (plus k 0) n)} (Refl {_} {_})
+pat f, n, k, c, nz, p1, p2, p3, p4, p5 =>
+  lemmaPlusNsNeutralTw {f} {n} k (S c) (MkTwiddles f n nz p1 p2 p3 p4 p5)
+    = let -- Ignore these steps and just use p4 to split up the f calls
+          h1 = eqInd2 {_} {_} {_} {eqSym {_} {_} {_} (
+                   p4 k (plus n (mul c n)) n (lteRefl n) nz
+                 )}
+                 {\h => Equal ZZ
+                          h
+                          (f (plus k (plus n (mul c n))) n)}
+                 (Refl {_} {_})
+          h2 = eqInd2 {_} {_} {_} {eqSym {_} {_} {_} (
+                   p4 n (mul c n) n (lteRefl n) nz
+                 )}
+                 {\h => Equal ZZ
+                          (multZ (f k n) h)
+                          (f (plus k (plus n (mul c n))) n)}
+                 h1
+          h3 = eqInd2 {_} {_} {_} {p2}
+                 {\h => Equal ZZ
+                          (multZ (f k n) (multZ h (f (mul c n) n)))
+                          (f (plus k (plus n (mul c n))) n)}
+                 h2
+          h4 = eqInd2 {_} {_} {_} {multOneLeftNeutralZ (f (mul c n) n)}
+                 {\h => Equal ZZ
+                          (multZ (f k n) h)
+                          (f (plus k (plus n (mul c n))) n)}
+                 h3
+          h5 = eqInd2 {_} {_} {_} {
+                   p4 k (mul c n) n (lteRefl n) nz
+                 }
+                 {\h => Equal ZZ
+                          h
+                          (f (plus k (plus n (mul c n))) n)}
+                 h4
+          h6 = eqInd2 {_} {_} {_} {eqSym {_} {_} {_} (lemmaPlusNsNeutralTw {f} {n} k c (MkTwiddles f n nz p1 p2 p3 p4 p5))}
+                 {\h => Equal ZZ
+                          h
+                          (f (plus k (plus n (mul c n))) n)}
+                 h5
+      in h6
+                    
