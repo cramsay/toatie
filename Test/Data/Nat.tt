@@ -131,3 +131,8 @@ clog2 Z = Z
 clog2 1 = Z
 pat n =>
   clog2 (S n) = S (flog2 n)
+
+-- Witness that a `Nat` is a power of two
+data Pow2 : Nat -> Type where
+  POne : Pow2 1
+  PDouble : (n : Nat) -> Pow2 n -> Pow2 (double' n)

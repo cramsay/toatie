@@ -1,0 +1,95 @@
+import Data.Nat
+import Data.Signed
+import Data.Vect_ -- This version of Vect is a parameter type, so we can have types who depend on its values
+import Proofs
+
+-- A heterogeneous vector to hold a collection of signed numbers with different
+-- type-level natural number encodings
+
+simple HWords : (w : Nat) -> (n: Nat) -> Vect n ZZ -> Type where
+  HNil : {w : Nat} -> HWords w 0 []
+  HCons : {w, n : Nat} ->
+          {val : ZZ} ->
+          {vals : Vect n ZZ} ->
+          Signed w val ->
+          HWords w n vals ->
+          HWords w (S n) (VCons {ZZ} {n} val vals)
+
+evensH : (w, n  : Nat) -> (xs : Vect (double' n) ZZ) ->
+         < HWords w (double' n) xs > ->
+         < HWords w n (evens n {ZZ} xs) >
+pat w, bs =>
+  evensH w Z [] bs = [| HNil {w} |]
+pat w, n, x1, x2, xs, b1, b2, bs =>
+  evensH w (S n) (VCons {_} {_} x1 (VCons {_} {_} x2 xs))
+                 [| HCons {w} {_} {_} {_} b1 (HCons {w} {_} {_} {_} b2 bs) |]
+    = [| HCons {w} {_} {_} {_} b1 ~(evensH w n xs [| bs |]) |]
+
+oddsH : (w, n  : Nat) -> (xs : Vect (double' n) ZZ) ->
+         < HWords w (double' n) xs > ->
+         < HWords w n (odds n {ZZ} xs) >
+pat w, bs =>
+  oddsH w Z [] bs = [| HNil {w} |]
+pat w, n, x1, x2, xs, b1, b2, bs =>
+  oddsH w (S n) (VCons {_} {_} x1 (VCons {_} {_} x2 xs))
+                 [| HCons {w} {_} {_} {_} b1 (HCons {w} {_} {_} {_} b2 bs) |]
+    = [| HCons {w} {_} {_} {_} b2 ~(oddsH w n xs [| bs |]) |]
+
+
+zipWithH : (w, n  : Nat) ->
+           (xs, ys : Vect n ZZ) ->
+           (fnW : Nat -> Nat) ->
+           (fnV : ZZ -> ZZ -> ZZ) ->
+           (fn : (w' : Nat) -> (x',y' : ZZ) ->
+                 < Signed w' x' > ->
+                 < Signed w' y' > ->
+                 < Signed (fnW w') (fnV x' y') >) ->
+           < HWords w n xs > ->
+           < HWords w n ys > ->
+           < HWords (fnW w) n (zipWith n {_} {_} {_} fnV xs ys) >
+           
+pat w, fnW, fnV, fn, bx, by =>
+  zipWithH w Z [] [] fnW fnV fn bx by = [| HNil {fnW w} |]
+
+pat w, n, x, xs, y, ys, fnW, fnV, fn, bx, bxs, by, bys =>
+  zipWithH w (S n) (VCons {_} {_} x xs) (VCons {_} {_} y ys) fnW fnV fn
+           [| HCons {w} {_} {_} {_} bx bxs |]
+           [| HCons {w} {_} {_} {_} by bys |]
+    = [| let head = ~(fn w x y [|bx|] [|by|])
+             tail = ~(zipWithH w n xs ys fnW fnV fn [|bxs|] [|bys|])
+         in HCons {_} {_} {_} {_} head tail 
+      |]
+
+snocH : (w, n  : Nat) ->
+        (xs : Vect n ZZ) ->
+        (x : ZZ) ->
+        < HWords w n xs > ->
+        < Signed w x > ->
+        < HWords w (S n) (snoc {_} {_} xs x) >
+pat w, x, bs, b =>
+  snocH w Z [] x bs b = [| HCons {_} {_} {_} {_} ~b (HNil {_}) |]
+pat w, n, x, xs, x', b, bs, b' =>
+  snocH w (S n) (VCons {_} {_} x xs)  x' [| HCons {_} {_} {_} {_} b bs |] b'
+    = [| HCons {_} {_} {_} {_} b ~(snocH w n xs x' [|bs|] b') |]
+
+appendHalvesH : (w, n  : Nat) ->
+                (xs, ys : Vect n ZZ) ->
+                < HWords w n xs > ->
+                < HWords w n ys > ->
+                < HWords w (double' n) (appendHalves {_} {_} xs ys) >
+pat w, bx, by =>
+  appendHalvesH w Z [] [] bx by = [| HNil {w} |]
+pat w, x, y, bx, by =>
+  appendHalvesH w 1 [x] [y]
+           [| HCons {w} {_} {_} {_} bx (HNil {_}) |]
+           [| HCons {w} {_} {_} {_} by (HNil {_}) |]
+    = [| HCons {_} {_} {_} {_} bx (HCons {_} {_} {_} {_} by (HNil {_})) |]
+pat w, n, x1, x2, xs, y1, y2, ys, bx1, bx2, bxs, by1, by2, bys =>
+  appendHalvesH w (S (S n)) (VCons {_} {_} x1 (VCons {_} {_} x2 xs)) (VCons {_} {_} y1 (VCons {_} {_} y2 ys))
+           [| HCons {w} {_} {_} {_} bx1 (HCons {_} {_} {_} {_} bx2 bxs) |]
+           [| HCons {w} {_} {_} {_} by1 (HCons {_} {_} {_} {_} by2 bys) |]
+    = [| let bxs' = ~(snocH _ _ xs y1 [|bxs|] [|by1|])
+             bys' = HCons {w} {_} {_} {_} by2 bys
+             rec  = ~(appendHalvesH w (S n) _ _ [|bxs'|] [|bys'|]) 
+         in HCons {_} {_} {_} {_} bx1 (HCons {_} {_} {_} {_} bx2 rec)
+      |]
