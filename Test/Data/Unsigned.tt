@@ -61,15 +61,15 @@ pat w, val, xs =>
   extend Z w {val} xs = xs
 pat w' =>
   extend (S w') Z {0} [| UNil |]
-    = let ans = extend w' 1 {_} [| UCons {_} {_} {_} UNil O |]
-      in eqInd2 {_} {_} {_} {eqSym {_} {_} {_} (plusSuccRightSucc w' 0)}
-           {\h => <Unsigned h 0>} ans
+    = [| let ans = ~(extend w' 1 {_} [| UCons {_} {_} {_} UNil O |])
+         in eqInd2 {_} {_} {_} {eqSym {_} {_} {_} (plusSuccRightSucc w' 0)}
+              {\h => Unsigned h 0} ans
+      |]
 pat w', w, val, xsval, xval, xs, x =>
   extend (S w') (S w) {_} [| UCons {w} {xsval} {xval} xs x |]
-    = [| let rec = ~( eqInd2 {_} {_} {_} {plusSuccRightSucc w' w}
-                        {\h => <Unsigned h xsval>}
-                        (extend (S w') w {xsval} [|xs|])
-                    )
+    = [| let rec = eqInd2 {_} {_} {_} {plusSuccRightSucc w' w}
+                        {\h => Unsigned h xsval}
+                     ~(extend (S w') w {xsval} [|xs|])
          in UCons {_} {_} {_} rec x
       |]
 

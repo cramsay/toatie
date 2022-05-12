@@ -127,37 +127,39 @@ pat cval, hr =>
                  {\h => <Signed (mulConstBits {cval} hr 0) h>} h1
 pat n, w, val, xs, hrec =>
   mulNatConstS (S w) {plus (S n) (S n)} (HalfRecEven n hrec) {val} xs
-    = let rec = eqInd2 {_} {_} {_} {prfPredMulCB {n} w hrec}
-                  {\h => <Signed h (multZ (Pos (S n)) val)>}
-                  (mulNatConstS (S w) {S n} hrec {val} xs)
-          ans = [| SCons {plus (countBits {S n} hrec) w} {0} {multZ (Pos (S n)) val} ~rec O |]
-          ans' = eqInd2 {_} {_} {_} {plusSuccRightSucc (countBits {S n} hrec) w}
-                   {\h => <Signed (S h) (plusZ (Pos 0) (plusZ (multZ (Pos (S n)) val) (multZ (Pos (S n)) val)))>}
-                   ans
-      in eqInd2 {_} {_} {_} {prfMultConstSEvenVal {n} hrec w val}
-           {\h => <Signed (S (plus (countBits {S n} hrec) (S w))) h>}
-           ans'
+    = [| let rec = eqInd2 {_} {_} {_} {prfPredMulCB {n} w hrec}
+                     {\h => Signed h (multZ (Pos (S n)) val)}
+                     ~(mulNatConstS (S w) {S n} hrec {val} xs)
+             ans = SCons {plus (countBits {S n} hrec) w} {0} {multZ (Pos (S n)) val} rec O
+             ans' = eqInd2 {_} {_} {_} {plusSuccRightSucc (countBits {S n} hrec) w}
+                      {\h => Signed (S h) (plusZ (Pos 0) (plusZ (multZ (Pos (S n)) val) (multZ (Pos (S n)) val)))}
+                      ans
+         in eqInd2 {_} {_} {_} {prfMultConstSEvenVal {n} hrec w val}
+              {\h => Signed (S (plus (countBits {S n} hrec) (S w))) h}
+              ans'
+      |]
 pat w, val, xs =>
   mulNatConstS (S w) {1} HalfRec1 {val} xs
     = eqInd2 {_} {_} {_} {eqSym {_} {_} {_} (multOneLeftNeutralZ val)}
         {\h => <Signed (S w) h>} xs
 pat n, w, val, xs, hrec =>
   mulNatConstS (S w) {S (plus (S n) (S n))} (HalfRecOdd n hrec) {val} xs
-    = let rec = eqInd2 {_} {_} {_} {prfPredMulCB {n} w hrec}
-                  {\h => <Signed h (multZ (Pos (S n)) val)>}
-                  (mulNatConstS (S w) {S n} hrec {val} xs)
-          recDouble = [| SCons {plus (countBits {S n} hrec) w} {0} {multZ (Pos (S n)) val} ~rec O |]
-          recDouble' = eqInd2 {_} {_} {_} {plusSuccRightSucc (countBits {S n} hrec) w}
-                         {\h => <Signed (S h) (plusZ (Pos 0) (plusZ (multZ (Pos (S n)) val) (multZ (Pos (S n)) val)))>}
-                         recDouble
-          recDouble'' = eqInd2 {_} {_} {_} {prfMultConstSEvenVal {n} hrec w val}
-                         {\h => <Signed (S (plus (countBits {S n} hrec) (S w))) h>}
-                         recDouble'
-          xsPad = signExtend (S (countBits {S n} hrec)) (S w) {_} xs
-          ans = addS _ {_} {_} xsPad recDouble''
-      in eqInd2 {_} {_} {_} {prfMultConstSOddVal {n} hrec w val}
-           {\h => <Signed (S (S (plus (countBits {S n} hrec) (S w)))) h>}
-           ans
+    = [| let rec = eqInd2 {_} {_} {_} {prfPredMulCB {n} w hrec}
+                     {\h => Signed h (multZ (Pos (S n)) val)}
+                     ~(mulNatConstS (S w) {S n} hrec {val} xs)
+             recDouble = SCons {plus (countBits {S n} hrec) w} {0} {multZ (Pos (S n)) val} rec O
+             recDouble' = eqInd2 {_} {_} {_} {plusSuccRightSucc (countBits {S n} hrec) w}
+                            {\h => Signed (S h) (plusZ (Pos 0) (plusZ (multZ (Pos (S n)) val) (multZ (Pos (S n)) val)))}
+                            recDouble
+             recDouble'' = eqInd2 {_} {_} {_} {prfMultConstSEvenVal {n} hrec w val}
+                            {\h => Signed (S (plus (countBits {S n} hrec) (S w))) h}
+                            recDouble'
+             xsPad = ~(signExtend (S (countBits {S n} hrec)) (S w) {_} xs)
+             ans = ~(addS _ {_} {_} [|xsPad|] [|recDouble''|])
+         in eqInd2 {_} {_} {_} {prfMultConstSOddVal {n} hrec w val}
+              {\h => Signed (S (S (plus (countBits {S n} hrec) (S w)))) h}
+              ans
+      |]
 
 -- Constant multiplication of a `Signed` binary number with a signed integer
 mulConstS : (w : Nat) -> (cval : ZZ) ->

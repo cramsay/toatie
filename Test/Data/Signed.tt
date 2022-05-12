@@ -18,11 +18,11 @@ simple Signed : Nat -> ZZ -> Type where
           Signed (S width) val -> Bit b ->
           Signed (S (S width)) (plusZ (Pos b) (doubleZ val))
 
-zeroS : (w : Nat) -> Signed w (Pos 0)
-zeroS Z = SNil
-zeroS 1 = SMsb {_} O
+zeroS : (w : Nat) -> < Signed w (Pos 0) > 
+zeroS Z = [| SNil |]
+zeroS 1 = [| SMsb {_} O |]
 pat n =>
-  zeroS (S (S n)) = SCons {_} {_} {_} (zeroS (S n)) O
+  zeroS (S (S n)) = [| SCons {_} {_} {_} ~(zeroS (S n)) O |]
 
 -- Sign extension preserves integer encoding
 
@@ -387,7 +387,7 @@ negateS : (w : Nat) -> {x : ZZ} ->
           < Signed w x > ->
           < Signed (S w) (negateZ x) >
 pat w, x, b =>
-  negateS w {x} b = let ans = (subS w {Pos 0} {x} [|zeroS w|] b)
+  negateS w {x} b = let ans = (subS w {Pos 0} {x} (zeroS w) b)
                     in eqInd2 {_} {_} {_} {plusZeroLeftNeutralZ (negateZ x)}
                          {\h => <Signed (S w) h>}
                          ans

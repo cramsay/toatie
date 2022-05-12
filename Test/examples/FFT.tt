@@ -89,7 +89,7 @@ pat n, f, tw, prec, ws, xs, bs =>
                   os
 
           -- Add halfs
-          outEs = zipWithH n _ _ {_} {_} {_} {_} (\xw => \yw => \{x} => \{y} => \bx => \by => addS' xw yw {x} {y} bx by) es os'
+          outEs = zipWithH n _ _ {_} {_} {_} {_} addS' es os'
           outOs = zipWithH n _ _ {_} {_} {_} {_} subS' es os'
           outs = appendHalvesH n {_} {_} {_} {_} outEs outOs
       in outs

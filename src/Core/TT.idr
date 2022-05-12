@@ -42,6 +42,7 @@ Eq Name where
   (==) (MN x i) (MN y j) = i == j && x == y
   (==) _ _ = False
 
+export
 nameTag : Name -> Int
 nameTag (UN _) = 0
 nameTag (MN _ _) = 1
