@@ -150,6 +150,7 @@ mutual
            | Nothing => pure (unload stk (CRef n))
          let Just def = compexpr gdef
                | Nothing => pure (unload stk (CRef n))
+         log "compiler.inline.eval" 10 ("Inlining FN : " ++ show n ++ " with stack " ++ show stk)
          let arity = getArity def
          if (not (n `elem` rec))
             then do S k <- get InlineFuel
@@ -739,7 +740,7 @@ compileAndInline ns
     transform : Nat -> List Name -> Core ()
     transform Z cns = pure ()
     transform (S k) cns
-        = do p <- newRef InlineFuel 1024
+        = do p <- newRef InlineFuel 4069
              l <- newRef LVar (the Int 0)
              traverse_ inlineDef cns
              traverse_ mergeLamDef cns

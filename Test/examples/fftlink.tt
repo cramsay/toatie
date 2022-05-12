@@ -1,2 +1,2 @@
-import FFT.TwiddlesN2
-import FFT.Proofs
+import FFT.Twiddles
+--import FFT.Proofs

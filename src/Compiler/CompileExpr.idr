@@ -192,8 +192,8 @@ mutual
                Core (CExp vars)
   toCExpTree n (STerm x) = toCExp n x
   toCExpTree n Impossible = pure CErased
-  toCExpTree n (Unmatched msg) = throw $ InternalError $
-    "Encountered unnmatched case when compiling: " ++ show n
+  toCExpTree n (Unmatched msg) = pure CErased --throw $ InternalError $
+    --"Encountered unnmatched case when compiling: " ++ show n
   toCExpTree n (Case idx p scTy []) = throw $ InternalError $
     "Encountered unnmatched case when compiling: " ++ show n
   toCExpTree n (Case idx p scTy alts@((ConCase _ _ _ _) :: _))

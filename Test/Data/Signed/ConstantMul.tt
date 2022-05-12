@@ -33,6 +33,16 @@ pat n, hrec =>
 pat n, hrec, w =>
   mulConstBits {n} hrec (S w) = plus (countBits {n} hrec) (S w)
 
+-- Version of `mulConstBits` for integer coefficients.
+-- Adds one if the output is negative (we just negate the
+-- positive version with a subtractor rather than
+-- changing the algorithm)
+mulConstBitsS : (c : ZZ) -> Nat -> Nat
+pat c, w =>
+  mulConstBitsS (Pos c) w = mulConstBits {c} (halfRec c) w
+pat c,w =>
+  mulConstBitsS (NegS c) w = S (mulConstBits {S c} (halfRec (S c)) w)
+
 -- Helper proof showing that if our second argument is 0, so it the output of mulConstBits
 mulCBZeroLeftZero : {c : Nat} -> (hrec : HalfRec c) -> Equal Nat (mulConstBits {c} hrec 0) 0
 mulCBZeroLeftZero {Z} HalfRecZ = Refl {_} {_}
@@ -149,21 +159,16 @@ pat n, w, val, xs, hrec =>
            {\h => <Signed (S (S (plus (countBits {S n} hrec) (S w)))) h>}
            ans
 
-{-
-
--- Not sure if we should bother with this tbh... we can always just use a subtractor rather than adder later in a DSP chain...
-
 -- Constant multiplication of a `Signed` binary number with a signed integer
 mulConstS : (w : Nat) -> (cval : ZZ) ->
-            (hrec : HalfRec (absZ cval)) ->
             { val : ZZ } ->
             < Signed w val > ->
-            < Signed (mulConstBits {absZ cval} hrec w) (multZ cval val) >
-pat w, cval, hrec, val, xs =>
-  mulConstS w (Pos cval) hrec {val} xs = mulNatConstS w {cval} hrec {val} xs
-pat w, cval, hrec, val, xs =>
-  mulConstS w (NegS cval) hrec {val} xs
-    = let absAns = mulNatConstS w {S cval} hrec {val} xs
-      in _
-
--}
+            < Signed (mulConstBitsS cval w) (multZ cval val) >
+pat w, cval, val, xs =>
+  mulConstS w (Pos cval) {val} xs = mulNatConstS w {cval} (halfRec cval) {val} xs
+pat w, cval, val, xs =>
+  mulConstS w (NegS cval) {val} xs
+    = let absAns = mulNatConstS w {S cval} (halfRec (S cval)) {val} xs
+          ans = negateS _ {_} absAns
+      in eqInd2 {_} {_} {_} {eqSym {_} {_} {_} (multNegateLeftZ (Pos (S cval)) val)}
+                {\h => <Signed (mulConstBitsS (NegS cval) w) h>} ans

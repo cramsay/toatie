@@ -1,0 +1,14 @@
+-- A signed adder example
+
+import Data.Nat
+import Data.ZZ
+import Data.Signed
+
+-- Top-level adder for 3 and 5 bit inputs
+-- The smaller input will be resized to 5 bits
+signed_adder : {x,y : ZZ} ->
+             < Signed 3 x -> Signed 5 y ->
+               Signed 6 (plusZ x y)
+             >
+pat x, y =>
+  signed_adder {x} {y} = [| \xs => \ys => ~(addS' 3 5 {x} {y} [|xs|] [|ys|]) |]

@@ -225,16 +225,17 @@ genNetlist n
              | _ => throw $ InternalError $ "Couldn't find compiled function in context: " ++ show n
 
        (argTys, retTy) <- closedQuoteType $ type gdef
+       let argTys' = reverse argTys
 
        -- Make initial netlist record with in/out types
        let nl = MkNetlist
                   n
-                  (zip args !(traverse typeToSType argTys)) -- Inputs
+                  (zip args !(traverse typeToSType argTys')) -- Inputs
                   !(typeToSType retTy)                      -- Outputs
                   [] -- Signals
                   [] -- Assignments
 
-       netlistTm nl (reverse argTys) prog
+       netlistTm nl argTys' prog
 
 showName : Name -> String
 showName (UN x) = x

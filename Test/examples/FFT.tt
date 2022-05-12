@@ -1,16 +1,12 @@
 import Data.Nat
-import Data.Nat.Inequality
 import Data.Fin
 import Data.Signed
+import Data.Signed.ConstantMul
 import Data.Vect_ -- This version of Vect is a parameter type, so we can have types who depend on its values
+import Data.HWords
 import Proofs
 
 import FFT.Twiddles
-
--- Witness that a `Nat` is a power of two
-data Pow2 : Nat -> Type where
-  POne : Pow2 1
-  PDouble : (n : Nat) -> Pow2 n -> Pow2 (double' n)
 
 -- Let's describe the plain, mathematical DFT equation to direct our optimised structure's type
 -- See first eqn @ https://en.wikipedia.org/wiki/Cooley%E2%80%93Tukey_FFT_algorithm#The_radix-2_DIT_case
@@ -35,7 +31,7 @@ pat f, tw, xs =>
   dit {1} {f} tw POne xs = xs
 pat n, f, tw, prec, xs =>
   dit {double' n} {f} tw (PDouble n prec) xs
-    = let halfTw = halfTwiddles {f} {n} tw
+    = let halfTw = halfTwiddles {f} n tw
           -- Recurse on evens
           es' = dit {n} {f} halfTw prec (evens n {_} xs)
           -- Recurse on odds
@@ -51,3 +47,56 @@ pat n, f, tw, prec, xs =>
           outs = appendHalves {_} {_} outEs outOs
       in outs
 
+-- Start looking at a synthesisable version
+
+dftWidth : {n : Nat} -> {f : Nat -> Nat -> ZZ} -> Twiddles f n -> Pow2 n -> Vect n Nat -> Vect n Nat
+pat f, tw, w =>
+  dftWidth {1} {f} tw POne [w] = [w]
+pat n, f, tw, prec, ws =>
+  dftWidth {double' n} {f} tw (PDouble n prec) ws
+    = let -- Recurse on half length vectors
+          es = dftWidth {n} {f} (halfTwiddles {f} n tw) prec (evens n {_} ws)
+          os = dftWidth {n} {f} (halfTwiddles {f} n tw) prec ( odds n {_} ws)
+          -- Add twiddle factor bits to odd side
+          os' = zipWith n {_} {_} {_} (mulConstBitsS)
+                  (twiddleRow {f} (double' n) tw 1 n)
+                  os
+          -- Add 1 to to the maximum of each even/odd pair
+          outHalf = zipWith n {_} {_} {_} (\x => \y => S (max x y)) es os'
+          -- Rejoin halves
+          outs = appendHalves {_} {_} outHalf outHalf
+      in outs
+
+circDIT : {n : Nat} -> {f : Nat -> Nat -> ZZ} -> (tw : Twiddles f n) -> (pow : Pow2 n) ->
+          (ws : Vect n Nat) ->
+          {xs : Vect n ZZ} ->
+          < HWords n ws xs > ->
+          < HWords n (dftWidth {n} {f} tw pow ws) (dit {n} {f} tw pow xs) >
+pat f, tw, w, x,  bs =>
+  circDIT {1} {f} tw POne [w] {[x]} bs = bs
+pat n, f, tw, prec, ws, xs, bs =>
+  circDIT {double' n} {f} tw (PDouble n prec) ws {xs} bs
+    = let -- Recurse on N/2 DFTs
+          halfTw = halfTwiddles {f} n tw
+          es = circDIT {n} {f} (halfTwiddles {f} n tw) prec _ {_} (evensH n {ws} {xs} bs)
+          os = circDIT {n} {f} (halfTwiddles {f} n tw) prec _ {_} ( oddsH n {ws} {xs} bs)
+
+          -- Scale odds by twiddle factors
+          tws = twiddleRow {f} (double' n) tw 1 n
+          os' = zipWithConstH n {ZZ} _ {_} {_} {_}
+                  (\w => \{v} => \c => \b => mulConstS w c {v} b)
+                  (twiddleRow {f} (double' n) tw 1 n)
+                  os
+
+          -- Add halfs
+          outEs = zipWithH n _ _ {_} {_} {_} {_} (\xw => \yw => \{x} => \{y} => \bx => \by => addS' xw yw {x} {y} bx by) es os'
+          outOs = zipWithH n _ _ {_} {_} {_} {_} subS' es os'
+          outs = appendHalvesH n {_} {_} {_} {_} outEs outOs
+      in outs
+
+import FFT.TwiddlesN2
+mydit : {xs : Vect 2 ZZ} ->
+        < HWords 2 [8,8] xs ->
+          HWords 2 [9,9] (dit {2} {oscilate} twOscil2 (PDouble 1 POne) xs) >
+pat xs =>
+  mydit {xs} = [| \bs => ~(circDIT {2} {oscilate} twOscil2 (PDouble 1 POne) [8,8] {xs} [|bs|]) |]

@@ -71,6 +71,8 @@ dismissNotLTE1 : {a : Type} ->
                  a
 pat a, big =>
   dismissNotLTE1 {a} big (LTEZero {_}) impossible
+pat a, big, rec =>
+  dismissNotLTE1 {a} big (LTESucc {S big} {0} (LTEZero {_})) impossible
                  
 dismissNotLTE2 : {a : Type} ->
                  (big : Nat) -> LTE (S (S (S big))) 2 -> 

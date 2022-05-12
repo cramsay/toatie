@@ -411,6 +411,14 @@ maxZeroLeftNeutral Z = Refl {_} {_}
 pat n =>
   maxZeroLeftNeutral (S n) = Refl {_} {_}
 
+maxCommutative : (x, y : Nat) -> Equal Nat (max x y) (max y x)
+pat y =>
+  maxCommutative Z y = eqSym {_} {_} {_} (maxZeroRightNeutral y)
+pat x =>
+  maxCommutative x Z = maxZeroRightNeutral x
+pat x, y =>
+  maxCommutative (S x) (S y) = eqCong {_} {_} {S} {_} {_} (maxCommutative x y)
+
 eqDoublePlusSelf : (n : Nat) -> Equal Nat (plus n n) (double' n)
 eqDoublePlusSelf Z = Refl {_} {_}
 pat n =>

@@ -18,6 +18,12 @@ simple Signed : Nat -> ZZ -> Type where
           Signed (S width) val -> Bit b ->
           Signed (S (S width)) (plusZ (Pos b) (doubleZ val))
 
+zeroS : (w : Nat) -> Signed w (Pos 0)
+zeroS Z = SNil
+zeroS 1 = SMsb {_} O
+pat n =>
+  zeroS (S (S n)) = SCons {_} {_} {_} (zeroS (S n)) O
+
 -- Sign extension preserves integer encoding
 
 prfSignExtMsb : (x : ZZ) -> Equal ZZ (plusZ x (doubleZ (negateZ x)))
@@ -375,3 +381,63 @@ pat w, x, y, xs, ys =>
              ans = ~(addSubS w {x} {_} {1} xs [|notys|] [|I|])
          in eqInd2 {_} {_} {_} {prfSubtractorN x y} {\h => Signed (S (S w)) h} ans
       |]
+
+-- Negate a `Signed` number using an subtractor
+negateS : (w : Nat) -> {x : ZZ} ->
+          < Signed w x > ->
+          < Signed (S w) (negateZ x) >
+pat w, x, b =>
+  negateS w {x} b = let ans = (subS w {Pos 0} {x} [|zeroS w|] b)
+                    in eqInd2 {_} {_} {_} {plusZeroLeftNeutralZ (negateZ x)}
+                         {\h => <Signed (S w) h>}
+                         ans
+
+resizeMaxLeftS : (n, w1, w2 : Nat) -> {val : ZZ} ->
+                 < Signed (plus n w1) val > ->
+                 < Signed (plus n (max w1 w2)) val >
+pat n, w1, val, bs =>
+  resizeMaxLeftS n w1 Z {val} bs
+    = eqInd2 {_} {_} {_} {eqSym {_} {_} {_} (maxZeroRightNeutral w1)}
+             {\h => <Signed (plus n h) val>} bs
+pat n, w2, val, bs =>
+  resizeMaxLeftS n Z w2 {val} bs
+    = let ans = signExtend w2 (plus n 0) {val} bs
+          h1 = eqInd2 {_} {_} {_} {plusZeroRightNeutral n}
+                 {\h => <Signed (plus w2 h) val>}
+                 ans
+          h2 = eqInd2 {_} {_} {_} {plusCommutative w2 n}
+                 {\h => <Signed h val>}
+                 h1
+      in h2
+pat n, w1, w2, val, bs =>
+  resizeMaxLeftS n (S w1) (S w2) {val} bs
+    = let ans = resizeMaxLeftS (S n) w1 w2 {val}
+                  (eqInd2 {_} {_} {_} {eqSym {_} {_} {_} (plusSuccRightSucc n w1)}
+                    {\h => <Signed h val>} bs)
+      in eqInd2 {_} {_} {_} {plusSuccRightSucc n (max w1 w2)}
+           {\h => <Signed h val>} ans
+
+resizeMaxRightS : (n, w1, w2 : Nat) -> {val : ZZ} ->
+                  < Signed (plus n w2) val > ->
+                  < Signed (plus n (max w1 w2)) val >
+pat n, w1, w2, val, x =>
+  resizeMaxRightS n w1 w2 {val} x
+    = eqInd2 {_} {_} {_} {maxCommutative w2 w1}
+        {\h => <Signed (plus n h) val>}
+        (resizeMaxLeftS n w2 w1 {val} x)
+
+addS' : (xw,yw : Nat) -> {x,y : ZZ} ->
+        < Signed xw x > -> < Signed yw y > ->
+        < Signed (S (max xw yw)) (plusZ x y) >
+pat xw, yw, x, y, xs, ys =>
+  addS' xw yw {x} {y} xs ys = addS (max xw yw) {x} {y}
+                                   (resizeMaxLeftS  0 xw yw {x} xs)
+                                   (resizeMaxRightS 0 xw yw {y} ys)
+
+subS' : (xw,yw : Nat) -> {x,y : ZZ} ->
+        < Signed xw x > -> < Signed yw y > ->
+        < Signed (S (max xw yw)) (subZ x y) >
+pat xw, yw, x, y, xs, ys =>
+  subS' xw yw {x} {y} xs ys = subS (max xw yw) {x} {y}
+                                   (resizeMaxLeftS  0 xw yw {x} xs)
+                                   (resizeMaxRightS 0 xw yw {y} ys)
