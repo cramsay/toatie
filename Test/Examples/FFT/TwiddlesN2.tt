@@ -3,7 +3,7 @@ import Data.Nat.Inequality
 import Data.Fin
 import Proofs
 
-import FFT.Twiddles
+import Examples.FFT.Twiddles
 
 {- -----------------------------------------------------------------------------
    Let's provide an example of a valid twiddle factor function for up to N=2.

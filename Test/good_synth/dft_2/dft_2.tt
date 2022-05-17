@@ -1,0 +1,8 @@
+import Examples.FFT.TwiddlesN2
+import Examples.FFT
+
+dft_2 : {xs : Vect 2 ZZ} ->
+        < HWords 2 [8,8] xs ->
+          HWords 2 [9,9] (dit {2} {oscilate} twOscil2 (PDouble 1 POne) xs) >
+pat xs =>
+  dft_2 {xs} = [| \bs => ~(circDIT {2} {oscilate} twOscil2 (PDouble 1 POne) [8,8] {xs} [|bs|]) |]

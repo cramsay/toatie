@@ -6,7 +6,7 @@ import Data.Vect_ -- This version of Vect is a parameter type, so we can have ty
 import Data.HWords
 import Proofs
 
-import FFT.Twiddles
+import Examples.FFT.Twiddles
 
 -- Let's describe the plain, mathematical DFT equation to direct our optimised structure's type
 -- See first eqn @ https://en.wikipedia.org/wiki/Cooley%E2%80%93Tukey_FFT_algorithm#The_radix-2_DIT_case
@@ -93,10 +93,3 @@ pat n, f, tw, prec, ws, xs, bs =>
           outOs = zipWithH n _ _ {_} {_} {_} {_} subS' es os'
           outs = appendHalvesH n {_} {_} {_} {_} outEs outOs
       in outs
-
-import FFT.TwiddlesN2
-mydit : {xs : Vect 2 ZZ} ->
-        < HWords 2 [8,8] xs ->
-          HWords 2 [9,9] (dit {2} {oscilate} twOscil2 (PDouble 1 POne) xs) >
-pat xs =>
-  mydit {xs} = [| \bs => ~(circDIT {2} {oscilate} twOscil2 (PDouble 1 POne) [8,8] {xs} [|bs|]) |]

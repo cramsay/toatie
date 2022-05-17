@@ -1,0 +1,16 @@
+import Data.Signed
+import Data.HWords
+
+addPair : {xs, ys : Vect 2 ZZ} ->
+           < HWords 2 [3,2] xs > ->
+           < HWords 2 [5,2] ys > ->
+           < HWords 2 [6,3] (zipWith 2 {_} {_} {_} plusZ xs ys) >
+pat xs, ys, x, y =>
+  addPair {xs} {ys} x y = zipWithH 2 _ _ {_} {_} {_} {_} addS' x y
+
+hetero_adders : {xs, ys : Vect 2 ZZ} ->
+                < HWords 2 [3,2] xs ->
+                  HWords 2 [5,2] ys ->
+                  HWords 2 [6,3] (zipWith 2 {_} {_} {_} plusZ xs ys) >
+pat xs, ys =>
+  hetero_adders {xs} {ys} = [| \x => \y => ~(addPair {xs} {ys} [|x|] [|y|]) |]

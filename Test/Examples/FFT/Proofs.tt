@@ -5,10 +5,10 @@ import Data.Signed
 import Data.Vect_
 import Proofs
 
-import FFT
-import FFT.Twiddles
-import FFT.LowerProofs
-import FFT.UpperProofs
+import Examples.FFT
+import Examples.FFT.Twiddles
+import Examples.FFT.LowerProofs
+import Examples.FFT.UpperProofs
 
 
 -- Prove our DIT's base case is equivalent to a 1-input DFT

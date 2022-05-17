@@ -5,8 +5,8 @@ import Data.Signed
 import Data.Vect_
 import Proofs
 
-import FFT
-import FFT.Twiddles
+import Examples.FFT
+import Examples.FFT.Twiddles
 
 lemmaGatherEvenElem :
   {n : Nat} ->

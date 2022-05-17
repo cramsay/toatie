@@ -3,7 +3,7 @@
 # All bad files should fail typechecking and exit with failure
 
 netlistsvg := $(shell which netlistsvg)
-examples   := $(addsuffix .example , $(basename $(shell find examples/ -maxdepth 1 -name '*.tt')))
+examples   := $(addsuffix .example , $(basename $(shell find Examples/ -maxdepth 1 -name '*.tt')))
 good_tests := $(addsuffix .goodtest, $(basename $(shell find good/ -name '*.tt')))
 bad_tests  := $(addsuffix .badtest , $(basename $(shell find bad/ -name '*.tt')))
 good_synth_tests := $(addsuffix .goodsynthtest, $(basename $(shell find good_synth/ -name '*.tt')))
