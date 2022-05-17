@@ -162,6 +162,7 @@ runMain fopts fname decls
                | Just funname =>
                    do defs <- get Ctxt
                       extDefs <- extractCtxt defs
+                      put Ctxt extDefs
                       compileAndInline [UN funname]
                       nl <- genNetlist $ UN funname
                       let outfile = fromMaybe "" (containsFOutDir fopts) ++ "/" ++ funname ++ ".vhd"
