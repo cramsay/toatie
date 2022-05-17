@@ -119,7 +119,7 @@ mutual
   toCExpTm n (Quote ty tm) = toCExp n tm
   toCExpTm n (TCode x) = toCExp n x
   toCExpTm n (Eval x) = toCExp n x
-  toCExpTm n (Escape x) = map CInline (toCExp n x)
+  toCExpTm n (Escape x) = toCExp n x
   toCExpTm n (Bind x (Lam _ _ ty) scope)
     = pure $ CLam x !(toCExp n scope)
   toCExpTm n (Bind x (Let _ val _) scope)

@@ -32,8 +32,6 @@ mutual
        CConCase :  (scr : CExp vars) -> (alts : List (CConAlt vars)) -> (def : Maybe (CExp vars)) -> CExp vars
        -- Project the an argument of a given constructor
        CPrj : (con : Name) -> (field : Nat) -> CExp vars -> CExp vars
-       -- Force inlining of an expression
-       CInline : CExp vars -> CExp vars
        -- An erased value
        CErased :  CExp vars
 
@@ -74,7 +72,6 @@ mutual
           def'  = map (insertNames ns) def
       in CConCase scr' alts' def'
   insertNames ns (CPrj c f tm) = CPrj c f (insertNames ns tm)
-  insertNames ns (CInline tm) = CInline (insertNames ns tm)
   insertNames ns CErased = CErased
 
   insertNamesConAlt : {outer : _} -> (ns : List Name) -> CConAlt (outer ++ inner) ->
@@ -124,7 +121,6 @@ mutual
                (map (shrinkConAlt sub) alts)
                (map (shrinkCExp   sub) def)
   shrinkCExp sub (CPrj c f tm) = CPrj c f (shrinkCExp sub tm)
-  shrinkCExp sub (CInline tm) = CInline (shrinkCExp sub tm)
   shrinkCExp sub CErased = CErased
 
   shrinkConAlt : SubVars newvars vars -> CConAlt vars -> CConAlt newvars
@@ -175,7 +171,6 @@ mutual
                (map (substEnvConAlt env) alts)
                (map (substEnv env) def)
   substEnv env (CPrj c f tm) = CPrj c f (substEnv env tm)
-  substEnv env (CInline tm) = CInline (substEnv env tm)
   substEnv env CErased = CErased
 
   substEnvConAlt : {outer, vars, dropped: _} ->
@@ -229,7 +224,6 @@ mutual
                                                  (map (mkLocalsConAlt bs) alts)
                                                  (map (mkLocals bs) def)
   mkLocals bs (CPrj con field x) = CPrj con field (mkLocals bs x)
-  mkLocals bs (CInline tm) = CInline (mkLocals bs tm)
   mkLocals bs CErased = CErased
 
   mkLocalsConAlt : {outer, bound : _} -> Bounds bound ->
@@ -295,7 +289,6 @@ mutual
   showCExp : {vars : _} -> String -> CExp vars -> String
   showCExp indent (CLocal {idx} p) = indent ++ "(local " ++ show (nameAt idx p) ++ ")"
   showCExp indent (CRef x) = indent ++ "(ref " ++ show x ++ ")"
-  showCExp indent (CInline tm) = indent ++ "(inline " ++ show tm ++ ")"
   showCExp indent CErased = indent ++ "erased"
   showCExp indent (CPrj c f tm) = indent ++ "prj^" ++ show c ++ "_" ++ show f ++ " " ++ show tm
   showCExp indent (CLam x sc)

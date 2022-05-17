@@ -24,11 +24,6 @@ NameSet = SortedSet Name
 
 data InlineFuel : Type where
 
-data InlineMode : Type where
-  IForce  : InlineMode
-  --IStop   : InlineMode
-  INonRec : InlineMode
-
 data EEnv : List Name -> List Name -> Type where
      Nil : EEnv free []
      (::) : CExp free -> EEnv free vars -> EEnv free (x :: vars)
@@ -39,21 +34,11 @@ extend env [] [] NilMatch = env
 extend env (a :: xs) (n :: ns) (ConsMatch w)
     = a :: extend env xs ns w
 
-mutual
-  {-
-  public export
-  data LocalEnv : List Name -> List Name -> Type where
-    Nil  : LocalEnv free []
-    (::) : Closure free -> LocalEnv free vars -> LocalEnv free (x :: vars)
-  -}
+data Closure : List Name -> Type where
+  MkClosure : {vars : _} ->
+              EEnv free vars ->
+              CExp (vars ++ free) -> Closure free
 
-  public export
-  data Closure : List Name -> Type where
-    MkClosure : {vars : _} ->
-                EEnv free vars ->
-                CExp (vars ++ free) -> Closure free
-
-export
 {vars : _} -> Show (Closure vars) where
   show (MkClosure env tm) = "(closure for " ++ show tm ++ " with env for " ++ show vars ++ " )"
 
@@ -109,7 +94,6 @@ mutual
                                    largest (maybe 0 (used p) def)
                                            (map (usedCon p) alts)
   used p (CPrj con field x) = used p x
-  used p (CInline tm) = used p tm
   used p tm = 0
 
   usedCon : {free : _} ->
@@ -123,8 +107,8 @@ mutual
                 {auto c : Ref Ctxt Defs} ->
                 {auto p : Ref InlineFuel Nat} ->
                 {auto l : Ref LVar Int} ->
-                (List Name) -> Closure vars -> Core (CExp vars)
-  evalClosure rec (MkClosure env tm) = eval INonRec rec env [] tm
+                Closure vars -> Core (CExp vars)
+  evalClosure (MkClosure env tm) = eval env [] tm
 
   unload : {vars : _} ->
            {auto c : Ref Ctxt Defs} ->
@@ -132,14 +116,14 @@ mutual
            {auto l : Ref LVar Int} ->
            Stack vars -> CExp vars -> Core (CExp vars)
   unload [] e = pure e
-  unload ((MkClosure env a) :: args) e = unload args (CApp e [!(eval INonRec [] env [] a)])
+  unload ((MkClosure env a) :: args) e = unload args (CApp e [!(eval env [] a)])
 
   unloadApp : {vars : _} ->
               {auto c : Ref Ctxt Defs} ->
               {auto p : Ref InlineFuel Nat} ->
               {auto l : Ref LVar Int} ->
               Nat -> Stack vars -> CExp vars -> Core (CExp vars)
-  unloadApp n args e = unload (drop n args) (CApp e !(traverse (evalClosure []) (take n args)))
+  unloadApp n args e = unload (drop n args) (CApp e !(traverse (evalClosure) (take n args)))
 
   takeFromStack : {free, vars : _} ->
                   {auto c : Ref Ctxt Defs} ->
@@ -150,7 +134,7 @@ mutual
   takeFromStack env (e :: es) (a :: as)
     = do Just (env', stk') <- takeFromStack env es as
            | Nothing => pure Nothing
-         tm <- evalClosure [] e
+         tm <- evalClosure e
          pure $ Just (tm :: env', stk')
   takeFromStack env stk [] = pure $ Just (env, stk)
   takeFromStack env [] args = pure Nothing
@@ -159,71 +143,42 @@ mutual
               {auto c : Ref Ctxt Defs} ->
               {auto p : Ref InlineFuel Nat} ->
               {auto l : Ref LVar Int} ->
-              InlineMode -> List Name -> Stack free ->
+              Stack free ->
               EEnv free vars ->
               {idx : Nat} -> (0 p : IsVar x idx (vars ++ free)) ->
               Core (CExp free)
-  evalLocal inl {vars=[]} rec stk env p = unload stk (CLocal p)
-  evalLocal inl {vars=x::xs} rec stk (v::env) First
+  evalLocal {vars=[]} stk env p = unload stk (CLocal p)
+  evalLocal {vars=x::xs} stk (v::env) First
     = case stk of
         [] => pure v
-        _  => eval inl rec env stk (weakenNs xs v)
-  evalLocal inl {vars=x::xs} rec stk (v::env) (Later y)
-    = evalLocal inl rec stk env y
+        _  => eval env stk (weakenNs xs v)
+  evalLocal {vars=x::xs} stk (v::env) (Later y)
+    = evalLocal stk env y
 
   tryApply : {vars, free : _} ->
              {auto c : Ref Ctxt Defs} ->
              {auto p : Ref InlineFuel Nat} ->
              {auto l : Ref LVar Int} ->
-             InlineMode ->
-             List Name -> Stack free -> EEnv free vars -> CDef ->
+             Stack free -> EEnv free vars -> CDef ->
              Core (Maybe (CExp free))
-  tryApply {free} {vars} inl rec stk env (MkFun args exp)
+  tryApply {free} {vars} stk env (MkFun args exp)
       = do Just (env', stk') <- takeFromStack env stk args
                | Nothing => pure Nothing
-           res <- eval inl rec env' stk'
+           res <- eval env' stk'
                      (rewrite sym (appendAssociative args vars free) in
                               embed {vars = vars ++ free} exp)
            pure (Just res)
-  tryApply inl rec stk env _ = pure Nothing
+  tryApply stk env _ = pure Nothing
 
 
   eval : {vars, free : _} ->
          {auto c : Ref Ctxt Defs} ->
          {auto p : Ref InlineFuel Nat} ->
          {auto l : Ref LVar Int} ->
-         InlineMode -> List Name -> EEnv free vars -> Stack free -> CExp (vars ++ free) ->
+         EEnv free vars -> Stack free -> CExp (vars ++ free) ->
          Core (CExp free)
-  eval inl rec env stk (CLocal p) = evalLocal inl rec stk env p
-  eval IForce rec env stk (CRef n)
-    = do defs <- get Ctxt
-         Just gdef <- lookupDef n defs
-           | Nothing => unload stk (CRef n)
-         let Just def = compexpr gdef
-               | Nothing => unload stk (CRef n)
-         log "compiler.inline.eval" 10 ("Forcing inlining of FN : " ++ show n ++ " with stack " ++ show stk)
-         let arity = getArity def
-         S k <- get InlineFuel
-           | Z => throw $ GenericMsg $ "Ran out of fuel when inlining: " ++ show n
-         put InlineFuel k
-         let inl' = if nameTag n == 0 then INonRec else IForce
-         Just ap <- tryApply inl' (n :: rec) stk env def
-           | Nothing => unloadApp arity stk (CRef n)
-         pure ap
-  {-
-  eval IStop rec env stk (CRef n)
-    = do defs <- get Ctxt
-         Just gdef <- lookupDef n defs
-           | Nothing => unload stk (CRef n)
-         let Just def = compexpr gdef
-           | Nothing => unload stk (CRef n)
-         case def of
-           (MkFun args x) => do let x' = --rewrite sym (appendAssociative args vars free) in
-                                         embed {vars = vars ++ free} x
-                                pure $ wrapLams args x'
-           (MkCon tag arity) => unload stk (CRef n)
-  -}
-  eval INonRec rec env stk (CRef n)
+  eval env stk (CLocal p) = evalLocal stk env p
+  eval env stk (CRef n)
     = do defs <- get Ctxt
          Just gdef <- lookupDef n defs
            | Nothing => unload stk (CRef n)
@@ -231,53 +186,40 @@ mutual
                | Nothing => unload stk (CRef n)
          log "compiler.inline.eval" 10 ("Trying inline of FN : " ++ show n ++ " with stack " ++ show stk)
          let arity = getArity def
-         if nameTag n == 1 || (not (n `elem` rec))
-            then do S k <- get InlineFuel
-                      | Z => throw $ GenericMsg $ "Ran out of fuel when inlining: " ++ show n
-                    put InlineFuel k
-                    Just ap <- tryApply INonRec (n :: rec) stk env def
-                    -- TODO we  _want_ to unroll recursive defs in general
-                    -- (inline case statements make mutually recursive defs)
-                    -- but will need to deal with this when "tying the knot"
-                    -- for synchronous logic
-                    --Just ap <- tryApply (n :: rec) stk env def
-                      | Nothing => unloadApp arity stk (CRef n)
-                    pure ap
-            else unloadApp arity stk (CRef n)
-  eval inl rec env [] (CLam x sc)
+         S k <- get InlineFuel
+           | Z => throw $ GenericMsg $ "Ran out of fuel when inlining: " ++ show n
+         put InlineFuel k
+         Just ap <- tryApply stk env def
+           | Nothing => unloadApp arity stk (CRef n)
+         pure ap
+  eval env [] (CLam x sc)
     = do xn <- genName "lamv"
-         sc' <- eval inl rec (CRef xn :: env) [] sc
+         sc' <- eval (CRef xn :: env) [] sc
          pure $ CLam x (refToLocal xn x sc')
-  eval inl rec env (e :: stk) (CLam x sc) = eval inl rec (!(evalClosure rec  e) :: env) stk sc
-  eval inl rec env stk (CLet x val ty sc)
+  eval env (e :: stk) (CLam x sc) = eval (!(evalClosure e) :: env) stk sc
+  eval env stk (CLet x val ty sc)
     = do xn <- genName "lamv"
-         sc' <- eval inl rec (CRef xn :: env) [] sc
-         val' <- eval inl rec env [] val
+         sc' <- eval (CRef xn :: env) [] sc
+         val' <- eval env [] val
          case val' of
            -- We'd just be rebinding the name of a local, so let's not
            CLocal p => pure $ substs [CLocal p] (refToLocal xn x sc')
            _        => pure $ CLet x val' ty (refToLocal xn x sc')
-  eval inl rec env stk (CApp (CRef n) args)
+  eval env stk (CApp (CRef n) args)
     = do defs <- get Ctxt
          Just gdef <- lookupDef n defs
-           | Nothing => eval inl rec env (map (MkClosure env) args ++ stk) (CRef n)
+           | Nothing => eval env (map (MkClosure env) args ++ stk) (CRef n)
          let Just def = compexpr gdef
-           | Nothing => eval inl rec env (map (MkClosure env) args ++ stk) (CRef n)
+           | Nothing => eval env (map (MkClosure env) args ++ stk) (CRef n)
          case def of
-           (MkFun argNs x) => do let x' = --rewrite sym (appendAssociative args vars free) in
-                                         embed {vars = vars ++ free} x
+           (MkFun argNs x) => do let x' = embed {vars = vars ++ free} x
                                  let x'' = substArgs argNs args x'
-                                 eval inl rec env stk x''
-           (MkCon tag arity) => eval inl rec env (map (MkClosure env) args ++ stk) (CRef n)
-  eval inl rec env stk (CApp f args) = eval inl rec env (map (MkClosure env) args ++ stk) f
-  eval inl rec env stk (CCon x args) = unload stk $ CCon x !(traverse (eval inl rec env []) args)
-  {-
-  eval inl rec env stk (CApp f args) = eval inl rec env (!(traverse (eval False rec env []) args) ++ stk) f
-  eval inl rec env stk (CCon x args) = pure $ unload stk $ CCon x !(traverse (eval False rec env []) args)
-  -}
-  eval inl rec env stk (CInline tm) = eval IForce rec env stk tm
-  eval inl rec env stk (CPrj con field sc)
-    = do sc' <- eval inl rec env [] sc
+                                 eval env stk x''
+           (MkCon tag arity) => eval env (map (MkClosure env) args ++ stk) (CRef n)
+  eval env stk (CApp f args) = eval env (map (MkClosure env) args ++ stk) f
+  eval env stk (CCon x args) = unload stk $ CCon x !(traverse (eval env []) args)
+  eval env stk (CPrj con field sc)
+    = do sc' <- eval env [] sc
          case sc' of
            CCon scname args => if scname == con
                                   then getIth field args
@@ -292,15 +234,15 @@ mutual
     getIth _ [] = throw $ InternalError $
                     "Projection term pointing beyond end of arg list: " ++
                     show (CPrj con field sc)
-  eval inl rec env stk CErased = unload stk $ CErased
-  eval inl rec env stk (CConCase scr alts def)
-    = do scr' <- eval inl rec env [] scr
+  eval env stk CErased = unload stk $ CErased
+  eval env stk (CConCase scr alts def)
+    = do scr' <- eval env [] scr
          let env' = update scr env scr'
-         Nothing <- pickAlt inl rec env' stk scr' alts def
+         Nothing <- pickAlt env' stk scr' alts def
            | Just val => do pure val
-         def' <- traverseOpt (eval inl rec env' stk) def
+         def' <- traverseOpt (eval env' stk) def
          -- TODO Just before returning, we could apply all the case transformations (see CaseOpt.idr in Idris2)
-         alts' <- traverse (evalAlt inl rec env' stk) alts
+         alts' <- traverse (evalAlt env' stk) alts
          let sc' = CConCase scr' alts' def'
          pure sc'
          --xn <- genName "cr"
@@ -331,12 +273,11 @@ mutual
             {auto c : Ref Ctxt Defs} ->
             {auto p : Ref InlineFuel Nat} ->
             {auto l : Ref LVar Int} ->
-            InlineMode ->
-            List Name -> EEnv free vars -> Stack free -> CConAlt (vars ++ free) ->
+            EEnv free vars -> Stack free -> CConAlt (vars ++ free) ->
             Core (CConAlt free)
-  evalAlt {free} {vars} inl rec env stk (MkConAlt n args sc)
+  evalAlt {free} {vars} env stk (MkConAlt n args sc)
     = do (bs, env') <- extendLoc env args
-         scEval <- eval inl rec env' stk
+         scEval <- eval env' stk
                    (rewrite sym (appendAssociative args vars free) in sc)
          let args' = boundNames bs
          let Just compat = areVarsCompatible (args++free) (args'++free)
@@ -351,25 +292,24 @@ mutual
             {auto c : Ref Ctxt Defs} ->
             {auto p : Ref InlineFuel Nat} ->
             {auto l : Ref LVar Int} ->
-            InlineMode ->
-            List Name -> EEnv free vars -> Stack free ->
+            EEnv free vars -> Stack free ->
             CExp free -> List (CConAlt (vars ++ free)) ->
             Maybe (CExp (vars ++ free)) ->
             Core (Maybe (CExp free))
-  pickAlt inl rec env stk (CCon n args) [] def
-    = traverseOpt (eval inl rec env stk) def
-  pickAlt {vars} {free} inl rec env stk con@(CCon n args) (MkConAlt n' args' sc :: alts) def
+  pickAlt env stk (CCon n args) [] def
+    = traverseOpt (eval env stk) def
+  pickAlt {vars} {free} env stk con@(CCon n args) (MkConAlt n' args' sc :: alts) def
     = if n == n'
          then case checkLengthMatch args args' of
                 Nothing => pure Nothing
                 Just m =>
                   do let env' : EEnv free (args' ++ vars)
                               = extend env args args' m
-                     pure $ Just !(eval inl rec env' stk
+                     pure $ Just !(eval env' stk
                              (rewrite sym (appendAssociative args' vars free) in
                               sc))
-         else pickAlt inl rec env stk con alts def
-  pickAlt inl rec env stk _ _ _ = pure Nothing
+         else pickAlt env stk con alts def
+  pickAlt env stk _ _ _ = pure Nothing
 
 -- Inlining may have messed with function arity (e.g. by adding lambdas to
 -- the LHS to avoid needlessly making a closure) so fix them up here. This
@@ -406,7 +346,6 @@ fixArityTm (CConCase scr alts def) args
     fixArityAlt (MkConAlt n a sc)
         = pure $ MkConAlt n a !(fixArityTm sc [])
 fixArityTm (CPrj con field x) args = pure $ expandToArity Z (CPrj con field !(fixArityTm x [])) args
-fixArityTm (CInline tm) args = pure $ expandToArity Z (CInline !(fixArityTm tm [])) args
 fixArityTm t [] = pure t
 fixArityTm t args = pure $ expandToArity Z t args
 
@@ -463,7 +402,7 @@ doEval : {args : _} ->
          Name -> CExp args -> Core (CExp args)
 doEval n exp
     = do log "compiler.inline.eval" 10 (show n ++ ": " ++ show exp)
-         exp' <- eval INonRec [] [] [] exp
+         exp' <- eval [] [] exp
          log "compiler.inline.eval" 10 ("Inlined: " ++ show exp')
          pure exp'
 
@@ -546,7 +485,6 @@ mutual
   liftLetsTm (CPrj con field x)
     = do (lv ** (lets, x')) <- liftLetsTm x
          pure $ (lv ** (lets, CPrj con field x'))
-  liftLetsTm (CInline tm) = liftLetsTm tm
   liftLetsTm CErased = pure ([] ** (id, CErased))
   liftLetsTm (CConCase scr [alt] Nothing)
     = do (scrlv ** (scrlets, scrsc)) <- liftLetsTm scr
