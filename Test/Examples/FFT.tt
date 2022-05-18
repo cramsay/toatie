@@ -77,12 +77,10 @@ pat f, tw, w, x,  bs =>
 pat n, f, tw, prec, ws, xs, bs =>
   circDIT {double' n} {f} tw (PDouble n prec) ws {xs} bs
     = let -- Recurse on N/2 DFTs
-          halfTw = halfTwiddles {f} n tw
           es = circDIT {n} {f} (halfTwiddles {f} n tw) prec _ {_} (evensH n {ws} {xs} bs)
           os = circDIT {n} {f} (halfTwiddles {f} n tw) prec _ {_} ( oddsH n {ws} {xs} bs)
 
           -- Scale odds by twiddle factors
-          tws = twiddleRow {f} (double' n) tw 1 n
           os' = zipWithConstH n {ZZ} _ {_} {_} {_}
                   (\w => \{v} => \c => \b => mulConstS w c {v} b)
                   (twiddleRow {f} (double' n) tw 1 n)

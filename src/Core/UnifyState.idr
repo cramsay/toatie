@@ -289,8 +289,8 @@ addDot : {vars : _} ->
 addDot env dotarg x y
   = do ust <- get UST
        defs <- get Ctxt
-       xnf <- normalise defs env x
-       ynf <- normalise defs env y
+       xnf <- normalise defs NoLets env x
+       ynf <- normalise defs NoLets env y
        put UST (record { dotConstraints $=
                            ((dotarg, MkConstraint InMatch env xnf ynf) ::)
                        } ust)

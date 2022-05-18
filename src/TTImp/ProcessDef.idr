@@ -38,7 +38,7 @@ mutual
            then pure True
            else anyM (mismatch defs) (zipWith (curry $ mapHom snd) xargs yargs)
   mismatchNF defs (NCode  x) (NCode  y) = mismatchNF defs x y
-  mismatchNF defs (NQuote _ x) (NQuote _ y) = mismatchNF defs !(evalClosure defs x) !(evalClosure defs y)
+  mismatchNF defs (NQuote _ x) (NQuote _ y) = mismatchNF defs !(evalClosure defs NoLets x) !(evalClosure defs NoLets y)
   mismatchNF defs (NEscape x xargs) (NEscape y yargs)
        = do False <- mismatchNF defs x y
               | True => pure True
@@ -49,7 +49,7 @@ mutual
              {vars : _} ->
              Defs -> (Closure vars, Closure vars) -> Core Bool
   mismatch defs (x, y)
-      = mismatchNF defs !(evalClosure defs x) !(evalClosure defs y)
+      = mismatchNF defs !(evalClosure defs NoLets x) !(evalClosure defs NoLets y)
 
 -- If the terms have the same type constructor at the head, and one of
 -- the argument positions has different constructors at its head, then this
@@ -75,8 +75,8 @@ export
 impossibleErrOK : {auto c : Ref Ctxt Defs} ->
                   Defs -> Error -> Core Bool
 impossibleErrOK defs (CantConvert env l r)
-    = impossibleOK defs !(nf defs env l)
-                        !(nf defs env r)
+    = impossibleOK defs !(nf defs NoLets env l)
+                        !(nf defs NoLets env r)
 {-
 -- TODO Throw suitable errors and handle them here
 impossibleErrOK defs (BadDotPattern _ _ _) = pure True
@@ -130,8 +130,8 @@ export
 recoverableErr : {auto c : Ref Ctxt Defs} ->
                  Defs -> Error -> Core Bool
 recoverableErr defs (CantConvert env l r)
-  = do l <- nf defs env l
-       r <- nf defs env r
+  = do l <- nf defs NoLets env l
+       r <- nf defs NoLets env r
        log "coverage.recover" 10 $ unlines
          [ "Recovering from CantConvert?"
          , "Checking:"
@@ -243,7 +243,7 @@ processImplicitUse env lhstm rhstm exprhsty
        case toTTImp rhstm' of
          Nothing      => throw $ GenericMsg "Can't convert back to TTImp"
          Just rhswrap => do (rhstm', rhsty')
-                               <- check env rhswrap (Just (gnf env exprhsty'))
+                               <- check env rhswrap (Just (gnf NoLets env exprhsty'))
                             pure ()
 
 -- Insert dots for any pattern variables after they have appeared once in the LHS
@@ -307,14 +307,14 @@ processLHS {vars} env lhs
        let lhs = evalState (empty,empty) (addDots lhs)
        (lhstm, lhstyg) <- elabTerm InLHS env lhs Nothing
 
-       lhstm <- normalise defs env lhstm
-       lhsty <- normalise defs env !(getTerm lhstyg)
+       lhstm <- normalise defs NoLets env lhstm
+       lhsty <- normalise defs NoLets env !(getTerm lhstyg)
 
        checkDots
 
        defs <- get Ctxt
-       lhstm <- normalise defs env lhstm
-       lhsty <- normalise defs env !(getTerm lhstyg)
+       lhstm <- normalise defs NoLets env lhstm
+       lhsty <- normalise defs NoLets env !(getTerm lhstyg)
 
        --coreLift $ putStrLn $ "PROCLHS: ENV = " ++ show env
        --coreLift $ putStrLn $ "PROCLHS: LHSTM = " ++ show lhstm
@@ -343,7 +343,7 @@ hasEmptyPat : {vars : _} ->
 hasEmptyPat defs env (Meta n _)
   = do Just ty <- lookupDefType n defs
          | Nothing => throw $ InternalError $ "Couldn't find type for meta: " ++ show n
-       pure $ !(isEmpty defs [] !(nf defs [] ty))
+       pure $ !(isEmpty defs [] !(nf defs NoLets [] ty))
 hasEmptyPat defs env (App _ f a) = pure $ !(hasEmptyPat defs env f) || !(hasEmptyPat defs env a)
 hasEmptyPat defs env _ = pure False
 
@@ -360,7 +360,7 @@ processClause (ImpossibleClause lhs_raw)
            (do
               (lhstm, lhstyg) <- elabTerm InLHS [] lhs_raw Nothing
               defs' <- get Ctxt
-              lhstm <- normalise defs' [] lhstm
+              lhstm <- normalise defs' NoLets [] lhstm
               if !(hasEmptyPat defs' [] lhstm)
                  then do put UST ust
                          put Ctxt defs
@@ -385,12 +385,12 @@ processClause (PatClause lhs_in rhs)
          -- TODO I want to check this with the correct implicitness in env
          -- from the get go! --- or at least have a way of working out which
          -- patvar binders are implicit or explicit!
-         (rhstm, rhsty) <- check env rhs (Just (gnf env rhsexp))
+         (rhstm, rhsty) <- check env rhs (Just (gnf KeepLets env rhsexp))
 
          -- Check that implicit/explicit arg use is correct on the RHS
          processImplicitUse env lhsenv rhstm rhsexp
          defs <- get Ctxt
-         rhsnf <- normalise defs env rhstm
+         rhsnf <- normalise defs KeepLets env rhstm
 
          solveConstraints InLHS
          ust <- get UST
@@ -411,7 +411,7 @@ processClause (PatClause lhs_in rhs)
   dumpHole : Defs -> Name -> Core String
   dumpHole defs n = do Just htype <- lookupDefType n defs
                          | Nothing => throw $ GenericMsg "Unresolved hole has no type"
-                       pure $ unlines $ splitPis n !(normalise defs [] htype)
+                       pure $ unlines $ splitPis n !(normalise defs NoLets [] htype)
 
 nameListEq : (xs : List Name) -> (ys : List Name) -> Maybe (xs = ys)
 nameListEq [] [] = Just Refl
@@ -563,7 +563,7 @@ processDef n clauses
 
          -- check final case tree for ambiguous matching on implicit args
          defs <- get Ctxt
-         topFnArity <- getArity defs [] (type gdef)
+         topFnArity <- getArity defs NoLets [] (type gdef)
          let topImplicitArgs = filterImplicitArgs (map (\n => MN "arg" n)
                                                        [0 .. cast topFnArity])
                                                   (type gdef)
@@ -637,7 +637,7 @@ processDef n clauses
                (lhstm, _) <- elabTerm InLHS [] itm Nothing
                --let lhstm = tmImps
                defs' <- get Ctxt
-               lhs <- normalise defs' [] lhstm
+               lhs <- normalise defs' NoLets [] lhstm
                newust <- get UST
                let [] = Data.SortedMap.toList $ constraints newust
                    | _ => do put UST ust
@@ -650,7 +650,7 @@ processDef n clauses
                  then do put Ctxt ctxt
                          pure Nothing
                  else do empty <- clearDefs ctxt
-                         rtm <- normalise empty [] lhs --TODO Maybe I need closeEnv here to strip patvar bindings?
+                         rtm <- normalise empty NoLets [] lhs --TODO Maybe I need closeEnv here to strip patvar bindings?
                          --let rtm = lhs
                          put Ctxt ctxt
                          put UST ust

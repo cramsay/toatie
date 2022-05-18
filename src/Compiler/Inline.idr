@@ -58,6 +58,11 @@ genName n
          put LVar (i + 1)
          pure (MN n i)
 
+genFromName : {auto l : Ref LVar Int} ->
+              Name -> Core Name
+genFromName (UN n) = genName n
+genFromName (MN n _) = genName n
+
 refToLocal : Name -> (x : Name) -> CExp vars -> CExp (x :: vars)
 refToLocal x new tm = refsToLocals (Add new x None) tm
 
@@ -198,13 +203,15 @@ mutual
          pure $ CLam x (refToLocal xn x sc')
   eval env (e :: stk) (CLam x sc) = eval (!(evalClosure e) :: env) stk sc
   eval env stk (CLet x val ty sc)
-    = do xn <- genName "lamv"
+    = do coreLift $ putStrLn $ "EVALING LET " ++ show (CLet x val ty sc)
+         xn <- genName "lamv"
+         x' <- genFromName (UN "waaaaah") -- x -- TODO sanitise name for VHDL output
          sc' <- eval (CRef xn :: env) [] sc
          val' <- eval env [] val
          case val' of
            -- We'd just be rebinding the name of a local, so let's not
-           CLocal p => pure $ substs [CLocal p] (refToLocal xn x sc')
-           _        => pure $ CLet x val' ty (refToLocal xn x sc')
+           CLocal p => pure $ substs [CLocal p] (refToLocal xn x' sc')
+           _        => pure $ CLet x' val' ty (refToLocal xn x' sc')
   eval env stk (CApp (CRef n) args)
     = do defs <- get Ctxt
          Just gdef <- lookupDef n defs

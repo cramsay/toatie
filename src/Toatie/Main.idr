@@ -88,7 +88,7 @@ repl = do coreLift $ putStr "> "
                                       repl
                  (tm, _) <- checkTerm [] ttexp Nothing
                  defs <- get Ctxt
-                 tm <- normalise defs [] tm
+                 tm <- normalise defs KeepLets [] tm
                  coreLift $ putStrLn $ "Type : " ++ show tm
                  dcons <- dataConsForType [] tm
                  coreLift $ putStrLn $ "Possible data constructors:\n" ++ unlines (map show dcons)
@@ -139,8 +139,8 @@ repl = do coreLift $ putStr "> "
                  (tm, ty) <- checkTerm [] ttexp Nothing
                  coreLift $ putStrLn $ "Checked: " ++ show tm
                  defs <- get Ctxt
-                 coreLift $ putStrLn $ "Type: " ++ show !(normalise defs [] !(getTerm ty))
-                 nf <- normalise defs [] tm
+                 coreLift $ putStrLn $ "Type: " ++ show !(normalise defs NoLets [] !(getTerm ty))
+                 nf <- normalise defs KeepLets [] tm
                  coreLift $ putStrLn $ "Evaluated: " ++ show nf
 
                  -- Show extracted versions too

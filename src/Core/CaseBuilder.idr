@@ -93,7 +93,7 @@ updatePats {todo = pvar :: ns} env (NBind _ (Pi _ _ farg) fsc) (p :: ps)
          Unknown =>
             do defs <- get Ctxt
                empty <- clearDefs defs
-               pure (record { argType = Known !(quote empty env farg) } p
+               pure (record { argType = Known !(quote empty NoLets env farg) } p
                           :: !(updatePats env !(fsc defs (toClosure env (Ref Bound pvar))) ps))
          _ => pure (p :: ps)
 updatePats env nf (p :: ps)
@@ -101,7 +101,7 @@ updatePats env nf (p :: ps)
          Unknown =>
             do defs <- get Ctxt
                empty <- clearDefs defs
-               pure (record { argType = Stuck !(quote empty env nf) } p :: ps)
+               pure (record { argType = Stuck !(quote empty NoLets env nf) } p :: ps)
          _ => pure (p :: ps)
 
 substInPatInfo : {pvar, vars, todo : _} ->
@@ -116,9 +116,9 @@ substInPatInfo {pvar} {vars} n tm p ps
              do defs <- get Ctxt
                 empty <- clearDefs defs
                 let env = mkEnv vars
-                case !(nf defs env (substName n tm fty)) of
+                case !(nf defs NoLets env (substName n tm fty)) of
                      NBind _ (Pi _ _ farg) fsc =>
-                       pure (record { argType = Known !(quote empty env farg) } p,
+                       pure (record { argType = Known !(quote empty NoLets env farg) } p,
                                  !(updatePats env
                                        !(fsc defs (toClosure env
                                              (Ref Bound pvar))) ps))
@@ -336,13 +336,13 @@ nextNames {vars} root ((pi, p) :: pats) fty
                    --   pure (Just !(fsc defs (toClosure env (Ref Bound n))),
                    --     Unknown)
                    Just (NBind _ (Pi _ _ farg) fsc) =>
-                      do farg <- evalClosure defs farg
+                      do farg <- evalClosure defs NoLets farg
                          case farg of
                            NErased => pure (Just !(fsc defs (toClosure env (Ref Bound n))), Unknown)
                            _       => pure (Just !(fsc defs (toClosure env (Ref Bound n))),
-                                            Known !(quote empty env farg))
+                                            Known !(quote empty NoLets env farg))
                    Just t =>
-                      pure (Nothing, Stuck !(quote empty env t))
+                      pure (Nothing, Stuck !(quote empty NoLets env t))
           (args ** ps) <- nextNames {vars} root pats (fst fa_tys)
           let argTy = case snd fa_tys of
                            Unknown => Unknown
@@ -413,7 +413,7 @@ groupCons fn pvars cs
                       else do defs <- get Ctxt
                               Just t <- lookupDef n defs
                                    | Nothing => pure NErased
-                              nf defs (mkEnv vars') (embed (type t))
+                              nf defs NoLets (mkEnv vars') (embed (type t))
              (patnames ** newargs) <- nextNames {vars=vars'} "e" (pargs) (Just cty)
              -- Update non-linear names in remaining patterns (to keep
              -- explicit dependencies in types accurate)
@@ -453,7 +453,7 @@ groupCons fn pvars cs
       = do let dty = NBind (MN "a" 0) (Pi 0 Explicit (MkClosure [] (mkEnv vars') TType)) $ --TODO We should really set stages correctly here
                        (\d, a => do --a' <- evalClosure d a
                                     pure (NBind (MN "x" 0) (Pi 0 Explicit a)
-                                             (\dv, av => do av' <- evalClosure dv av
+                                             (\dv, av => do av' <- evalClosure dv NoLets av
                                                             pure (NCode av'))))
 
            ([tyname, argname] ** newargs) <- nextNames "e" [(AExplicit, pty),(AExplicit, parg)] (Just dty)
@@ -517,7 +517,7 @@ sameType fn env [] = pure ()
 sameType {ns} fn env (p :: xs)
     = do defs <- get Ctxt
          case getFirstArgType p of
-              Known t => sameTypeAs !(nf defs env t)
+              Known t => sameTypeAs !(nf defs NoLets env t)
                                     (map getFirstArgType xs)
               ty => throw (CaseCompile fn DifferingTypes)
   where
@@ -538,7 +538,7 @@ sameType {ns} fn env (p :: xs)
     sameTypeAs ty [] = pure ()
     sameTypeAs ty (Known t :: xs) =
          do defs <- get Ctxt
-            if headEq ty !(nf defs env t)
+            if headEq ty !(nf defs NoLets env t)
                then sameTypeAs ty xs
                else throw (CaseCompile fn DifferingTypes)
     sameTypeAs ty _ = throw (CaseCompile fn DifferingTypes)
@@ -808,7 +808,7 @@ mkPatClause fn args ty (ps, rhs)
     = maybe (throw (CaseCompile fn DifferingArgNumbers))
             (\eq =>
                do defs <- get Ctxt
-                  nty <- nf defs [] ty
+                  nty <- nf defs NoLets [] ty
                   ns <- mkNames args ps eq (Just nty)
                   pure (MkPatClause [] ns
                           (rewrite sym (appendNilRightNeutral args) in
@@ -828,11 +828,11 @@ mkPatClause fn args ty (ps, rhs)
                      Just (NBind _ (Pi _ _ farg) fsc) =>
                         pure (Just !(fsc defs (toClosure [] (Ref Bound arg))),
                                 Known (embed {more = arg :: args}
-                                          !(quote empty [] farg)))
+                                          !(quote empty NoLets [] farg)))
                      Just t =>
                         pure (Nothing,
                                 Stuck (embed {more = arg :: args}
-                                        !(quote empty [] t)))
+                                        !(quote empty NoLets [] t)))
              pure (MkInfo p First (Builtin.snd fa_tys)
                       :: weaken !(mkNames args ps eq (Builtin.fst fa_tys)))
 
@@ -904,7 +904,7 @@ getPMDef : {auto c : Ref Ctxt Defs} ->
            Core (args ** CaseTree args)
 getPMDef fn ty []
     = do defs <- get Ctxt
-         pure (!(getArgs 0 !(nf defs [] ty)) ** (Unmatched "No clauses"))
+         pure (!(getArgs 0 !(nf defs NoLets [] ty)) ** (Unmatched "No clauses"))
   where
     getArgs : Int -> NF [] -> Core (List Name)
     getArgs i (NBind x (Pi _ _ _) sc)

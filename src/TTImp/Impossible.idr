@@ -33,7 +33,7 @@ piInfoToAppInfo Explicit = AExplicit
 
 nfToClosure : {auto c : Ref Ctxt Defs} -> NF [] -> Core (Closure [])
 nfToClosure nf = do defs <- get Ctxt
-                    tm <- quote defs [] nf
+                    tm <- quote defs NoLets [] nf
                     pure $ toClosure [] tm
 
 mutual
@@ -61,7 +61,7 @@ mutual
          defs <- get Ctxt
          Just gdef <- lookupDef n defs
            | Nothing => throw $ GenericMsg $ "Undefined name " ++ show n
-         tynf <- nf defs [] (type gdef)
+         tynf <- nf defs NoLets [] (type gdef)
          let head = case definition gdef of
                       DCon t a => DataCon t a
                       TCon i t a _ => TyCon i t a

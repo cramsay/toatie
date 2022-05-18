@@ -75,8 +75,8 @@ convertError : {vars : _} ->
 convertError env x y
     = do defs <- get Ctxt
          empty <- clearDefs defs
-         throw (CantConvert env !(quote empty env x)
-                                !(quote empty env y))
+         throw (CantConvert env !(quote empty NoLets env x)
+                                !(quote empty NoLets env y))
 
 
 postpone : {vars : _} ->
@@ -88,8 +88,8 @@ postpone mode env x y
     = do defs <- get Ctxt
          empty <- clearDefs defs
 
-         xtm <- quote empty env x
-         ytm <- quote empty env y
+         xtm <- quote empty NoLets env x
+         ytm <- quote empty NoLets env y
          c <- addConstraint (MkConstraint mode env xtm ytm)
          pure (constrain c)
 
@@ -157,7 +157,7 @@ patternEnv : {auto c : Ref Ctxt Defs} ->
 patternEnv {vars} env args
     = do defs <- get Ctxt
          empty <- clearDefs defs
-         args' <- traverse (evalClosure empty) args
+         args' <- traverse (evalClosure empty NoLets) args
          case getVars [] args' of
               Nothing => pure Nothing
               Just vs =>
@@ -290,7 +290,7 @@ getArgTypes : {vars : _} ->
 getArgTypes defs (NBind n (Pi _ _ ty) sc) (a :: as)
   = do Just scTys <- getArgTypes defs !(sc defs a) as
          | Nothing => pure Nothing
-       pure (Just (!(evalClosure defs ty) :: scTys))
+       pure (Just (!(evalClosure defs NoLets ty) :: scTys))
 getArgTypes _ _ [] = pure (Just [])
 getArgTypes _ _ _ = pure Nothing
 
@@ -318,7 +318,7 @@ mutual
               Core UnifyResult
   unifyIfEq post mode env x y
         = do defs <- get Ctxt
-             if !(convert defs env x y)
+             if !(convert defs NoLets env x y)
                 then pure success
                 else if post
                         then postpone mode env x y
@@ -340,9 +340,9 @@ mutual
     = do defs <- get Ctxt
          Just vty <- lookupDefType mname defs
            | Nothing => ufail $ "No such metavariable" ++ show mname
-         vargTys <- getArgTypes defs !(nf defs env (embed vty)) (map snd $ margs ++ margs')
+         vargTys <- getArgTypes defs !(nf defs NoLets env (embed vty)) (map snd $ margs ++ margs')
          nargTys <- maybe (pure Nothing)
-                           (\ty => getArgTypes defs !(nf defs env (embed ty)) $ map snd args')
+                           (\ty => getArgTypes defs !(nf defs NoLets env (embed ty)) $ map snd args')
                            nty
          if !(headsConvert mode env vargTys nargTys)
             then
@@ -459,7 +459,7 @@ mutual
                        -- metavariable's environment
                        defs <- get Ctxt
                        empty <- clearDefs defs
-                       tm <- quote empty env tmnf
+                       tm <- quote empty NoLets env tmnf
 
                        let solveOrElsePostpone : Term newvars -> Core UnifyResult
                            solveOrElsePostpone stm = do
@@ -473,7 +473,7 @@ mutual
                        case shrinkTerm tm submv of
                             Just stm => solveOrElsePostpone stm
                             Nothing  =>
-                              do tm' <- quote defs env tmnf
+                              do tm' <- quote defs NoLets env tmnf
                                  case shrinkTerm tm' submv of
                                    Nothing => postpone mode env (NApp (NMeta mname $ map snd margs) margs') tmnf
                                    Just stm => solveOrElsePostpone stm
@@ -509,7 +509,7 @@ mutual
       = convertError env (NApp  (NLocal x xp) args) y
   unifyApp mode env f args tm
       = do defs <- get Ctxt
-           if !(convert defs env (NApp f args) tm)
+           if !(convert defs NoLets env (NApp f args) tm)
               then pure success
               else postpone mode env (NApp f args) tm
 
@@ -531,8 +531,8 @@ mutual
            else
              do empty <- clearDefs defs
                 -- Unify types of bound vars
-                tx' <- quote empty env tx
-                ty' <- quote empty env ty
+                tx' <- quote empty NoLets env tx
+                ty' <- quote empty NoLets env ty
                 ct  <- unify mode env tx ty
                 -- Make env' so we can unify scopes
                 xn <- genName "x"
@@ -542,22 +542,22 @@ mutual
                   [] => -- no constraints, check scopes
                         do tscx <- scx defs (toClosure env (Ref Bound xn))
                            tscy <- scy defs (toClosure env (Ref Bound xn))
-                           tmx <- quote empty env tscx
-                           tmy <- quote empty env tscy
+                           tmx <- quote empty NoLets env tscx
+                           tmy <- quote empty NoLets env tscy
                            unify mode env'
                                  (refsToLocals (Add x xn None) tmx)
                                  (refsToLocals (Add x xn None) tmy)
                   cs => -- Constraints! Make new guarded constant
-                        do txtm <- quote empty env tx
-                           tytm <- quote empty env ty
+                        do txtm <- quote empty NoLets env tx
+                           tytm <- quote empty NoLets env ty
                            c    <- newConstant env
                                      (Bind x (Lam sy Explicit txtm) (Local _ First))
                                      (Bind x (Pi  sy Explicit txtm) (weaken tytm))
                                      cs
                            tscx <- scx defs (toClosure env (Ref Bound xn))
                            tscy <- scy defs (toClosure env (App AExplicit c (Ref Bound xn)))
-                           tmx <- quote empty env tscx
-                           tmy <- quote empty env tscy
+                           tmx <- quote empty NoLets env tscx
+                           tmy <- quote empty NoLets env tscy
                            cs' <- unify mode env'
                                     (refsToLocals (Add x xn None) tmx)
                                     (refsToLocals (Add x xn None) tmy)
@@ -575,14 +575,14 @@ mutual
                                ct <- unify mode env tx ty
                                -- Make env' so we can unify scopes
                                xn <- genName "x"
-                               txtm <- quote empty env tx
+                               txtm <- quote empty NoLets env tx
                                let env' : Env Term (x :: _)
                                         = Lam sx Explicit txtm :: env
                                -- Unify scopes
                                tscx <- scx defs (toClosure env (Ref Bound xn))
                                tscy <- scy defs (toClosure env (Ref Bound xn))
-                               tmx <- quote empty env tscx
-                               tmy <- quote empty env tscy
+                               tmx <- quote empty NoLets env tscx
+                               tmy <- quote empty NoLets env tscy
                                cs' <- unify mode env' (refsToLocals (Add x xn None) tmx)
                                                       (refsToLocals (Add x xn None) tmy)
                                pure (union ct cs')
@@ -630,7 +630,7 @@ mutual
       localsIn [] = pure 0
       localsIn (c :: cs)
           = do defs <- get Ctxt
-               case !(evalClosure defs c) of
+               case !(evalClosure defs NoLets c) of
                  NApp (NLocal _ _) _ => pure $ S !(localsIn cs)
                  _ => localsIn cs
   unifyBothApps mode env (NMeta xn xs) xs' yh ys
@@ -670,7 +670,7 @@ mutual
   unifyNoEta mode env x@(NApp fx@(NMeta _ _) axs)
                       y@(NApp fy@(NMeta _ _) ays)
     = do defs <- get Ctxt
-         if !(convert defs env x y)
+         if !(convert defs NoLets env x y)
            then pure success
            else unifyBothApps mode env fx axs fy ays
   unifyNoEta mode env (NApp fx axs) (NApp fy ays)
@@ -699,27 +699,27 @@ mutual
     unify mode env tmx@(NBind x (Lam sx ix tx) scx) tmy
         = do defs <- get Ctxt
              if isHoleApp tmy
-                then if not !(convert defs env tmx tmy)
+                then if not !(convert defs NoLets env tmx tmy)
                         then unifyNoEta mode env tmx tmy
                         else pure success
                 else do empty <- clearDefs defs
-                        domty <- quote empty env tx
-                        etay <- nf defs env
+                        domty <- quote empty NoLets env tx
+                        etay <- nf defs NoLets env
                                  $ Bind x (Lam sx Explicit domty)
-                                 $ App AExplicit (weaken !(quote empty env tmy))
+                                 $ App AExplicit (weaken !(quote empty NoLets env tmy))
                                                  (Local 0 First)
                         unify mode env tmx etay
     unify mode env tmy tmx@(NBind x (Lam sx ix tx) scx) 
        = do defs <- get Ctxt
             if isHoleApp tmy
-               then if not !(convert defs env tmx tmy)
+               then if not !(convert defs NoLets env tmx tmy)
                        then unifyNoEta mode env tmx tmy
                        else pure success
                else do empty <- clearDefs defs
-                       domty <- quote empty env tx
-                       etay <- nf defs env
+                       domty <- quote empty NoLets env tx
+                       etay <- nf defs NoLets env
                                 $ Bind x (Lam sx Explicit domty)
-                                $ App AExplicit (weaken !(quote empty env tmy))
+                                $ App AExplicit (weaken !(quote empty NoLets env tmy))
                                                 (Local 0 First)
                        unify mode env tmx etay
     -- Otherwise, unification succeeds if both sides are convertible
@@ -730,16 +730,16 @@ mutual
   Unify Term where
     unify mode env x y
         = do defs <- get Ctxt
-             xnf <- nf defs env x
-             ynf <- nf defs env y
+             xnf <- nf defs NoLets env x
+             ynf <- nf defs NoLets env y
              unify mode env xnf ynf
 
   export
   Unify Closure where
     unify mode env x y
         = do defs <- get Ctxt
-             xnf <- evalClosure defs x
-             ynf <- evalClosure defs y
+             xnf <- evalClosure defs NoLets x
+             ynf <- evalClosure defs NoLets y
              unify mode env xnf ynf
 
 -- Retry the given constraint, by constraint id
@@ -823,7 +823,7 @@ checkDots
     getHoleName : Term [] -> Core (Maybe Name)
     getHoleName tm
       = do defs <- get Ctxt
-           NApp (NMeta n' args) _ <- nf defs [] tm
+           NApp (NMeta n' args) _ <- nf defs NoLets [] tm
              | _ => pure Nothing
            pure (Just n')
 
@@ -833,8 +833,8 @@ checkDots
     checkConstraint : (Name, Constraint) -> Core ()
     checkConstraint (n, MkConstraint mode env xold yold)
       = do defs <- get Ctxt
-           x <- nf defs env xold
-           y <- nf defs env yold
+           x <- nf defs NoLets env xold
+           y <- nf defs NoLets env yold
 
            -- A dot is okay if the constraint is solvable *without solving
            -- any additional holes*
@@ -873,8 +873,8 @@ checkDots
                                 put UST (record { dotConstraints = [] } ust)
                                 empty <- clearDefs defs
                                 throw (BadDotPattern env
-                                         !(quote empty env x)
-                                         !(quote empty env y))
+                                         !(quote empty NoLets env x)
+                                         !(quote empty NoLets env y))
                            _ => do put UST (record { dotConstraints = [] } ust)
                                    throw err
              )

@@ -175,7 +175,7 @@ caseBlock {vars} mode env scr scrtm scrty alts expected
 
        processDef casen alts'
 
-       pure (appTm, gnf env caseretty)
+       pure (appTm, gnf NoLets env caseretty)
   where
 
   getBindName : Int -> Name -> List Name -> (Name, Name)
@@ -316,13 +316,13 @@ checkCase mode env scr scrty_in alts exp
        -- Check scrutinee type is a type
        (scrtyv, scrtyt) <- check env scrty_exp (Just gType)
        -- Check scrutinee has expected type
-       (scrtm_in, gscrty) <- check env scr (Just (gnf env scrtyv))
+       (scrtm_in, gscrty) <- check env scr (Just (gnf NoLets env scrtyv))
 
        -- Check if we've managed to work out scrty (if not, we bail)
        defs <- get Ctxt
-       scrty <- normalise defs env !(getTerm gscrty)
+       scrty <- normalise defs NoLets env !(getTerm gscrty)
        defs <- get Ctxt
-       checkConcrete !(nf defs env scrty)
+       checkConcrete !(nf defs NoLets env scrty)
 
        caseBlock mode env scr scrtm_in scrty alts exp
 
@@ -348,7 +348,7 @@ checkCase mode env scr scrty_in alts exp
   getRetTy defs (NTCon n _ _ _ _)
     = do Just ty <- lookupDefType n defs
            | Nothing => pure Nothing
-         pure (Just (n, !(nf defs [] ty)))
+         pure (Just (n, !(nf defs NoLets [] ty)))
   getRetTy _ _ = pure Nothing
 
   -- Guess a scrutinee type by looking at the alternatives, so that we
@@ -361,7 +361,7 @@ checkCase mode env scr scrty_in alts exp
           do defs <- get Ctxt
              Just ty <- lookupDefType n defs
                  | Nothing => guessScrType xs
-             Just (tyn, tyty) <- getRetTy defs !(nf defs [] ty)
+             Just (tyn, tyty) <- getRetTy defs !(nf defs NoLets [] ty)
                  | _ => guessScrType xs
              applyTo defs (IVar tyn) tyty
         _ => guessScrType xs

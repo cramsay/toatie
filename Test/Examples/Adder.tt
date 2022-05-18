@@ -24,7 +24,7 @@ and O I = O
 and I O = O
 and I I = I
 
-data Pair : Type -> Type where
+simple Pair : Type -> Type where
      MkP : {a : Type} -> a -> a -> Pair a
 
 fa : Bit -> Bit -> Bit -> Pair Bit
@@ -34,3 +34,6 @@ pat a, b, cin =>
           sum   = xor axorb cin
           cout  = or (and axorb cin) (and a b)
       in MkP {_} cout sum
+
+faCirc : < Bit -> Bit -> Bit -> Pair Bit >
+faCirc = [| \a => \b => \cin => fa a b cin |]

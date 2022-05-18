@@ -1,0 +1,109 @@
+import Data.Nat
+import Data.Nat.Inequality
+import Data.Fin
+import Data.Signed
+import Data.Vect_
+import Proofs
+
+import Examples.FFT
+import Examples.FFT.Twiddles
+import Examples.FFT.LowerProofs
+import Examples.FFT.UpperProofs
+
+
+-- Prove our DIT's base case is equivalent to a 1-input DFT
+
+eqDitBase : {f : Nat -> Nat -> ZZ} -> (tw : Twiddles f 1) -> (xs : Vect 1 ZZ) -> Equal (Vect 1 ZZ) (dft 1 {f} tw xs) (dit {1} {f} tw POne xs)
+pat f, nz, p1, p2, p3, p4, p5, x =>
+  eqDitBase {f} (MkTwiddles f 1 nz p1 p2 p3 p4 p5) [x]
+    = let h1 = eqInd2 {_} {_} {_} {p1}
+                 {\h => Equal (Vect 1 ZZ)
+                                 [multZ (f 0 1) x]
+                                 [multZ h x]
+                 } (Refl {_} {_})
+          h2 = eqInd2 {_} {_} {_} {multOneLeftNeutralZ x}
+                 {\h => Equal (Vect 1 ZZ)
+                                 [multZ (f 0 1) x]
+                                 [h]
+                 } h1
+      in h2
+-- Prove DIT/DFT equivalence in general
+
+eqDit : {n : Nat} -> {f : Nat -> Nat -> ZZ} -> (tw : Twiddles f n) -> (isPow2 : Pow2 n)  ->
+        (xs : Vect n ZZ) ->
+        Equal (Vect n ZZ) (dft n {f} tw xs) (dit {n} {f} tw isPow2 xs)
+
+eqDitRec : (n : Nat) -> {f : Nat -> Nat -> ZZ} -> (tw : Twiddles f (double' n)) -> (isPow2 : Pow2 (double' n))  ->
+           (xs : Vect (double' n) ZZ) ->
+           (es, os : Vect n ZZ) ->
+           Equal (Vect n ZZ) (evens n {ZZ} xs) es ->
+           Equal (Vect n ZZ) (odds  n {ZZ} xs) os ->
+           Equal (Vect (double' n) ZZ) (dft (double' n) {f} tw xs) (dit {double' n} {f} tw isPow2 xs)
+
+pat f, tw, xs =>
+  eqDit {1} {f} tw POne xs = eqDitBase {f} tw xs
+pat n, f, tw, prec, xs =>
+  eqDit {double' n} {f} tw (PDouble n prec) xs
+    = eqDitRec n {f} tw (PDouble n prec) xs (evens n {ZZ} xs) (odds n {ZZ} xs) (Refl {_} {_}) (Refl {_} {_})
+
+pat n, f, tw, prec, xs, es, os, prfEven, prfOdd =>
+  eqDitRec n {f} tw (PDouble n prec) xs es os prfEven prfOdd
+    = let h1 = Refl {_} {dit {double' n} {f} tw (PDouble n prec) xs}
+
+          -- Apply our proof of deinterleved xs
+          h2 = eqInd2 {_} {_} {_} {prfEven}
+                 {\h => Equal (Vect (double' n) ZZ)
+                          (appendHalves {_} {_}
+                              (zipWith n {_} {_} {_} plusZ (dit {_} {_} (halfTwiddles {_} _ tw) prec h)
+                                                           (zipWith n {_} {_} {_} multZ (map n {(Fin n)} {_} (\i : (Fin n) => (twiddle {_} {(double' n)} tw 1 (finToNat {_} i))) (indices n))
+                                                                                        (dit {_} {_} (halfTwiddles {_} _ tw) prec (odds n {_} xs))))
+                              (zipWith n {_} {_} {_} subZ (dit {_} {_} (halfTwiddles {_} _ tw) prec h)
+                                                          (zipWith n {_} {_} {_} multZ (map n {(Fin n)} {_} (\i : (Fin n) => (twiddle {_} {(double' n)} tw 1 (finToNat {_} i))) (indices n))
+                                                                                        (dit {_} {_} (halfTwiddles {_} _ tw) prec (odds n {_} xs)))))
+                          (dit {double' n} {f} tw (PDouble n prec) xs)
+                          } h1
+          h3 = eqInd2 {_} {_} {_} {prfOdd}
+                 {\h => Equal (Vect (double' n) ZZ)
+                          (appendHalves {_} {_}
+                              (zipWith n {_} {_} {_} plusZ (dit {_} {_} (halfTwiddles {_} _ tw) prec es)
+                                                           (zipWith n {_} {_} {_} multZ (map n {(Fin n)} {_} (\i : (Fin n) => (twiddle {_} {(double' n)} tw 1 (finToNat {_} i))) (indices n))
+                                                                                        (dit {_} {_} (halfTwiddles {_} _ tw) prec h)))
+                              (zipWith n {_} {_} {_} subZ (dit {_} {_} (halfTwiddles {_} _ tw) prec es)
+                                                          (zipWith n {_} {_} {_} multZ (map n {(Fin n)} {_} (\i : (Fin n) => (twiddle {_} {(double' n)} tw 1 (finToNat {_} i))) (indices n))
+                                                                                        (dit {_} {_} (halfTwiddles {_} _ tw) prec h))))
+                          (dit {double' n} {f} tw (PDouble n prec) xs)
+                          } h2
+          -- Recurse on our proof for odd and even sub-dfts
+          h4 = eqInd2 {_} {_} {_} {eqSym {_} {_} {_} (eqDit {n} {f} (halfTwiddles {f} n tw) prec es)}
+                 {\h => Equal (Vect (double' n) ZZ)
+                          (appendHalves {_} {_}
+                              (zipWith n {_} {_} {_} plusZ h
+                                                           (zipWith n {_} {_} {_} multZ (map n {(Fin n)} {_} (\i : (Fin n) => (twiddle {_} {(double' n)} tw 1 (finToNat {_} i))) (indices n))
+                                                                                        (dit {_} {_} (halfTwiddles {_} _ tw) prec os)))
+                              (zipWith n {_} {_} {_} subZ h
+                                                          (zipWith n {_} {_} {_} multZ (map n {(Fin n)} {_} (\i : (Fin n) => (twiddle {_} {(double' n)} tw 1 (finToNat {_} i))) (indices n))
+                                                                                        (dit {_} {_} (halfTwiddles {_} _ tw) prec os))))
+                          (dit {double' n} {f} tw (PDouble n prec) xs)
+                          } h3
+          h5 = eqInd2 {_} {_} {_} {eqSym {_} {_} {_} (eqDit {n} {f} (halfTwiddles {f} n tw) prec os)}
+                 {\h => Equal (Vect (double' n) ZZ)
+                          (appendHalves {_} {_}
+                              (zipWith n {_} {_} {_} plusZ (dft _ {_} (halfTwiddles {_} _ tw) es)
+                                                           (zipWith n {_} {_} {_} multZ (map n {(Fin n)} {_} (\i : (Fin n) => (twiddle {_} {(double' n)} tw 1 (finToNat {_} i))) (indices n))
+                                                                                        h))
+                              (zipWith n {_} {_} {_} subZ (dft _ {_} (halfTwiddles {_} _ tw) es)
+                                                          (zipWith n {_} {_} {_} multZ (map n {(Fin n)} {_} (\i : (Fin n) => (twiddle {_} {(double' n)} tw 1 (finToNat {_} i))) (indices n))
+                                                                                        h)))
+                          (dit {double' n} {f} tw (PDouble n prec) xs)
+                          } h4
+
+          -- Combine proofs of equality for lower and upper halfs
+          h6 = eqInd2 {_} {_} {_} {eqForHalves n {ZZ} _ _ (dft (double' n) {f} tw xs)
+                                     (eqDitRecLower {n} {f} tw xs es os prfEven prfOdd)
+                                     (eqDitRecUpper {n} {f} tw xs es os prfEven prfOdd)
+                                  }
+                 {\h => Equal (Vect (double' n) ZZ)
+                          h
+                          (dit {double' n} {f} tw (PDouble n prec) xs)
+                 } h5
+      in h6

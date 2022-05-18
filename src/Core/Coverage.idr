@@ -63,7 +63,7 @@ conflict defs env nfty n
               | Nothing => pure False
          case (definition gdef, type gdef) of
               (DCon t arity, dty)
-                  => do Nothing <- conflictNF 0 nfty !(nf defs [] dty)
+                  => do Nothing <- conflictNF 0 nfty !(nf defs NoLets [] dty)
                             | Just ms => pure $ conflictMatch ms
                         pure True
               _ => pure False
@@ -73,8 +73,8 @@ conflict defs env nfty n
                      Core (Maybe (List (Name, Term vars)))
       conflictArgs _ [] [] = pure (Just [])
       conflictArgs i (c :: cs) (c' :: cs')
-          = do cnf <- evalClosure defs c
-               cnf' <- evalClosure defs c'
+          = do cnf <- evalClosure defs NoLets c
+               cnf' <- evalClosure defs NoLets c'
                Just ms <- conflictNF i cnf cnf'
                     | Nothing => pure Nothing
                Just ms' <- conflictArgs i cs cs'
@@ -99,7 +99,7 @@ conflict defs env nfty n
                        !(sc defs (toClosure [] (Ref Bound x')))
       conflictNF i nf (NApp (NRef Bound n) [])
           = do empty <- clearDefs defs
-               pure (Just [(n, !(quote empty env nf))])
+               pure (Just [(n, !(quote empty NoLets env nf))])
       conflictNF i (NDCon n t a args) (NDCon n' t' a' args')
           = if t == t'
                then conflictArgs i (map snd args) (map snd args')
@@ -165,7 +165,7 @@ getCons defs (NTCon tn _ _ _ _)
            | _ => pure Nothing
          case (definition gdef, type gdef) of
            (DCon t arity, ty) =>
-              pure (Just (!(nf defs [] ty), cn, t, arity))
+              pure (Just (!(nf defs NoLets [] ty), cn, t, arity))
            _ => pure Nothing
 getCons defs nty = pure []
 
@@ -337,7 +337,7 @@ buildArgs defs known not ps cs@(Case {name = var} idx el ty altsIn)
   -- the ones it can't possibly be (the 'not') because a previous case
   -- has matched.
     = do let fenv = freeEnv _
-         nfty <- nf defs fenv ty
+         nfty <- nf defs NoLets fenv ty
          alts <- replaceDefaults defs nfty altsIn
          let alts' = alts ++ !(getMissingAlts defs nfty alts)
          let altsK = maybe alts' (\t => filter (tagIs t) alts')

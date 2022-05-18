@@ -42,7 +42,7 @@ checkExp env term got (Just exp)
         let expExt = --extraction
                      !(getTerm exp)
 
-        ures <- unify InTerm env !(nf defs env gotExt) !(nf defs env expExt)
+        ures <- unify InTerm env !(nf defs NoLets env gotExt) !(nf defs NoLets env expExt)
 
         -- If there are constraints, return a guarded definition. Otherwise,
         -- we've won.
@@ -62,7 +62,7 @@ weakenExp : {x, vars : _} ->
 weakenExp env Nothing = pure Nothing
 weakenExp env (Just gtm)
     = do tm <- getTerm gtm
-         pure (Just (gnf env (weaken tm)))
+         pure (Just (gnf KeepLets env (weaken tm)))
 
 -- Check that the implicitness of a binder is compatible with the implicitness of an application
 checkImplicitness : PiInfo -> AppInfo -> Core Bool
@@ -104,7 +104,7 @@ checkTerm env (IVar n) exp
                   then throw (GenericMsg $ "Stage error: var " ++ show n ++ " is bound at stage "
                                             ++ show stageBound ++ " but used at stage " ++ show stageNow)
                   else checkExp env (Local _ p)
-                                    (gnf env (binderType binder))
+                                    (gnf NoLets env (binderType binder))
                                      exp
            Nothing =>
              do defs <- get Ctxt
@@ -114,11 +114,11 @@ checkTerm env (IVar n) exp
                               DCon t a => DataCon t a
                               TCon i t a cons => TyCon i t a
                               _ => Func
-                checkExp env (Ref nt n) (gnf env (embed (type gdef))) exp
+                checkExp env (Ref nt n) (gnf NoLets env (embed (type gdef))) exp
 -- Let binding with explicit type
 checkTerm env (ILet n (Just argTy) argVal scope) exp
     = do (argTytm , _) <- checkTerm env argTy (Just gType)
-         (argValtm, _) <- checkTerm env argVal (Just $ gnf env argTytm)
+         (argValtm, _) <- checkTerm env argVal (Just $ gnf NoLets env argTytm)
          stage <- get Stg
          let env' : Env Term (n :: vars)
                   = Lam stage Explicit argTytm :: env
@@ -126,7 +126,7 @@ checkTerm env (ILet n (Just argTy) argVal scope) exp
          (scopetm, gscopetmTy) <- checkTerm env' scope expScopeTy
          scopeTyTerm <- getTerm gscopetmTy
          pure (Bind n (Let stage argValtm argTytm) scopetm
-              ,gnf env (Bind n (Let stage argValtm argTytm) scopeTyTerm))
+              ,gnf NoLets env (Bind n (Let stage argValtm argTytm) scopeTyTerm))
 -- Let binding with implicit type
 checkTerm env (ILet n Nothing argVal scope) exp
     = do (argValtm, gargValty) <- checkTerm env argVal Nothing
@@ -138,12 +138,12 @@ checkTerm env (ILet n Nothing argVal scope) exp
          (scopetm, gscopetmTy) <- checkTerm env' scope expScopeTy
          scopeTyTerm <- getTerm gscopetmTy
          pure (Bind n (Let stage argValtm argTytm) scopetm
-              ,gnf env (Bind n (Let stage argValtm argTytm) scopeTyTerm))
+              ,gnf NoLets env (Bind n (Let stage argValtm argTytm) scopeTyTerm))
 checkTerm env (IPi p mn argTy retTy) exp
     = do let n = fromMaybe (MN "_" 0) mn
          (argTytm, gargTyty) <- checkTerm env argTy (Just gType)
          defs <- get Ctxt
-         argTytm <- normalise defs env argTytm
+         argTytm <- normalise defs NoLets env argTytm
 
          stage <- get Stg
          let env' : Env Term (n :: vars)
@@ -178,8 +178,8 @@ checkTerm env (ILam p mn argTy scope) Nothing
          -- If implicit, check that name isn't free var in extraction of scope
          checkLamFV n p scopetm
 
-         checkExp env (Bind n (Lam stage p argTytm) scopetm)
-                      (gnf env (Bind n (Pi stage p argTytm) !(getTerm gscopety)))
+         checkExp env (Bind n (Lam 0 p argTytm) scopetm)
+                      (gnf NoLets env (Bind n (Pi stage p argTytm) !(getTerm gscopety)))
                       Nothing
 checkTerm env (ILam p mn argTy scope) (Just exp)
     = do let n = fromMaybe (MN "_" 0) mn
@@ -189,19 +189,19 @@ checkTerm env (ILam p mn argTy scope) (Just exp)
                   = Lam stage p argTytm :: env
          expTyNF <- getNF exp
          defs <- get Ctxt
-         case !(quote defs env expTyNF) of
+         case !(quote defs NoLets env expTyNF) of
               Bind _ (Pi _ p' ty) sc =>
                  do let env' : Env Term (n :: vars)
                              = Lam stage p argTytm :: env
                     let scty = renameTop n sc
                     (scopetm, gscopety) <-
-                              checkTerm env' scope (Just (gnf env' scty))
+                              checkTerm env' scope (Just (gnf NoLets env' scty))
                     let True = p == p'
                           | _ => throw (GenericMsg "Lambda binding does not have same implicitness as its type")
                     checkLamFV n p scopetm
 
                     checkExp env (Bind n (Lam stage p argTytm) scopetm)
-                                 (gnf env (Bind n (Pi stage p argTytm) !(getTerm gscopety)))
+                                 (gnf NoLets env (Bind n (Pi stage p argTytm) !(getTerm gscopety)))
                                  (Just exp)
               _ => throw (GenericMsg "Lambda must have a function type")
 checkTerm env (IPatvar n ty scope) exp
@@ -217,7 +217,7 @@ checkTerm env (IPatvar n ty scope) exp
                     else Implicit
 
          checkExp env (Bind n (PVar stage i ty) scopetm)
-                      (gnf env (Bind n (PVTy stage ty) !(getTerm gscopety)))
+                      (gnf NoLets env (Bind n (PVTy stage ty) !(getTerm gscopety)))
                       exp
   -- TODO here we should infer the implicitness of the pattern var
   --  Does it appear in an explicit position in the scope? maybe best to do this with the rawImp scope?
@@ -234,7 +234,7 @@ checkTerm env (IApp i f a) exp
                        -- Check the argument type, given the expected argument
                        -- type
                        (atm, gaty) <- checkTerm env a
-                                                (Just (glueBack defs env !(evalClosure defs ty)))
+                                                (Just (glueBack defs NoLets env !(evalClosure defs NoLets ty)))
 
                        -- FIXME do check implicitness unless the mode says we're checking a term we've generated...
                        --       this way we don't have to tag our applications correctly. Bit of a hack
@@ -248,7 +248,7 @@ checkTerm env (IApp i f a) exp
                        -- Calculate the type of the application by continuing
                        -- to evaluate the scope with 'atm'
                        sc' <- sc defs (toClosure env atm)
-                       checkExp env (App i ftm atm) (glueBack defs env sc') exp
+                       checkExp env (App i ftm atm) (glueBack defs KeepLets env sc') exp
               _ => throw (GenericMsg $ "Not a function type: " ++
                           show ftm ++ " of type " ++ show !(getTerm gfty))
 checkTerm env Implicit Nothing
@@ -297,7 +297,7 @@ checkTerm env (IQuote sc) Nothing
        -- Decrement stage again to check whole term
        put Stg stage
        -- Does our expected type match the Code equiv of our scope's type?
-       checkExp env (Quote sctytm sctm) (gnf env $ TCode sctytm) Nothing
+       checkExp env (Quote sctytm sctm) (gnf NoLets env $ TCode sctytm) Nothing
 
 checkTerm env (IQuote  sc) (Just exp)
   = do expNF <- getNF exp
@@ -305,7 +305,7 @@ checkTerm env (IQuote  sc) (Just exp)
        let (NCode iexp) = expNF
           | NApp (NMeta _ _) _ => checkTerm env (IQuote sc) Nothing
           | _ => throw $ GenericMsg $ "Expected type of quote in not code type: " ++ show !(getTerm exp)
-       let innerExp = Just $ gnf env !(quote defs env iexp)
+       let innerExp = Just $ gnf NoLets env !(quote defs NoLets env iexp)
 
        -- Increment stage so we can typecheck the scope
        stage <- get Stg
@@ -316,7 +316,7 @@ checkTerm env (IQuote  sc) (Just exp)
        -- Decrement stage again to check whole term
        put Stg stage
        -- Does our expected type match the Code equiv of our scope's type?
-       checkExp env (Quote sctytm sctm) (gnf env $ TCode sctytm) (Just exp)
+       checkExp env (Quote sctytm sctm) (gnf NoLets env $ TCode sctytm) (Just exp)
 
 checkTerm env (ICode scty) exp
   = do -- Is scty of type Type?
@@ -334,33 +334,33 @@ checkTerm env (IEval code) Nothing
        (codetm, gcodety) <- checkTerm env code Nothing
        codetyNF <- getNF gcodety
        defs <- get Ctxt
-       TCode aty <- quote defs env codetyNF
+       TCode aty <- quote defs NoLets env codetyNF
              | _ => throw (GenericMsg "Cannot eval non-code type")
        -- TODO How do we check for closed terms?! For now, I'm just checking
        -- that the NF doesn't start on a bind, but I think that's not quite
        -- right
-       case !(nf defs env codetm) of
+       case !(nf defs NoLets env codetm) of
          NBind _ _ _ => throw (GenericMsg "Maybe trying to eval something with free variables?")
                         -- Then we're good to go by returning the inner term with it's inner type
-         _           => checkExp env (Eval codetm) (gnf env aty) Nothing
+         _           => checkExp env (Eval codetm) (gnf NoLets env aty) Nothing
 checkTerm env (IEval code) (Just exp)
   = do -- Only eval in stage 0
        Z <- get Stg
         | _ => throw (GenericMsg "Eval appears in non-zero stage")
        -- Only eval closed terms with type TCode A
-       let innerExp = gnf env (TCode $ !(getTerm exp))
+       let innerExp = gnf NoLets env (TCode $ !(getTerm exp))
        (codetm, gcodety) <- checkTerm env code (Just innerExp)
        codetyNF <- getNF gcodety
        defs <- get Ctxt
-       TCode aty <- quote defs env codetyNF
+       TCode aty <- quote defs NoLets env codetyNF
              | _ => throw (GenericMsg "Cannot eval non-code type")
        -- TODO How do we check for closed terms?! For now, I'm just checking
        -- that the NF doesn't start on a bind, but I think that's not quite
        -- right
-       case !(nf defs env codetm) of
+       case !(nf defs NoLets env codetm) of
          NBind _ _ _ => throw (GenericMsg "Maybe trying to eval something with free variables?")
                         -- Then we're good to go by returning the inner term with it's inner type
-         _           => checkExp env (Eval codetm) (gnf env aty) (Just exp)
+         _           => checkExp env (Eval codetm) (gnf NoLets env aty) (Just exp)
 checkTerm env (IEscape code) Nothing
   = do -- Are we in a non-zero stage?
        S n <- get Stg
@@ -370,26 +370,26 @@ checkTerm env (IEscape code) Nothing
        (codetm, gcodety) <- checkTerm env code Nothing
        codetyNF <- getNF gcodety
        defs <- get Ctxt
-       TCode aty <- quote defs env codetyNF
+       TCode aty <- quote defs NoLets env codetyNF
          | _ => throw (GenericMsg "Cannot escape non-code type")
        put Stg (S n)
        -- We're good to go with the code's inner term and it's original type
-       checkExp env (Escape codetm) (gnf env aty) Nothing
+       checkExp env (Escape codetm) (gnf NoLets env aty) Nothing
 checkTerm env (IEscape code) (Just exp)
   = do -- Are we in a non-zero stage?
        S n <- get Stg
          | _ => throw (GenericMsg "Cannot escape in stage zero")
        -- Check if `code` has type Code A in stage n-1
-       let innerExp = gnf env (TCode $ !(getTerm exp))
+       let innerExp = gnf NoLets env (TCode $ !(getTerm exp))
        put Stg n
        (codetm, gcodety) <- checkTerm env code (Just innerExp)
        codetyNF <- getNF gcodety
        defs <- get Ctxt
-       TCode aty <- quote defs env codetyNF
+       TCode aty <- quote defs NoLets env codetyNF
          | _ => throw (GenericMsg "Cannot escape non-code type")
        put Stg (S n)
        -- We're good to go with the code's inner term and it's original type
-       checkExp env (Escape codetm) (gnf env aty) (Just exp)
+       checkExp env (Escape codetm) (gnf NoLets env aty) (Just exp)
 
 -- TODO Have a second pass at the staging rules and make sure we're not doing
 -- too much extra work (evaluating normal forms twice for glued, etc.)
@@ -410,7 +410,7 @@ TTImp.Elab.Check.normaliseHoleTypes
   where
     updateType : Defs -> Name -> GlobalDef -> Core ()
     updateType defs n def
-      = do ty' <- normalise defs [] (type def) -- TODO only need to normalise holes... we're doing the full thing
+      = do ty' <- normalise defs KeepLets [] (type def) -- TODO only need to normalise holes... we're doing the full thing
            ignore $ addDef n (record { type = ty' } def)
 
     normaliseH : Defs -> Name -> Core ()
@@ -445,7 +445,7 @@ TTImp.Elab.Check.elabTerm {vars} mode env tm ty
        solveConstraints umode
 
        defs <- get Ctxt
-       chktm <- normalise defs env chktm
+       chktm <- normalise defs KeepLets env chktm
 
        hs <- getHoles
        restoreHoles (union hs oldhs)

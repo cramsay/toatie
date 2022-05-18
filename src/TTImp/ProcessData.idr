@@ -487,7 +487,7 @@ processData (MkImpData n info tycon datacons)
          -- Add it to the context before checking data constructors
          -- Exercise: We should also check whether it's already defined!
          defs <- get Ctxt
-         arity <- getArity defs [] tychk
+         arity <- getArity defs NoLets [] tychk
          let info' = convTyConInfo info
          addDef n (newDef tychk (TCon info' 0 arity []))
          chkcons <- traverse (processCon n info') datacons
@@ -510,7 +510,7 @@ processData (MkImpData n info tycon datacons)
 
          defs <- get Ctxt
          traverse_ (\ (i, (cn, ty)) =>
-                       do carity <- getArity defs [] ty
+                       do carity <- getArity defs NoLets [] ty
                           addDef cn (newDef ty (DCon (cast i) carity)))
                    (zip [0..(length chkcons)] chkcons)
 
