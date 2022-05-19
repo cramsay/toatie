@@ -178,7 +178,7 @@ checkTerm env (ILam p mn argTy scope) Nothing
          -- If implicit, check that name isn't free var in extraction of scope
          checkLamFV n p scopetm
 
-         checkExp env (Bind n (Lam 0 p argTytm) scopetm)
+         checkExp env (Bind n (Lam stage p argTytm) scopetm)
                       (gnf NoLets env (Bind n (Pi stage p argTytm) !(getTerm gscopety)))
                       Nothing
 checkTerm env (ILam p mn argTy scope) (Just exp)

@@ -239,7 +239,7 @@ genNetlist n
 
 showName : Name -> String
 showName (UN x) = x
-showName (MN x y) = x ++ "_" ++ show y
+showName (MN x y) = "\\" ++ x ++ "_" ++ show y ++ "\\"
 
 export
 Show SType where

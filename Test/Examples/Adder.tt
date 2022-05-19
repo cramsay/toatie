@@ -1,6 +1,9 @@
 -- Simple example of a single bit full adder
 --
 -- No fancy verification... See our Unsigned adder example for that.
+-- We're using this as an easy way to explore resource sharing (or a lack thereof).
+-- We can explicitly share values by using let bindings. Our netlist gets generated
+-- by evaluation using call-by-name, so operations in the arguments may be duplicated otherwise.
 
 object Bit : Type where
      O : Bit
@@ -32,8 +35,19 @@ pat a, b, cin =>
   fa a b cin
     = let axorb = xor a b
           sum   = xor axorb cin
-          cout  = or (and axorb cin) (and a b)
+          coutL = and axorb cin
+          coutR = and a b
+          cout  = or coutL coutR
       in MkP {_} cout sum
+
+xorCirc : < Bit -> Bit -> Bit >
+xorCirc = [| \a => \b => xor a b |]
+
+orCirc : < Bit -> Bit -> Bit >
+orCirc = [| \a => \b => or a b |]
+
+andCirc : < Bit -> Bit -> Bit >
+andCirc = [| \a => \b => and a b |]
 
 faCirc : < Bit -> Bit -> Bit -> Pair Bit >
 faCirc = [| \a => \b => \cin => fa a b cin |]
