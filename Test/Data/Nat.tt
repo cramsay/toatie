@@ -92,18 +92,6 @@ modNatNZ : Nat -> (y : Nat) -> NonZero y -> Nat
 pat left, right =>
   modNatNZ left (S right) (SIsNonZero right) = mod' left left right
 
-{-
--- div' fuel a b = a `div` (S b)
--- assuming we have enough fuel
-div' : Nat -> Nat -> Nat -> Nat
-pat centre, right =>
-  div' Z centre right = Z
-pat fuel, centre, right =>
-  div' (S fuel) centre right =
-    case lte centre right of
-      True  ==> Z
-      False ==> S (div' fuel (minus centre (S right)) right)
--}
 divCase : Nat -> Nat -> Bool -> Nat
 div' : Nat -> Nat -> Nat
 
@@ -119,18 +107,6 @@ pat centre, right =>
 divNatNZ : Nat -> (y : Nat) -> NonZero y -> Nat
 pat left, right =>
   divNatNZ left (S right) (SIsNonZero right) = div' left right
-
-flog2 : Nat -> Nat
-flog2 Z = Z
-flog2 1 = Z
-pat n =>
-  flog2 n = plus 1 (flog2 (divNatNZ n 2 (SIsNonZero 1)))
-
-clog2 : Nat -> Nat
-clog2 Z = Z
-clog2 1 = Z
-pat n =>
-  clog2 (S n) = S (flog2 n)
 
 -- Witness that a `Nat` is a power of two
 data Pow2 : Nat -> Type where

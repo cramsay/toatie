@@ -180,19 +180,20 @@ netlistTm nl tys (CLet x (CConCase (CLocal {idx} p) alts def) ty sc)
        let nl' = addSignal nl' x !(typeToSType ty)
        (tagu, tagl) <- getTagPos [] scTy
        alts' <- traverse (netlistAlt scTy ty) alts
+       let alts' = mapMaybe id alts'
        def'  <- netlistDef ty def
        let cs = SMux x tagu tagl (nameAt idx p) alts' def'
        pure $ addAssignment nl' cs
   where
 
-  netlistAlt : Term [] -> Term [] -> CConAlt vars -> Core (STag,STree)
+  netlistAlt : Term [] -> Term [] -> CConAlt vars -> Core (Maybe (STag,STree))
   netlistAlt scTy ty (MkConAlt n args tm)
     = do let tys' = map (const Erased) args ++ tys
          tag <- tagForCons scTy n
          tree <- tmToSTree tys' ty tm
          let Just tree' = pruneSTree tree
-               | Nothing => throw $ GenericMsg $ "Alternative scrutinee is empty!"
-         pure (tag,tree')
+               | Nothing => pure Nothing
+         pure $ Just (tag,tree')
 
   netlistDef : Term [] -> Maybe (CExp vars) -> Core STree
   netlistDef ty Nothing = do wTag <- tyTagWidth [] ty

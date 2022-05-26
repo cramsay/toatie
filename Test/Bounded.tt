@@ -1,0 +1,188 @@
+import Data.Nat
+import Data.Nat.Half
+import Data.Fin
+import Data.Vect
+
+-- Introducing Bits --------------------------------------------------
+----------------------------------------------------------------------
+
+simple Bit : Type where
+  O : Bit
+  I : Bit
+
+simple Pair : Type -> Type -> Type where
+     MkP : {a,b : Type} -> a -> b -> Pair a b
+
+-- Full adder
+addBit : Bit -> Bit -> Bit -> Pair Bit Bit
+addBit O O O = MkP {_} {_} O O
+addBit O O I = MkP {_} {_} O I
+addBit O I O = MkP {_} {_} O I
+addBit O I I = MkP {_} {_} I O
+addBit I O O = MkP {_} {_} O I
+addBit I O I = MkP {_} {_} I O
+addBit I I O = MkP {_} {_} I O
+addBit I I I = MkP {_} {_} I I
+
+-- Binary numbers indexed by width -----------------------------------
+----------------------------------------------------------------------
+
+simple Bin : Nat -> Type where
+  BinNil : Bin 0
+  BinCons : {n : Nat} -> Bin n -> Bit -> Bin (S n)
+
+zeroBin : (n : Nat) -> < Bin n >
+zeroBin Z = [| BinNil |]
+pat n =>
+  zeroBin (S n) = [| BinCons {_} ~(zeroBin n) O |]
+
+addBin' : (n : Nat) -> < Bin n > -> < Bin n > -> < Bit > -> < Bin (S n) >
+pat cin =>
+  addBin' Z [| BinNil |] [| BinNil |] cin
+    = [| BinCons {_} BinNil ~cin |]
+pat n, x, xs, y, ys, cin =>
+  addBin' (S n) [| BinCons {_} xs x |] [| BinCons {_} ys y |] cin
+    = [| case addBit ~cin x y of
+           pat cin', lsb =>
+             MkP {_} {_} cin' lsb ==>
+               BinCons {_} ~(addBin' _ [|xs|] [|ys|] [|cin'|]) lsb
+      |]
+
+bx : Bin 3
+bx = BinCons {_} (BinCons {_} (BinCons {_} BinNil O) I) I
+
+by : Bin 2
+by = BinCons {_} (BinCons {_} BinNil I) O
+
+resizeBin : (n, n' : Nat) -> < Bin n > -> < Bin n' >
+-- Extend with zeros
+pat n' =>
+  resizeBin Z n' [| BinNil |] = zeroBin n'
+-- Truncate
+pat n, bs =>
+  resizeBin n Z bs = [| BinNil |] 
+-- Recurse
+pat n, n', bs, b =>
+  resizeBin (S n) (S n') [| BinCons {_} bs b |]
+    = [| BinCons {_} ~(resizeBin n n' [|bs|]) b |]
+
+addBin : (n, m : Nat) -> < Bin n > -> < Bin m > -> < Bit > -> < Bin (S (max n m)) >
+pat n, m, xs, ys, cin =>
+  addBin n m xs ys cin = addBin' (max n m) (resizeBin n (max n m) xs)
+                                           (resizeBin m (max n m) ys) cin
+
+mulConstBin : (n : Nat) -> {c : Nat} -> (chr : HalfRec c) ->
+            < Bin n > -> < Bin (plus (clog2 c) n) >
+pat c, chr =>
+  mulConstBin Z {c} chr [| BinNil |] = zeroBin _
+pat n, xs =>
+  mulConstBin n {Z} HalfRecZ xs = zeroBin _
+pat n, xs =>
+  mulConstBin n {1} HalfRec1 xs = resizeBin _ _ xs
+pat n, c, chr, xs =>
+  mulConstBin n {plus (S c) (S c)} (HalfRecEven c chr) xs
+    = resizeBin _ _ [|BinCons {_} ~(mulConstBin n {S c} chr xs) O|]
+pat n, c, chr, xs =>
+  mulConstBin n {S (plus (S c) (S c))} (HalfRecOdd c chr) xs
+    = resizeBin _ _ (addBin _ _ [| BinCons {_} ~(mulConstBin n {S c} chr xs) O |] xs [|O|])
+
+gateBin : (n : Nat) -> <Bit> -> <Bin n> -> <Bin n>
+pat b =>
+  gateBin Z [|b|] [|BinNil|] = [|BinNil|]
+pat n, b, xs, x =>
+  gateBin (S n) b [|BinCons {_} xs x|]
+    = [| case ~b of
+           O ==> BinCons {_} ~(gateBin _ [|O|] [|xs|]) O
+           I ==> BinCons {_} ~(gateBin _ [|I|] [|xs|]) x
+      |]
+
+mulBin : (n, m : Nat) -> < Bin n > -> < Bin m > -> < Bin (plus n m) >
+pat m, ys =>
+  mulBin Z m [| BinNil |] ys = zeroBin _
+pat n, m, xs, x, ys =>
+  mulBin (S n) m [| BinCons {_} xs x |] ys
+    = [| let row = ~(gateBin _ [|x|] ys)
+             rec = ~(mulBin _ _ [|xs|] [|BinCons {_} ~ys O|])
+             ans = ~(addBin _ _ [|row|] [|rec|] [|O|])
+         in ~(resizeBin _ _ [|ans|])
+      |]
+
+{- little synthesisable multiplier
+mymul : < Bin 4 -> Bin 3 -> Bin (plus 4 3) >
+mymul = [| \x => \y => ~(mulBin 4 3 [|x|] [|y|]) |]
+-}
+
+
+-- Binary numbers indexed by their upper bound -----------------------
+----------------------------------------------------------------------
+
+simple Bounded : Nat -> Type where
+  MkB : {n : Nat} -> Bin (clog2 (S n)) -> Bounded n
+
+-- Bit funny, but Bounded will actually error if we try to construct one with a
+-- binary number with _more_ bits than we need (as well as less)!
+
+boundedToBin : {n : Nat} -> Bounded n -> Bin (clog2 (S n))
+pat n, xs =>
+  boundedToBin {n} (MkB {n} xs) = xs
+
+addB : (n, m : Nat) -> < Bounded n > -> < Bounded m > -> < Bounded (plus n m) >
+pat n, m, xs, ys =>
+  addB n m [| MkB {_} xs |] [| MkB {_} ys |]
+    = [| MkB {_} ~(resizeBin _ _ (addBin _ _ [|xs|] [|ys|] [|O|])) |]
+
+mulConstB : (n : Nat) -> {c : Nat} -> (chr : HalfRec c) ->
+            < Bounded n > -> < Bounded (mul c n) >
+pat n, c, chr, xs =>
+  mulConstB n {c} chr [| MkB {_} xs |]
+    = [| MkB {_} ~(resizeBin _ _ (mulConstBin _ {c} chr [|xs|])) |]
+
+{- little synthesisable const mul that uses our Bounded helper
+
+myconstmul : < Bin (clog2 6) -> Bin (clog2 (S (mul 6 5))) >
+myconstmul = [| \x => boundedToBin {_}
+                        ~(mulConstB 6 {5} (halfRec 5) [|MkB {6} x|])
+             |]
+-}
+
+data Vect' : Nat -> Type -> Type where
+  VNil' : {a : Type} -> Vect' Z a
+  VCons' : {a : Type} -> {k : Nat} ->
+           a -> Vect' k a -> Vect' (S k) a
+             
+sum : (n : Nat) -> Vect' n Nat -> Nat
+sum Z (VNil' {_}) = Z
+pat n, x, xs =>
+  sum (S n) (VCons' {_} {_} x xs) = plus x (sum n xs)
+
+lemmaDotProd : (n, c, cs : Nat) ->
+               Equal Nat (plus (mul c n) (mul n cs))
+                         (mul n (plus c cs))
+pat n, c, cs =>
+  lemmaDotProd n c cs
+    = let h1 = eqInd2 {_} {_} {_} {mulCommutative c n}
+                 {\h => Equal Nat (plus (mul c n) (mul n cs))
+                                  (plus h         (mul n cs))}
+                 (Refl {_} {_})
+          h2 = eqInd2 {_} {_} {_} {eqSym {_} {_} {_} (mulDistributesOverPlusRight n c cs)}
+                 {\h => Equal Nat (plus (mul c n) (mul n cs)) h}
+                 h1
+      in h2
+
+dotProd : (j,n : Nat) -> (ws : Vect' j Nat) ->
+          < Vect j (Bounded n) > ->
+          < Bounded (mul n (sum j ws)) >
+pat n, xs =>
+  dotProd Z n (VNil' {_}) xs = [| MkB {_} ~(zeroBin _) |]
+pat j, n, w, ws, x, xs =>
+  dotProd (S j) n (VCons' {_} {_} w ws) [|VCons {_} {_} x xs|]
+    = [| let y = ~(addB _ _ (mulConstB _ {w} (halfRec w) [|x|])
+                            (dotProd _ _ ws [|xs|]))
+         in eqInd2 {_} {_} {_} {lemmaDotProd n w (sum j ws)}
+              {\h => Bounded h} y
+      |]
+
+-- Little synthesisable example of using dotProd
+
+myconstmul : < Bin (clog2 (S 6)) -> Bin (clog2 (S (mul 6 5))) >
+myconstmul = [| \x => boundedToBin {_} ~(mulConstB 6 {5} (halfRec 5) [|MkB {6} x|]) |]

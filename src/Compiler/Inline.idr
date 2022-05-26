@@ -823,7 +823,7 @@ compileAndInline ns
     transform : Nat -> List Name -> Core ()
     transform Z cns = pure ()
     transform (S k) cns
-        = do p <- newRef InlineFuel 500
+        = do p <- newRef InlineFuel 5000
              l <- newRef LVar (the Int 0)
              traverse_ inlineDef cns
              traverse_ mergeLamDef cns

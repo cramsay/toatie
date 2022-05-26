@@ -95,8 +95,7 @@ pat right =>
   plusSuccRightSucc Z right = Refl {Nat} {S right}
 pat left, right =>
   plusSuccRightSucc (S left) right
-    = let h = plusSuccRightSucc left right
-      in eqCong {_} {_} {S} {_} {_} h
+    = eqCong {_} {_} {S} {_} {_} (plusSuccRightSucc left right)
 
 plusAssociative : (left, centre, right : Nat) ->
                   Equal Nat (plus left (plus centre right))
@@ -363,43 +362,6 @@ pat x =>
                                 (S h)
                } h4
     in h5
-
-clog2DoublePlus1 : (x : Nat) -> NonZero x -> Equal Nat (clog2 (plus x x)) (S (clog2 x))
-pat x =>
-  clog2DoublePlus1 Z (SIsNonZero x) impossible
-pat prf =>
-  clog2DoublePlus1 1 prf = Refl {_} {_}
-pat x, prf =>
-  clog2DoublePlus1 (S (S x)) prf
-    = let h1 = Refl {_} {S (flog2 (S (plus x (S (S x)))))}
-          h2 : Equal Nat (S (flog2 (S (plus x (S (S x)))))) (S (flog2 (S (S (plus x (S x))))))
-             = eqInd2 {_} {_} {_} {eqSym {_} {_} {_} (plusSuccRightSucc x (S x))}
-                 {\h => Equal Nat (S (flog2 (S (plus x (S (S x))))))
-                                  (S (flog2 (S h)))
-                 } h1
-          h3 : Equal Nat (S (flog2 (S (plus x (S (S x))))))
-                         (S (S (flog2 (S (divCase (plus x (S x)) 1 (lte (plus x (S x)) 1))))))
-             = eqInd2 {_} {_} {_} {minusZeroRight (plus x (S x))}
-                 {\h => Equal Nat (S (flog2 (S (plus x (S (S x))))))
-                                  (S (S (flog2 (S (divCase h 1 (lte h 1))))))
-                 } h2
-          h4 : Equal Nat (S (flog2 (S (plus x (S (S x))))))
-                         (S (S (flog2 (S x))))
-             = eqInd2 {_} {_} {_} {div2DoubleFloor x}
-                 {\h => Equal Nat (S (flog2 (S (plus x (S (S x))))))
-                                  (S (S (flog2 (S h))))
-                 } h3
-      in h4
-
-{-
-clog2SuccPowTwoSucc : (x : Nat) ->
-                      Equal Nat (clog2 (S (pow 2 x)))
-                                (S (clog2 (pow 2 x)))
-clog2SuccPowTwoSucc Z = Refl {_} {_}
-clog2SuccPowTwoSucc (S Z) = Refl {_} {_}
-pat x =>
-  clog2SuccPowTwoSucc (S (S x)) = Refl {_} {_}
-  -}
 
 maxZeroRightNeutral : (n : Nat) -> Equal Nat (max n 0) n
 maxZeroRightNeutral Z = Refl {_} {_}

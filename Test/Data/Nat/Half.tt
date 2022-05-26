@@ -47,3 +47,36 @@ pat k =>
 halfRec Z = HalfRecZ
 pat n =>
   halfRec (S n) = halfRec' {n} (half n)
+
+-- How many extra bits do we need to represent a HalfRec coefficient?
+-- This is a simple worst case, e.g. HalfRecOdd adds one bit for our doubling input
+-- and one more bit for our addition with the original input (regardless of if
+-- we've crossed a power-of-two boundary in the addition or not).
+countBits : {n : Nat} -> HalfRec n -> Nat
+countBits {Z} HalfRecZ = Z
+countBits {1} HalfRec1 = Z
+pat n, hrec =>
+  countBits {plus (S n) (S n)} (HalfRecEven n hrec) = S (countBits {S n} hrec)
+pat n, hrec =>
+  countBits {S (plus (S n) (S n))} (HalfRecOdd n hrec) = S (S (countBits {S n} hrec))
+
+countBits' : (n : Nat) -> Nat
+pat n =>
+  countBits' n = countBits {n} (halfRec n)
+
+flog2' : {n : Nat} -> HalfRec n -> Nat
+flog2' {Z} HalfRecZ = Z
+flog2' {1} HalfRec1 = Z
+pat n, hrec =>
+  flog2' {plus (S n) (S n)} (HalfRecEven n hrec) = S (flog2' {S n} hrec)
+pat n, hrec =>
+  flog2' {S (plus (S n) (S n))} (HalfRecOdd n hrec) = (S (flog2' {S n} hrec))
+
+flog2 : (n : Nat) -> Nat
+pat n =>
+  flog2 n = (flog2' {n} (halfRec n))
+
+clog2 : (n : Nat) -> Nat
+clog2 Z = Z
+pat n =>
+  clog2 (S n) = S (flog2' {n} (halfRec n))

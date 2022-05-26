@@ -140,7 +140,7 @@ repl = do coreLift $ putStr "> "
                  coreLift $ putStrLn $ "Checked: " ++ show tm
                  defs <- get Ctxt
                  coreLift $ putStrLn $ "Type: " ++ show !(normalise defs NoLets [] !(getTerm ty))
-                 nf <- normalise defs KeepLets [] tm
+                 nf <- normalise defs NoLets [] tm
                  coreLift $ putStrLn $ "Evaluated: " ++ show nf
 
                  -- Show extracted versions too
