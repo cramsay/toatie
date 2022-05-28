@@ -113,40 +113,38 @@ mymul = [| \x => \y => ~(mulBin 4 3 [|x|] [|y|]) |]
 -}
 
 
--- Binary numbers indexed by their upper bound -----------------------
+-- Binary numbers indexed by their upper bound and width -------------
 ----------------------------------------------------------------------
 
-simple Bounded : Nat -> Type where
-  MkB : {n, w : Nat} -> {prf : Equal Nat w (clog2 (S n))} -> Bin w -> Bounded n
+simple Bounded : Nat -> Nat -> Type where
+  MkB : {n, w : Nat} -> {prf : Equal Nat w (clog2 (S n))} -> Bin w -> Bounded n w
+
+Bounded' : (n : Nat) -> Type
+pat n =>
+  Bounded' n = Bounded n (clog2 (S n))
 
 -- Bit funny, but Bounded will actually error if we try to construct one with a
 -- binary number with _more_ bits than we need (as well as less)!
 
-boundedToBin : (n : Nat) -> Bounded n -> Bin (clog2 (S n))
+boundedToBin : (n, w : Nat) -> Bounded n w -> Bin w
 pat n, w, prf, xs =>
-  boundedToBin n (MkB {n} {w} {prf} xs) = eqInd2 {_} {_} {_} {prf} {\h => Bin h} xs
+  boundedToBin n w (MkB {n} {w} {prf} xs) = xs
 
-addB : (n, m : Nat) -> < Bounded n > -> < Bounded m > -> < Bounded (plus n m) >
-pat n, nw, prfn, m, mw, prfm, xs, ys =>
-  addB n m [| MkB {n} {nw} {prfn} xs |] [| MkB {m} {mw} {prfm} ys |]
+addB : (n, m : Nat) -> < Bounded' n > -> < Bounded' m > -> < Bounded' (plus n m) >
+pat n, prfn, m, prfm, xs, ys =>
+  addB n m [| MkB {n} {_} {prfn} xs |] [| MkB {m} {_} {prfm} ys |]
     = [| let ans = ~(resizeBin _ (clog2 (S (plus n m))) (addBin _ _ [|xs|] [|ys|] [|O|]))
          in MkB {_} {_} {Refl {_} {_}} ans
       |]
 
-mulConstB : (n : Nat) -> (c : Nat) ->
-            < Bounded n > -> < Bounded (mul c n) >
-pat n, nw, prfn, c, xs =>
-  mulConstB n c [| MkB {n} {nw} {prfn} xs |]
+mulConstB : (n, c : Nat) ->
+            < Bounded' n > -> < Bounded' (mul c n) >
+pat n, c, xs =>
+  mulConstB n c [| MkB {n} {_} {_} xs |]
     = [| MkB {_} {_} {Refl {_} {_}} ~(resizeBin _ (clog2 (S (mul c n))) (mulConstBin _ {c} (halfRec c) [|xs|])) |]
 
-myconstmul : < Bounded 6 -> Bounded (mul 6 5) >
+myconstmul : < Bounded 6 3 -> Bounded (mul 6 5) 5 >
 myconstmul = [| \x => ~(mulConstB 6 5 [|x|])
-             |]
-{-
-{- little synthesisable const mul that uses our Bounded helper -}
-myconstmul : < Bin (clog2 6) -> Bin (clog2 (S (mul 6 5))) >
-myconstmul = [| \x => boundedToBin _
-                        ~(mulConstB 6 5 [|MkB {6} {_} {Refl {_} {_}} x|])
              |]
 
 data Vect' : Nat -> Type -> Type where
@@ -174,8 +172,8 @@ pat n, c, cs =>
       in h2
 
 dotProd : (j,n : Nat) -> (ws : Vect' j Nat) ->
-          < Vect j (Bounded n) > ->
-          < Bounded (mul n (sum j ws)) >
+          < Vect j (Bounded' n) > ->
+          < Bounded' (mul n (sum j ws)) >
 pat n, xs =>
   dotProd Z n (VNil' {_}) xs = [| MkB {_} {_} {Refl {_} {_}} ~(zeroBin _) |]
 pat j, n, w, ws, x, xs =>
@@ -183,24 +181,13 @@ pat j, n, w, ws, x, xs =>
     = [| let y = ~(addB _ _ (mulConstB _ w [|x|])
                             (dotProd _ _ ws [|xs|]))
          in eqInd2 {_} {_} {_} {lemmaDotProd n w (sum j ws)}
-              {\h => Bounded h} y
+              {\h => Bounded' h} y
       |]
 
 -- Little synthesisable example of using dotProd
 myws : Vect' 2 Nat
 myws = VCons' {_} {_} 3 (VCons' {_} {_} 7 (VNil' {_}))
 
-{- Doesn't compile --- Way forward might be to noticed single cons gadts and somehow optimise it away...
-   Then we can synthesis Bounded directly. _OR_ Can just make the bounded nat explicit
--}
-mydotprod : < Vect 2 (Bin (clog2 (S 6))) -> Vect 2 (Bin (clog2 (S 6))) > -- (clog2 (S (mul 6 (sum 2 myws)))) >
-mydotprod = [| \xs => --let xs' = map 2 {_} {_} (MkB {6} {_} {Refl {_} {_}}) xs
-                          --ans = xs' --ans = ~(dotProd 2 6 myws [|xs'|])
-                      --in map 2 {_} {_} (boundedToBin 6) ans
-                      map 2 _ _ (boundedToBin 6) (map 2 _ _ (MkB {6} {_} {Refl {_} {_}}) xs)
-
+mydotprod : < Vect 2 (Bounded 6 3) -> Bounded (mul 6 (sum 2 myws)) 6 >
+mydotprod = [| \xs => ~(dotProd 2 6 myws [|xs|])
             |]
-
--- Issue is how do we find type of vnil? we've erased arg... maybe we should keep type annotations? don't know.
--- VNil with no a type is OK since it has no bits... where do we go wrong? Annotation of cons applied to a thing with a type?
--}

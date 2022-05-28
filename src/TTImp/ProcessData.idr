@@ -24,6 +24,7 @@ appendInnerAssoc [] centre right = Refl
 appendInnerAssoc (x :: xs) centre right = let h = appendInnerAssoc xs centre right in cong (x ::) h
 
 -- Get the return type of a type definition
+export
 getRetTy : {vars :_} -> Term vars -> (bs ** Term (bs ++ vars))
 getRetTy (Bind n (Pi _ _ _) sc)
   = let (bs ** rec) = getRetTy sc

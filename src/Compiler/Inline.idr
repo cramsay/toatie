@@ -89,6 +89,26 @@ substArgs [] _ fn = fn
 substArgs (a::as) [] fn = substArgs as [] (substs [CErased] fn) --Should never happen...
 substArgs (a::as) (arg::args) fn = substArgs as args (substs [weakenNs as arg] fn)
 
+isConUnboxable : {auto c : Ref Ctxt Defs} ->
+                 Name -> Core Bool
+isConUnboxable x
+  = do defs <- get Ctxt
+       log "compiler.inline.isConUnboxable" 10 $ "checking for unboxibility of " ++ show x
+       -- Is it in context?
+       Just dcongdef <- lookupDef x defs
+         | Nothing => pure False
+       -- Does it return a type with one constructor?
+       let (_ ** tyconty) = getRetTy $ type dcongdef
+       let Just tcon = getTyConName tyconty
+         | Nothing => pure False
+       Just (MkGlobalDef _ (TCon _ _ _ [conn]) _) <- lookupDef tcon defs
+         | _ => pure False
+       -- Does it take one explicit argument?
+       let (MkGlobalDef _ _ (Just (MkCon _ 1))) = dcongdef
+         | _ => pure False
+       log "compiler.inline.isConUnboxable" 10 $ "Is unboxable! " ++ show x
+       pure True
+
 
 mutual
   used : {free : _} ->
@@ -239,9 +259,11 @@ parameters (mode : EvalMode)
              | Nothing => eval env (map (MkClosure env) args ++ stk) (CRef n)
            let Just def = compexpr gdef
              | Nothing => eval env (map (MkClosure env) args ++ stk) (CRef n)
+           {-
            S k <- get InlineFuel
              | Z => throw $ GenericMsg $ "Ran out of fuel when inlining: " ++ show n
            put InlineFuel k
+           -}
            case def of
              (MkFun argNs x) => do let x' = embed {vars = vars ++ free} x
                                    let x'' = substArgs argNs args x'
@@ -253,11 +275,21 @@ parameters (mode : EvalMode)
     eval env stk (CApp f args)
       = do log "compiler.inline.eval" 10 ("For application : " ++ show f ++ " with args " ++ show args)
            eval env (map (MkClosure env) args ++ stk) f
+  {-
+    eval env stk (CCon x [a])
+      = do True <- isConUnboxable x
+             | False => unload stk $ CCon x !(traverse (eval env []) [a])
+           eval env stk a
+  -}
     eval env stk (CCon x args)
       = do log "compiler.inline.eval" 10 ("For constructor application : " ++ show x ++ " with args " ++ show args)
            unload stk $ CCon x !(traverse (eval env []) args)
     eval env stk (CPrj con field sc)
       = do sc' <- eval env [] sc
+           {-
+           False <- isConUnboxable con
+             | True => pure sc' -- scope would have been unboxed, so discard projection too
+           -}
            case sc' of
              CCon scname args => if scname == con
                                     then getIth field args
@@ -678,6 +710,7 @@ mutual
   typeOfCCon tys n args
     = do u <- newRef UST initUState
          argTys <- traverse (typeOfConcrete tys) args
+         log "compiler.inline.typeOfCCon" 10 $ "Looking for dcon type from " ++ show n ++ show argTys
          typeForDataCon n argTys
 
   typeOfConcrete : {vars : _} -> {auto c : Ref Ctxt Defs} -> List (Term []) -> CExp vars -> Core (Term [])
@@ -734,9 +767,8 @@ mutual
         in apply fn matchedArgs
   annotateTyTm tys (CLet x (CPrj con field (CLocal {idx} p)) ty sc)
     = do innerty <- typeOfLocal tys idx
-         coreLift $ putStrLn $ "Getting type annotation for proj into " ++ show x
-         coreLift $ putStrLn $ ".. from pos " ++ show idx ++ " in " ++ show tys
          ty' <- typeOfPrj tys con field innerty
+         log "compiler.inline.annotateTyTm" 10 $ "Got prj type of " ++ show ty'
          sc' <- annotateTyTm (ty'::tys) sc
          pure $ CLet x (CPrj con field (CLocal {idx} p)) ty' sc'
   annotateTyTm tys tm@(CLet x val ty sc)
@@ -823,7 +855,7 @@ compileAndInline ns
     transform : Nat -> List Name -> Core ()
     transform Z cns = pure ()
     transform (S k) cns
-        = do p <- newRef InlineFuel 5000
+        = do p <- newRef InlineFuel 10000
              l <- newRef LVar (the Int 0)
              traverse_ inlineDef cns
              traverse_ mergeLamDef cns
