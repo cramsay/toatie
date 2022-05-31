@@ -9,11 +9,14 @@ mutual
        IVar : Name -> RawImp
        ILet : Name -> (margTy : Maybe RawImp) -> (argVal : RawImp) -> (scope : RawImp) ->
               RawImp
-       IPi : PiInfo -> Maybe Name ->
+       IPi : PiInfo -> Maybe Name -> Maybe Stage ->
              (argTy : RawImp) -> (retTy : RawImp) -> RawImp
-       ILam : PiInfo -> Maybe Name ->
+       ILam : PiInfo -> Maybe Name -> Maybe Stage ->
               (argTy : RawImp) -> (scope : RawImp) -> RawImp
-       IPatvar : Name -> (ty : RawImp) -> (scope : RawImp) -> RawImp
+       IPatvar : Name -> Maybe Stage -> (ty : RawImp) -> (scope : RawImp) -> RawImp
+          --             ^ Optionally specify the stage this pattern is introduced.
+          --               Used by inline case statements when lifting to new top
+          --               level definitions
           -- ^ Idris doesn't need this since the pattern variable names are
           -- inferred, but in this initial version everything is explicit
        IApp : AppInfo -> RawImp -> RawImp -> RawImp
@@ -72,10 +75,10 @@ toTTImp : {vars : _} -> Term vars -> Maybe RawImp
 toTTImp (Local idx p) = Just $ IVar (nameAt idx p)
 toTTImp (Ref   _   n) = Just $ IVar n
 toTTImp (Meta n   args) = Just Implicit
-toTTImp (Bind n (Lam s i ty) scope) = Just $ ILam i (Just n) !(toTTImp ty) !(toTTImp scope)
-toTTImp (Bind n (Pi  s i ty) scope) = Just $ IPi  i (Just n) !(toTTImp ty) !(toTTImp scope)
+toTTImp (Bind n (Lam s i ty) scope) = Just $ ILam i (Just n) (Just s) !(toTTImp ty) !(toTTImp scope)
+toTTImp (Bind n (Pi  s i ty) scope) = Just $ IPi  i (Just n) (Just s) !(toTTImp ty) !(toTTImp scope)
 toTTImp (Bind n (Let s val ty) scope) = Just $ ILet n (toTTImp ty) !(toTTImp val) !(toTTImp scope)
-toTTImp (Bind n (PVar s i ty) scope) = Just $ IPatvar n !(toTTImp ty) !(toTTImp scope)
+toTTImp (Bind n (PVar s i ty) scope) = Just $ IPatvar n (Just s) !(toTTImp ty) !(toTTImp scope)
 toTTImp (Bind n (PVTy s ty) scope) = Nothing
 toTTImp (App i f a) = Just $ IApp i !(toTTImp f) !(toTTImp a)
 toTTImp (Quote _ tm) = Just $ IQuote  !(toTTImp tm)
@@ -100,10 +103,10 @@ toTTImpClosed (Ref   _   n) = if !(goodName n)
                     | _ => pure False
                   pure True
 toTTImpClosed (Meta n   args) = pure Implicit
-toTTImpClosed (Bind n (Lam s i ty) scope) = pure $ ILam i (pure n) !(toTTImpClosed ty) !(toTTImpClosed scope)
-toTTImpClosed (Bind n (Pi  s i ty) scope) = pure $ IPi  i (pure n) !(toTTImpClosed ty) !(toTTImpClosed scope)
+toTTImpClosed (Bind n (Lam s i ty) scope) = pure $ ILam i (pure n) (Just s) !(toTTImpClosed ty) !(toTTImpClosed scope)
+toTTImpClosed (Bind n (Pi  s i ty) scope) = pure $ IPi  i (pure n) (Just s) !(toTTImpClosed ty) !(toTTImpClosed scope)
 toTTImpClosed (Bind n (Let s val ty) scope) = pure $ ILet n (Just !(toTTImpClosed ty)) !(toTTImpClosed val) !(toTTImpClosed scope)
-toTTImpClosed (Bind n (PVar s i ty) scope) = pure $ IPatvar n !(toTTImpClosed ty) !(toTTImpClosed scope)
+toTTImpClosed (Bind n (PVar s i ty) scope) = pure $ IPatvar n (Just s) !(toTTImpClosed ty) !(toTTImpClosed scope)
 toTTImpClosed (Bind n (PVTy s ty) scope) = pure Implicit
 toTTImpClosed (App i f a) = pure $ IApp i !(toTTImpClosed f) !(toTTImpClosed a)
 toTTImpClosed (Quote _ tm) = pure $ IQuote  !(toTTImpClosed tm)
@@ -124,15 +127,15 @@ mutual
     show (IVar n) = show n
     show (ILet n margTy argVal scope) = "let " ++ show n ++ maybe "" (\ty=>" : " ++ show ty) margTy
                                         ++ " = " ++ show argVal ++ " in " ++ show scope
-    show (IPi Implicit mn argTy retTy) = "{" ++ maybe "" (\n=>show n ++ " : ") mn
-                                         ++ show argTy ++ "} -> " ++ show retTy
-    show (IPi Explicit mn argTy retTy) = "(" ++ maybe "" (\n=>show n ++ " : ") mn
-                                         ++ show argTy ++ ") -> " ++ show retTy
-    show (ILam Implicit mn argTy scope) = "\\{" ++ maybe "_" (\n=>show n) mn ++ " : "
+    show (IPi Implicit mn _ argTy retTy) = "{" ++ maybe "" (\n=>show n ++ " : ") mn
+                                           ++ show argTy ++ "} -> " ++ show retTy
+    show (IPi Explicit mn _ argTy retTy) = "(" ++ maybe "" (\n=>show n ++ " : ") mn
+                                           ++ show argTy ++ ") -> " ++ show retTy
+    show (ILam Implicit mn _ argTy scope) = "\\{" ++ maybe "_" (\n=>show n) mn ++ " : "
                                             ++ show argTy ++ "} => " ++ show scope
-    show (ILam Explicit mn argTy scope) = "\\" ++ maybe "_" (\n=>show n) mn ++ " : "
+    show (ILam Explicit mn _ argTy scope) = "\\" ++ maybe "_" (\n=>show n) mn ++ " : "
                                             ++ show argTy ++ " => " ++ show scope
-    show (IPatvar n ty scope) = "pat " ++ show n ++ " : " ++ show ty ++ " => " ++ show scope
+    show (IPatvar n _ ty scope) = "pat " ++ show n ++ " : " ++ show ty ++ " => " ++ show scope
     show (IApp AImplicit f a) = show f ++ " {" ++ show a ++ "}"
     show (IApp AExplicit f a) = show f ++ " (" ++ show a ++ ")"
     show (ICase scr scrty alts) = "case " ++ show scr ++ " : " ++ show scrty ++ " of " ++ show alts

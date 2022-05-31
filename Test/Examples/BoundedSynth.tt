@@ -31,11 +31,6 @@ simple Bin : Nat -> Type where
   BinNil : Bin 0
   BinCons : {n : Nat} -> Bin n -> Bit -> Bin (S n)
 
-zeroBin : (n : Nat) -> < Bin n >
-zeroBin Z = [| BinNil |]
-pat n =>
-  zeroBin (S n) = [| BinCons {_} ~(zeroBin n) O |]
-
 addBin' : (n : Nat) -> < Bin n > -> < Bin n > -> < Bit > -> < Bin (S n) >
 pat cin =>
   addBin' Z [| BinNil |] [| BinNil |] cin
@@ -54,6 +49,11 @@ bx = BinCons {_} (BinCons {_} (BinCons {_} BinNil O) I) I
 by : Bin 2
 by = BinCons {_} (BinCons {_} BinNil I) O
 
+zeroBin : (n : Nat) -> < Bin n >
+zeroBin Z = [| BinNil |]
+pat n =>
+  zeroBin (S n) = [| BinCons {_} ~(zeroBin n) O |]
+
 resizeBin : (n, n' : Nat) -> < Bin n > -> < Bin n' >
 -- Extend with zeros
 pat n' =>
@@ -68,8 +68,13 @@ pat n, n', bs, b =>
 
 addBin : (n, m : Nat) -> < Bin n > -> < Bin m > -> < Bit > -> < Bin (S (max n m)) >
 pat n, m, xs, ys, cin =>
-  addBin n m xs ys cin = addBin' (max n m) (resizeBin n (max n m) xs)
-                                           (resizeBin m (max n m) ys) cin
+  addBin n m xs ys cin = addBin' _ (resizeBin _ _ xs)
+                                   (resizeBin _ _ ys) cin
+
+{- Synthesisable example of calling addBin
+myaddBin : < Bin 3 -> Bin 3 -> Bin 4 >
+myaddBin = [| \x => \y => ~(addBin 3 3 [|x|] [|y|] [|O|]) |]
+-}
 
 mulConstBin : (n : Nat) -> {c : Nat} -> (chr : HalfRec c) ->
             < Bin n > -> < Bin (plus (clog2 c) n) >
@@ -86,25 +91,15 @@ pat n, c, chr, xs =>
   mulConstBin n {S (plus (S c) (S c))} (HalfRecOdd c chr) xs
     = resizeBin _ _ (addBin _ _ [| BinCons {_} ~(mulConstBin n {S c} chr xs) O |] xs [|O|])
 
-gateBin : (n : Nat) -> <Bit> -> <Bin n> -> <Bin n>
-pat b =>
-  gateBin Z [|b|] [|BinNil|] = [|BinNil|]
-pat n, b, xs, x =>
-  gateBin (S n) b [|BinCons {_} xs x|]
-    = [| case ~b of
-           O ==> BinCons {_} ~(gateBin _ [|O|] [|xs|]) O
-           I ==> BinCons {_} ~(gateBin _ [|I|] [|xs|]) x
-      |]
-
 mulBin : (n, m : Nat) -> < Bin n > -> < Bin m > -> < Bin (plus n m) >
 pat m, ys =>
   mulBin Z m [| BinNil |] ys = zeroBin _
 pat n, m, xs, x, ys =>
   mulBin (S n) m [| BinCons {_} xs x |] ys
-    = [| let row = ~(gateBin _ [|x|] ys)
-             rec = ~(mulBin _ _ [|xs|] [|BinCons {_} ~ys O|])
-             ans = ~(addBin _ _ [|row|] [|rec|] [|O|])
-         in ~(resizeBin _ _ [|ans|])
+    = [| let rec = ~(mulBin _ _ [|xs|] [|BinCons {_} ~ys O|])
+         in case x of
+              O ==> ~(resizeBin _ _ [|rec|])
+              I ==> ~(resizeBin _ _ (addBin _ _ ys [|rec|] [|O|]))
       |]
 
 {- little synthesisable multiplier

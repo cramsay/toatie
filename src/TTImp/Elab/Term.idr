@@ -102,7 +102,8 @@ checkTerm env (IVar n) exp
                 stageNow <- get Stg
                 if stageNow < stageBound
                   then throw (GenericMsg $ "Stage error: var " ++ show n ++ " is bound at stage "
-                                            ++ show stageBound ++ " but used at stage " ++ show stageNow)
+                                            ++ show stageBound ++ " but used at stage " ++ show stageNow
+                                            ++ " by binder " ++ show binder)
                   else checkExp env (Local _ p)
                                     (gnf NoLets env (binderType binder))
                                      exp
@@ -139,13 +140,15 @@ checkTerm env (ILet n Nothing argVal scope) exp
          scopeTyTerm <- getTerm gscopetmTy
          pure (Bind n (Let stage argValtm argTytm) scopetm
               ,gnf NoLets env (Bind n (Let stage argValtm argTytm) scopeTyTerm))
-checkTerm env (IPi p mn argTy retTy) exp
+checkTerm env (IPi p mn ms argTy retTy) exp
     = do let n = fromMaybe (MN "_" 0) mn
          (argTytm, gargTyty) <- checkTerm env argTy (Just gType)
          defs <- get Ctxt
          argTytm <- normalise defs NoLets env argTytm
 
-         stage <- get Stg
+         stage <- case ms of
+                    Just s => pure s
+                    Nothing => get Stg
          let env' : Env Term (n :: vars)
                   = Pi stage p argTytm :: env
          (retTytm, gretTyty) <- checkTerm env' retTy (Just gType)
@@ -167,10 +170,12 @@ checkTerm env (IPi p mn argTy retTy) exp
 
          checkExp env (Bind n (Pi stage p argTytm) retTytm) gType exp
 
-checkTerm env (ILam p mn argTy scope) Nothing
+checkTerm env (ILam p mn ms argTy scope) Nothing
     = do let n = fromMaybe (MN "_" 0) mn
          (argTytm, gargTyty) <- checkTerm env argTy (Just gType)
-         stage <- get Stg
+         stage <- case ms of
+                    Just s => pure s
+                    Nothing => get Stg
          let env' : Env Term (n :: vars)
                   = Lam stage p argTytm :: env
          (scopetm, gscopety) <- checkTerm env' scope Nothing
@@ -181,10 +186,12 @@ checkTerm env (ILam p mn argTy scope) Nothing
          checkExp env (Bind n (Lam stage p argTytm) scopetm)
                       (gnf NoLets env (Bind n (Pi stage p argTytm) !(getTerm gscopety)))
                       Nothing
-checkTerm env (ILam p mn argTy scope) (Just exp)
+checkTerm env (ILam p mn ms argTy scope) (Just exp)
     = do let n = fromMaybe (MN "_" 0) mn
          (argTytm, gargTyty) <- checkTerm env argTy (Just gType)
-         stage <- get Stg
+         stage <- case ms of
+                    Just s => pure s
+                    Nothing => get Stg
          let env' : Env Term (n :: vars)
                   = Lam stage p argTytm :: env
          expTyNF <- getNF exp
@@ -204,9 +211,11 @@ checkTerm env (ILam p mn argTy scope) (Just exp)
                                  (gnf NoLets env (Bind n (Pi stage p argTytm) !(getTerm gscopety)))
                                  (Just exp)
               _ => throw (GenericMsg "Lambda must have a function type")
-checkTerm env (IPatvar n ty scope) exp
+checkTerm env (IPatvar n ms ty scope) exp
     = do (ty, gTyty) <- checkTerm env ty (Just gType)
-         stage <- get Stg
+         stage <- case ms of
+                    Just s => pure s
+                    Nothing => get Stg
          let env' : Env Term (n :: vars)
                   = PVar stage Implicit ty :: env -- Try with an implicit PVar for now... we'll fix this up afterwards
          (scopetm, gscopety) <- checkTerm env' scope Nothing

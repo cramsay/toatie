@@ -37,19 +37,19 @@ findBindableNames True env used (IVar nm@(UN n))   --TODO how about MN for impli
   = if not (nm `elem` env) && lowerFirst n
        then [(n, getUnique used n)]
        else []
-findBindableNames arg env used (IPi i mn argTy retTy)
+findBindableNames arg env used (IPi i mn _ argTy retTy)
   = let env' = case mn of
                  Nothing => env
                  Just n => n :: env in
     findBindableNames True env used argTy ++
     findBindableNames True env' used retTy
-findBindableNames arg env used (ILam i mn argTy scope)
+findBindableNames arg env used (ILam i mn _ argTy scope)
   = let env' = case mn of
                  Nothing => env
                  Just n => n :: env in
     findBindableNames True env used argTy ++
     findBindableNames True env' used scope
-findBindableNames arg env used (IPatvar n ty scope)
+findBindableNames arg env used (IPatvar n _ ty scope)
   = let env' = n :: env in
     findBindableNames arg env used ty ++
     findBindableNames arg env' used scope
@@ -75,14 +75,14 @@ mutual
       ILet n (map (substNames bound ps) margTy)
              (     substNames bound ps argVal)
              (     substNames bound' ps scope)
-  substNames bound ps (IPi i mn argTy retTy)
+  substNames bound ps (IPi i mn ms argTy retTy)
     = let bound' = maybe bound (\n=>n::bound) mn in
-      IPi i mn (substNames bound  ps argTy)
-               (substNames bound' ps argTy)
-  substNames bound ps (ILam i mn argTy scope)
+      IPi i mn ms (substNames bound  ps argTy)
+                  (substNames bound' ps argTy)
+  substNames bound ps (ILam i mn ms argTy scope)
     = let bound' = maybe bound (\n=>n::bound) mn in
-      ILam i mn (substNames bound  ps argTy)
-                (substNames bound' ps argTy)
+      ILam i mn ms (substNames bound  ps argTy)
+                   (substNames bound' ps argTy)
   substNames bound ps (IApp i f a) = IApp i (substNames bound ps f)
                                             (substNames bound ps a)
   substNames bound ps (ICase scr scrty xs)
@@ -95,10 +95,10 @@ mutual
   substNames bound ps (ICode x) = ICode (substNames bound ps x)
   substNames bound ps (IEval x) = IEval (substNames bound ps x)
   substNames bound ps (IEscape x) = IEscape (substNames bound ps x)
-  substNames bound ps (IPatvar n ty scope)
+  substNames bound ps (IPatvar n ms ty scope)
     = let bound' = n :: bound in
-      IPatvar n (substNames bound ps ty)
-                (substNames bound' ps scope)
+      IPatvar n ms (substNames bound ps ty)
+                   (substNames bound' ps scope)
   substNames bound ps tm = tm
 
   substNamesClause : List Name -> List (Name, RawImp) -> ImpClause -> ImpClause
@@ -173,6 +173,7 @@ caseBlock {vars} mode env scr scrtm scrty alts expected
 
        let alts' = map (updateClause casen casefnty splitOn env) alts
 
+       s <- get Stg
        processDef casen alts'
 
        pure (appTm, gnf NoLets env caseretty)
@@ -193,13 +194,14 @@ caseBlock {vars} mode env scr scrtm scrty alts expected
   addEnv idx {vs = v :: vs} (b :: bs) used
     = let n = getBindName idx v used
           (ns, rest) = addEnv (idx + 1) bs (snd n :: used)
-          ns' = n :: ns in
+          ns' = n :: ns
+          ms = Just $ binderStage b in
       (ns', --IVar (snd n) :: rest)
-            IPatvar (snd n) Implicit Implicit :: rest)
+            IPatvar (snd n) ms Implicit Implicit :: rest)
         -- TODO Adding these as patvars seems to make the actual args be left as implicits
         --      Maybe we need to use this function to get (names, patvars) ?
   addEnv' : {vs : _} ->
-           Int -> Env Term vs -> List Name -> (List (AppInfo, RawImp), List (Name, RawImp))
+           Int -> Env Term vs -> List Name -> (List (AppInfo, RawImp), List (Name, Maybe Stage, RawImp))
   addEnv' idx [] used = ([], [])
   addEnv' idx {vs = v :: vs} (b :: bs) used
     = let n = getBindName idx v used
@@ -207,11 +209,12 @@ caseBlock {vars} mode env scr scrtm scrty alts expected
           appinfo = case binderInfo b of
                       Just Implicit => AImplicit
                       _             => AExplicit
+          ms = Just $ binderStage b
           ty = fromMaybe (trace "Failed to unelab pattern type in case statement" Implicit)
                           mty
           (ns, rest) = addEnv' (idx + 1) bs (snd n :: used)
       in ((appinfo, IVar (snd n)) :: ns,
-          (snd n, ty) :: rest)
+          (snd n, ms, ty) :: rest)
 
   -- Replace a variable in the argument list; if the reference is to
   -- a variable kept in the outer environment (therefore not an argument
@@ -238,7 +241,7 @@ caseBlock {vars} mode env scr scrtm scrty alts expected
   -- in the generated case block
   -- TODO OK?
   usedIn : RawImp -> List Name
-  usedIn (IPatvar n _ _) = [n]
+  usedIn (IPatvar n _ _ _) = [n]
   usedIn (IApp _ f a) = usedIn f ++ usedIn a
   usedIn _ = []
 
@@ -251,16 +254,16 @@ caseBlock {vars} mode env scr scrtm scrty alts expected
 
   removePatBinds : List (AppInfo, RawImp) -> List (AppInfo, RawImp)
   removePatBinds [] = []
-  removePatBinds ((i, IPatvar _ _ sc) :: xs) = removePatBinds $ (i, sc) :: xs
+  removePatBinds ((i, IPatvar _ _ _ sc) :: xs) = removePatBinds $ (i, sc) :: xs
   removePatBinds (x :: xs) = x :: removePatBinds xs
 
-  wrapPatBinds : List (Name, RawImp) -> RawImp -> RawImp
+  wrapPatBinds : List (Name, Maybe Stage, RawImp) -> RawImp -> RawImp
   wrapPatBinds [] lhs = lhs
-  wrapPatBinds ((pname, pty) :: ps) lhs = IPatvar pname pty (wrapPatBinds ps lhs)
+  wrapPatBinds ((pname, pms, pty) :: ps) lhs = IPatvar pname pms pty (wrapPatBinds ps lhs)
 
-  findPatBinds : List RawImp -> List (Name, RawImp)
+  findPatBinds : List RawImp -> List (Name, Maybe Stage, RawImp)
   findPatBinds [] = []
-  findPatBinds ((IPatvar n ty sc) :: xs) = (n, ty) :: findPatBinds (sc :: xs)
+  findPatBinds ((IPatvar n ms ty sc) :: xs) = (n, ms, ty) :: findPatBinds (sc :: xs)
   findPatBinds (x :: xs) = findPatBinds xs
 
   impsToImplicit : {vars : _} -> (fnTy : Term vars) -> List (AppInfo, RawImp) -> List (AppInfo, RawImp)

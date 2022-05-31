@@ -156,13 +156,13 @@ mutual
       mkPi : RawImp -> List (PiInfo, RawImp) -> RawImp
       mkPi arg [] = arg
       mkPi arg ((exp, a) :: as)
-            = IPi exp Nothing arg (mkPi a as)
+            = IPi exp Nothing Nothing arg (mkPi a as)
 
   pibindAll : PiInfo -> List (Maybe Name, RawImp) ->
               RawImp -> RawImp
   pibindAll p [] scope = scope
   pibindAll p ((n, ty) :: rest) scope
-           = IPi p n ty (pibindAll p rest scope)
+           = IPi p n Nothing ty (pibindAll p rest scope)
 
   bindList : FileName -> IndentInfo ->
              Rule (List (Name, RawImp))
@@ -238,7 +238,7 @@ mutual
       bindAll : List (Name, RawImp) -> RawImp -> RawImp
       bindAll [] scope = scope
       bindAll ((n, ty) :: rest) scope
-         = ILam Explicit (Just n) ty (bindAll rest scope)
+         = ILam Explicit (Just n) Nothing ty (bindAll rest scope)
 
   implicitLam : FileName -> IndentInfo -> Rule RawImp
   implicitLam fname indents
@@ -255,7 +255,7 @@ mutual
        bindAll : List (Name, RawImp) -> RawImp -> RawImp
        bindAll [] scope = scope
        bindAll ((n, ty) :: rest) scope
-           = ILam Implicit (Just n) ty (bindAll rest scope)
+           = ILam Implicit (Just n) Nothing ty (bindAll rest scope)
 
   let_ : FileName -> IndentInfo -> Rule RawImp
   let_ fname indents
@@ -333,7 +333,7 @@ mutual
        bindAll : List (PiInfo, Name, RawImp) -> RawImp -> RawImp
        bindAll [] scope = scope
        bindAll ((p, n, ty) :: rest) scope
-           = IPatvar n ty (bindAll rest scope)
+           = IPatvar n Nothing ty (bindAll rest scope)
 
   binder : FileName -> IndentInfo -> Rule RawImp
   binder fname indents
@@ -394,7 +394,7 @@ parseRHS fname indents lhs
     getFn : RawImp -> SourceEmptyRule Name
     getFn (IVar n) = pure n
     getFn (IApp _ f a) = getFn f
-    getFn (IPatvar _ _ sc) = getFn sc
+    getFn (IPatvar _ _ _ sc) = getFn sc
     getFn _ = fail "Not a function application"
 
 ifThenElse : Bool -> Lazy t -> Lazy t -> t

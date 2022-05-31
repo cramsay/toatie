@@ -75,7 +75,7 @@ mutual
            Core (Term [])
   mkTerm (IVar n)        mty pvs args = buildApp n mty pvs args
   mkTerm (IApp _ fn arg) mty pvs args = mkTerm fn mty pvs (arg :: args)
-  mkTerm (IPatvar n ty sc) mty pvs args = mkTerm sc mty ((n,ty)::pvs) args
+  mkTerm (IPatvar n _ ty sc) mty pvs args = mkTerm sc mty ((n,ty)::pvs) args
   mkTerm tm _ _ _                  = nextVar
 
   -- Given an LHS that is declared 'impossible', build a term to match from,

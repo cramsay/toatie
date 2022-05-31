@@ -251,8 +251,8 @@ processImplicitUse env lhstm rhstm exprhsty
 addDots : RawImp -> State (SortedSet Name, SortedSet Name) RawImp
 addDots IType    = pure IType
 addDots Implicit = pure Implicit
-addDots (IPi Implicit mn argTy retTy)  = pure $ IPi Implicit mn argTy retTy
-addDots (IPi Explicit mn argTy retTy)  = pure $ IPi Explicit mn argTy retTy
+addDots (IPi Implicit mn ms argTy retTy)  = pure $ IPi Implicit mn ms argTy retTy
+addDots (IPi Explicit mn ms argTy retTy)  = pure $ IPi Explicit mn ms argTy retTy
 addDots (ILet n margTy argVal scope)   = pure $ ILet n margTy argVal scope -- Can't have ILet on LHS...
 addDots (IMustUnify x) = pure $ IMustUnify x
 addDots (IQuote x)     = pure $ --IQuote (IMustUnify x)
@@ -260,11 +260,11 @@ addDots (IQuote x)     = pure $ --IQuote (IMustUnify x)
 addDots (ICode x)      = pure $ ICode   !(addDots x)
 addDots (IEval x)      = pure $ IEval   !(addDots x)
 addDots (IEscape x)    = pure $ IEscape !(addDots x)
-addDots (IPatvar n ty scope) = do (pats, founds) <- get
-                                  put (insert n pats, founds)
-                                  pure $ IPatvar n ty !(addDots scope)
-addDots (ILam Implicit mn argTy scope) = pure $ ILam Implicit mn argTy !(addDots scope)--(IMustUnify $ addDots scope)
-addDots (ILam Explicit mn argTy scope) = pure $ ILam Explicit mn argTy !(addDots scope)
+addDots (IPatvar n ms ty scope) = do (pats, founds) <- get
+                                     put (insert n pats, founds)
+                                     pure $ IPatvar n ms ty !(addDots scope)
+addDots (ILam Implicit mn ms argTy scope) = pure $ ILam Implicit mn ms argTy !(addDots scope)--(IMustUnify $ addDots scope)
+addDots (ILam Explicit mn ms argTy scope) = pure $ ILam Explicit mn ms argTy !(addDots scope)
 addDots (IApp AImplicit f a) = pure $ IApp AImplicit !(addDots f) !(addDots a)
 addDots (IApp AExplicit f a) = pure $ IApp AExplicit !(addDots f) !(addDots a)
 addDots (IVar x) = do (pats, founds) <- get
@@ -606,10 +606,6 @@ processDef n clauses
   catchAll : Clause -> Bool
   catchAll (MkClause env lhs _)
     = all simplePat (getArgs lhs)
-
-  wrapLams : List Name -> RawImp -> RawImp
-  wrapLams [] tm = tm
-  wrapLams (x::xs) tm = ILam Explicit (Just x) Implicit (wrapLams xs tm)
 
   -- Return 'Nothing' if the clause is impossible, otherwise return the
   -- checked clause (with implicits filled in, so that we can see if they

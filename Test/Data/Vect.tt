@@ -52,18 +52,6 @@ pat n : Nat, acc : Type, elem : Type, f : <acc->elem->acc>, init : <acc> =>
       in ~(unrollFoldl n {acc} {elem} f [| init' |]) (tail {elem} {n} xs)
   |]
 
--- A possibly non-synthesisable version of `map`
-map : (n : Nat) -> (a, b : Type) ->
-      (f : a -> b) ->
-      Vect n a -> Vect n b
-pat a, b, f =>
-  map Z a b f (VNil {a}) = VNil {b}
-pat n, a, b, f, x, xs =>
-  map (S n) a b f (VCons {_} {_} x xs) =
-    let y  = f x
-        ys = map n a b f xs
-    in VCons {b} {n} (f x) (map n a b f xs)
-
 --wrong : {x : Nat} -> Nat
 --pat {x : Nat} =>
 --  wrong {x} = x
