@@ -91,6 +91,7 @@ pat n, c, chr, xs =>
   mulConstBin n {S (plus (S c) (S c))} (HalfRecOdd c chr) xs
     = resizeBin _ _ (addBin _ _ [| BinCons {_} ~(mulConstBin n {S c} chr xs) O |] xs [|O|])
 
+{- A simple definition of multiplication but with lots of additions with zero that could be avoided
 mulBin : (n, m : Nat) -> < Bin n > -> < Bin m > -> < Bin (plus n m) >
 pat m, ys =>
   mulBin Z m [| BinNil |] ys = zeroBin _
@@ -101,10 +102,26 @@ pat n, m, xs, x, ys =>
               O ==> ~(resizeBin _ _ [|rec|])
               I ==> ~(resizeBin _ _ (addBin _ _ ys [|rec|] [|O|]))
       |]
+-}
+
+-- A more realistic multiplier definition
+mulBin' : (n, m : Nat) -> (xs : < Bin n >) -> (ys, acc : < Bin m >) -> < Bin (plus n m) >
+pat m, ys, acc =>
+  mulBin' Z m [|BinNil|] ys acc = acc
+pat n, m, xs, x, ys, acc =>
+  mulBin' (S n) m [| BinCons {_} xs x |] ys acc
+    = [| let row : Bin m
+                 = case x of
+                     I ==> ~ys
+                     O ==> ~(zeroBin _)
+         in case ~(addBin' _ [|row|] acc [|O|]) of
+              pat zs, z =>
+                (BinCons {_} zs z) ==> BinCons {_} ~(mulBin' _ _ [|xs|] ys [|zs|]) z
+      |]
 
 {- little synthesisable multiplier
 mymul : < Bin 4 -> Bin 3 -> Bin (plus 4 3) >
-mymul = [| \x => \y => ~(mulBin 4 3 [|x|] [|y|]) |]
+mymul = [| \x => \y => ~(mulBin' 4 3 [|x|] [|y|] (zeroBin _)) |]
 -}
 
 
