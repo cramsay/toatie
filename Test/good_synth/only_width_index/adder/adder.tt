@@ -1,0 +1,5 @@
+import Data.Nat
+import Examples.BoundedSynth
+
+adder : < Bin 2 -> Bin 3 -> Bin 4 >
+adder = [| \xs => \ys => ~(addBin 2 3 [|xs|] [|ys|] [|O|]) |]

@@ -308,6 +308,7 @@ parameters (mode : EvalMode)
     eval env stk (CConCase scr alts def)
       = do scr' <- eval env [] scr
            let env' = update scr env scr'
+           coreLift $ putStrLn $ "Picking alt in " ++ show alts ++ " with scrutinee " ++ show scr'
            Nothing <- pickAlt env' stk scr' alts def
              | Just val => do pure val
            def' <- traverseOpt (eval env' stk) def
@@ -588,17 +589,33 @@ mutual
                      = CConCase (rewrite sym (appendAssociative altlv scrlv vars) in weakenNs altlv scrsc)
                                 (rewrite sym (appendAssociative altlv scrlv vars) in alts')
                                 Nothing
-         Just (deflv ** (deflets, defsc)) <- traverseOpt (liftLetsTm . weakenNs scrlv) def
+         Just (deflv ** (deflets, defsc)) <- traverseOpt (liftLetsTm . weakenNs (altlv ++ scrlv)) def
            | Nothing => pure (xn :: altlv ++ scrlv **
                               (scrlets . altlets . rewrite appendAssociative altlv scrlv vars in
                                                    CLet xn concase Erased
                           , CLocal First )
                         )
-         -- TODO include default alt too!
-         pure (xn :: altlv ++ scrlv **
-                (scrlets . altlets . rewrite appendAssociative altlv scrlv vars in
-                                     CLet xn concase Erased
-                , CLocal First )
+                     {-
+                     = CConCase (rewrite sym (appendAssociative altlv scrlv vars) in weakenNs (deflv ++ altlv) scrsc)
+                                (rewrite sym (appendAssociative altlv scrlv vars) in alts')
+                                (Just defsc)
+                     -}
+         --let outlets = deflets . CLet xn concase' Erased
+         let deflets' : CExp (deflv ++ (altlv ++ (scrlv ++ vars))) -> CExp (altlv ++ (scrlv ++ vars))
+                      = rewrite (appendAssociative altlv scrlv vars) in deflets
+         let defsc' : CExp (deflv ++ (altlv ++ (scrlv ++ vars)))
+                    = rewrite (appendAssociative altlv scrlv vars) in defsc
+         let concase' : CExp (deflv++(altlv++(scrlv++vars)))
+                      = CConCase (weakenNs deflv (weakenNs altlv scrsc))
+                                 (map (weakenNs deflv) alts')
+                                 (Just defsc')
+         let alllets = scrlets . altlets . deflets' . CLet xn concase' Erased
+         let alllets' : CExp ((xn :: deflv ++ (altlv ++ scrlv)) ++ vars) -> CExp vars
+                      = rewrite sym (appendAssociative (xn :: deflv) (altlv ++ scrlv) vars) in
+                        rewrite sym (appendAssociative altlv scrlv  vars) in alllets
+         pure (xn :: deflv ++ altlv ++ scrlv **
+                ( alllets'
+                , CLocal First)
               )
 
   liftLetsArgs : {vars:_} ->
@@ -686,6 +703,30 @@ mutual
                  = rewrite sym (appendAssociative alv args vars) in asc
          pure $ (alv++args ** (lets',sc'))
 
+peelSubVars : {newvars, oldvars : _} ->
+              SubVars (v :: newvars) (v' :: oldvars) ->
+              Maybe (SubVars newvars oldvars)
+peelSubVars SubRefl = Just $ SubRefl
+peelSubVars (DropCons x) = Nothing
+peelSubVars (KeepCons x) = Just x
+
+eraseUnused : {vars:_} ->
+              {auto l : Ref LVar Int} ->
+              CExp vars ->
+              Core (vars' ** (SubVars vars' vars
+                             ,CExp vars'))
+eraseUnused (CLet x val ty sc)
+  = do (x'::vs ** (subs, sc')) <- eraseUnused sc
+          | ([] ** (subs, sc')) => throw $ InternalError $ "Found completely erased scope when erasing unused names: " ++ show sc
+       let Just subs' = peelSubVars subs
+             | Nothing => throw $ InternalError $ "Found DropCons for head of CLet's erasure variables! " ++ show sc
+       case used First sc' of
+         0 => pure (vs ** (subs', substs [CErased] sc'))
+         _ => pure (_ ** (subs', CLet x (shrinkCExp subs' val)
+                                        ty
+                                        (renameVars (CompatExt CompatPre) sc')))
+eraseUnused x = pure (_ ** (SubRefl, x))
+
 -- Lift all let bindings out into a single block at the top-level
 liftLets : {auto c : Ref Ctxt Defs} ->
            {auto l : Ref LVar Int} ->
@@ -696,8 +737,13 @@ liftLets (MkFun args def)
        let sc' = case sc of
                    CLocal _ => sc
                    tm       => CLet xn tm Erased (CLocal First)
-       pure $ MkFun args (lets sc')
+       (args' ** (_, def')) <- eraseUnused (lets sc')
+       let Just cmpt = areVarsCompatible args' args
+          | _ => throw $ InternalError $ "WAT! Incompatible args found after erasing unused names: "
+                                            ++ show args ++ " and " ++ show args'
+       pure $ MkFun args $ renameVars cmpt def'
 liftLets d = pure d
+
 
 export
 typeOfLocal : List (Term []) -> Nat -> Core (Term [])

@@ -56,8 +56,8 @@ pat n =>
 
 resizeBin : (n, n' : Nat) -> < Bin n > -> < Bin n' >
 -- Extend with zeros
-pat n' =>
-  resizeBin Z n' [| BinNil |] = zeroBin n'
+pat n', bs =>
+  resizeBin Z n' bs = zeroBin n'
 -- Truncate
 pat n, bs =>
   resizeBin n Z bs = [| BinNil |] 

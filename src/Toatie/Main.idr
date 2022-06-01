@@ -66,11 +66,13 @@ data ReplCmd : Type where
   RC_BitRep : ReplCmd
   RC_CompileDef : ReplCmd
   RC_Netlist : ReplCmd
+  RC_ShowDef : ReplCmd
 
 parseReplCmd : String -> Maybe ReplCmd
 parseReplCmd ":BitRep" = Just RC_BitRep
 parseReplCmd ":CompileDef"   = Just RC_CompileDef
 parseReplCmd ":Netlist" = Just RC_Netlist
+parseReplCmd ":ShowDef" = Just RC_ShowDef
 parseReplCmd _ = Nothing
 
 repl : {auto c : Ref Ctxt Defs} ->
@@ -129,6 +131,15 @@ repl = do coreLift $ putStr "> "
                  nl <- genNetlist name
                  coreLift $ putStrLn $ "Compiled to: " ++ show nl
                  put Ctxt defs
+                 repl
+
+            Just RC_ShowDef =>
+              do let Right (IVar name) = runParser Nothing inp' (expr "(input)" init)
+                       | _ => do coreLift $ printLn "Couldn't parse input as a name"
+                 defs <- get Ctxt
+                 Just (MkGlobalDef type def _) <- lookupDef name defs
+                   | Nothing => coreLift $ putStrLn $ "Couldn't find name " ++ show name ++ " in context."
+                 coreLift $ putStrLn $ show name ++ " : " ++ show type ++ "\n  = " ++ show def
                  repl
 
           -- Not a command, so just interpret it as a term
