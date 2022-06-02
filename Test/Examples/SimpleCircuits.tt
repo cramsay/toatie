@@ -19,10 +19,6 @@ fst : Vect 2 Bit -> Bit
 pat x, xs =>
   fst (VCons {Bit} {1} x xs) = x
 
--- Looks good!
-twoNots : < Vect 2 Bit -> Vect 2 Bit >
-twoNots = unrollMap 2 {_} {_} [| \y => xor I y |]
-
 -- Do our patterns get handled OK by our case lifting?
 -- Looks good!
 caseTest : (n : Nat) -> Vect n Bit -> Nat

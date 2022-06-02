@@ -308,7 +308,6 @@ parameters (mode : EvalMode)
     eval env stk (CConCase scr alts def)
       = do scr' <- eval env [] scr
            let env' = update scr env scr'
-           coreLift $ putStrLn $ "Picking alt in " ++ show alts ++ " with scrutinee " ++ show scr'
            Nothing <- pickAlt env' stk scr' alts def
              | Just val => do pure val
            def' <- traverseOpt (eval env' stk) def

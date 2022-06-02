@@ -31,16 +31,16 @@ simple Bin : Nat -> Type where
   BinNil : Bin 0
   BinCons : {n : Nat} -> Bin n -> Bit -> Bin (S n)
 
-addBin' : (n : Nat) -> < Bin n > -> < Bin n > -> < Bit > -> < Bin (S n) >
+addBin' : (n : Nat) -> < Bit > -> < Bin n > -> < Bin n > -> < Bin (S n) >
 pat cin =>
-  addBin' Z [| BinNil |] [| BinNil |] cin
+  addBin' Z cin [| BinNil |] [| BinNil |]
     = [| BinCons {_} BinNil ~cin |]
-pat n, x, xs, y, ys, cin =>
-  addBin' (S n) [| BinCons {_} xs x |] [| BinCons {_} ys y |] cin
+pat n, cin, x, xs, y, ys =>
+  addBin' (S n) cin [| BinCons {_} xs x |] [| BinCons {_} ys y |]
     = [| case addBit ~cin x y of
            pat cin', lsb =>
              MkP {_} {_} cin' lsb ==>
-               BinCons {_} ~(addBin' _ [|xs|] [|ys|] [|cin'|]) lsb
+               BinCons {_} ~(addBin' _ [|cin'|] [|xs|] [|ys|]) lsb
       |]
 
 bx : Bin 3
@@ -66,14 +66,14 @@ pat n, n', bs, b =>
   resizeBin (S n) (S n') [| BinCons {_} bs b |]
     = [| BinCons {_} ~(resizeBin n n' [|bs|]) b |]
 
-addBin : (n, m : Nat) -> < Bin n > -> < Bin m > -> < Bit > -> < Bin (S (max n m)) >
-pat n, m, xs, ys, cin =>
-  addBin n m xs ys cin = addBin' _ (resizeBin _ _ xs)
-                                   (resizeBin _ _ ys) cin
+addBin : (n, m : Nat) -> < Bit > -> < Bin n > -> < Bin m > -> < Bin (S (max n m)) >
+pat n, m, cin, xs, ys =>
+  addBin n m cin xs ys = addBin' _ cin (resizeBin _ _ xs)
+                                       (resizeBin _ _ ys)
 
 {- Synthesisable example of calling addBin
 myaddBin : < Bin 3 -> Bin 3 -> Bin 4 >
-myaddBin = [| \x => \y => ~(addBin 3 3 [|x|] [|y|] [|O|]) |]
+myaddBin = [| \x => \y => ~(addBin 3 3 [|O|] [|x|] [|y|]) |]
 -}
 
 mulConstBin : (n : Nat) -> {c : Nat} -> (chr : HalfRec c) ->
@@ -89,7 +89,7 @@ pat n, c, chr, xs =>
     = resizeBin _ _ [|BinCons {_} ~(mulConstBin n {S c} chr xs) O|]
 pat n, c, chr, xs =>
   mulConstBin n {S (plus (S c) (S c))} (HalfRecOdd c chr) xs
-    = resizeBin _ _ (addBin _ _ [| BinCons {_} ~(mulConstBin n {S c} chr xs) O |] xs [|O|])
+    = resizeBin _ _ (addBin _ _ [|O|] [| BinCons {_} ~(mulConstBin n {S c} chr xs) O |] xs)
 
 {- A simple definition of multiplication but with lots of additions with zero that could be avoided
 mulBin : (n, m : Nat) -> < Bin n > -> < Bin m > -> < Bin (plus n m) >
@@ -100,30 +100,64 @@ pat n, m, xs, x, ys =>
     = [| let rec = ~(mulBin _ _ [|xs|] [|BinCons {_} ~ys O|])
          in case x of
               O ==> ~(resizeBin _ _ [|rec|])
-              I ==> ~(resizeBin _ _ (addBin _ _ ys [|rec|] [|O|]))
+              I ==> ~(resizeBin _ _ (addBin _ _ [|O|] ys [|rec|]))
       |]
 -}
 
 -- A more realistic multiplier definition
-mulBin' : (n, m : Nat) -> (xs : < Bin n >) -> (ys, acc : < Bin m >) -> < Bin (plus n m) >
+mulBin : (n, m : Nat) -> (acc : <Bin m>) -> (xs : <Bin n>) -> (ys : <Bin m>) -> <Bin (plus n m)>
 pat m, ys, acc =>
-  mulBin' Z m [|BinNil|] ys acc = acc
+  mulBin Z m acc [|BinNil|] ys = acc
 pat n, m, xs, x, ys, acc =>
-  mulBin' (S n) m [| BinCons {_} xs x |] ys acc
-    = [| let row : Bin m
-                 = case x of
-                     I ==> ~ys
-                     O ==> ~(zeroBin _)
-         in case ~(addBin' _ [|row|] acc [|O|]) of
+  mulBin (S n) m acc [| BinCons {_} xs x |] ys
+    = [| let row : Bin m = case x of
+               I ==> ~ys
+               O ==> ~(zeroBin _)
+         in case ~(addBin' _ [|O|] [|row|] acc) of
               pat zs, z =>
-                (BinCons {_} zs z) ==> BinCons {_} ~(mulBin' _ _ [|xs|] ys [|zs|]) z
+                (BinCons {_} zs z) ==> BinCons {_} ~(mulBin _ _ [|zs|] [|xs|] ys) z
       |]
 
 {- little synthesisable multiplier
 mymul : < Bin 4 -> Bin 3 -> Bin (plus 4 3) >
-mymul = [| \x => \y => ~(mulBin' 4 3 [|x|] [|y|] (zeroBin _)) |]
+mymul = [| \x => \y => ~(mulBin 4 3 (zeroBin _) [|x|] [|y|]) |]
 -}
 
+-- Dot product using higher order functions on vect
+dotProdBin : (i,n,m : Nat) ->
+             <Vect i (Bin n)> ->
+             <Vect i (Bin m)> ->
+             <Bin (plus i (plus n m))>
+pat i, n, m, xs, ys =>
+  dotProdBin i n m xs ys
+    = [| let mults = ~(vzipWith _ {_} {_} {_} (mulBin _ _ (zeroBin m)) xs ys)
+         in ~(vdfoldr _ {_}
+                (\i => Bin (plus i (plus n m)))
+                (\i => \x => \y => addBin' (plus i (plus n m)) [|O|]
+                                           (resizeBin (plus n m) _ x) y)
+                (zeroBin _) [|mults|])
+      |]
+
+-- Dot product using higher order functions on vect with an adder tree
+dotProdTreeBin : (i,n,m : Nat) ->
+                 <Vect (pow 2 i) (Bin n)> ->
+                 <Vect (pow 2 i) (Bin m)> ->
+                 <Bin (plus i (plus n m))>
+pat i, n, m, xs, ys =>
+  dotProdTreeBin i n m xs ys
+    = [| let mults = ~(vzipWith _ {_} {_} {_} (mulBin _ _ (zeroBin m)) xs ys)
+         in ~(vdtfoldr _ {_}
+                (\i => Bin (plus i (plus n m)))
+                (\x => x)
+                (\i => addBin' _ [|O|])
+                [|mults|])
+      |]
+
+mydotprodbin : < Vect 2 (Bin 2) -> Vect 2 (Bin 3) -> Bin 7 >
+mydotprodbin = [| \xs => \ys => ~(dotProdBin 2 2 3 [|xs|] [|ys|])|]
+
+mydotprodtreebin : < Vect 2 (Bin 2) -> Vect 2 (Bin 3) -> Bin 6 >
+mydotprodtreebin = [| \xs => \ys => ~(dotProdTreeBin 1 2 3 [|xs|] [|ys|])|]
 
 -- Binary numbers indexed by their upper bound and width -------------
 ----------------------------------------------------------------------
@@ -145,7 +179,7 @@ pat n, w, prf, xs =>
 addB : (n, m : Nat) -> < Bounded' n > -> < Bounded' m > -> < Bounded' (plus n m) >
 pat n, prfn, m, prfm, xs, ys =>
   addB n m [| MkB {n} {_} {prfn} xs |] [| MkB {m} {_} {prfm} ys |]
-    = [| let ans = ~(resizeBin _ (clog2 (S (plus n m))) (addBin _ _ [|xs|] [|ys|] [|O|]))
+    = [| let ans = ~(resizeBin _ (clog2 (S (plus n m))) (addBin _ _ [|O|] [|xs|] [|ys|]))
          in MkB {_} {_} {Refl {_} {_}} ans
       |]
 
