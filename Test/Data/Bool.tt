@@ -1,3 +1,9 @@
 data Bool : Type where
   False : Bool
   True  : Bool
+
+ifThenElse : {a : Type} -> Bool -> a -> a -> a
+pat a, true, false =>
+  ifThenElse {a} True true false = true
+pat a, true, false =>
+  ifThenElse {a} False true false = false

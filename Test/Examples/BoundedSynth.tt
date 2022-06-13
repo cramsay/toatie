@@ -76,20 +76,24 @@ myaddBin : < Bin 3 -> Bin 3 -> Bin 4 >
 myaddBin = [| \x => \y => ~(addBin 3 3 [|O|] [|x|] [|y|]) |]
 -}
 
-mulConstBin : (n : Nat) -> {c : Nat} -> (chr : HalfRec c) ->
+mulConstBin' : (n : Nat) -> {c : Nat} -> (chr : HalfRec c) ->
             < Bin n > -> < Bin (plus (clog2 c) n) >
 pat c, chr =>
-  mulConstBin Z {c} chr [| BinNil |] = zeroBin _
+  mulConstBin' Z {c} chr [| BinNil |] = zeroBin _
 pat n, xs =>
-  mulConstBin n {Z} HalfRecZ xs = zeroBin _
+  mulConstBin' n {Z} HalfRecZ xs = zeroBin _
 pat n, xs =>
-  mulConstBin n {1} HalfRec1 xs = resizeBin _ _ xs
+  mulConstBin' n {1} HalfRec1 xs = resizeBin _ _ xs
 pat n, c, chr, xs =>
-  mulConstBin n {plus (S c) (S c)} (HalfRecEven c chr) xs
-    = resizeBin _ _ [|BinCons {_} ~(mulConstBin n {S c} chr xs) O|]
+  mulConstBin' n {plus (S c) (S c)} (HalfRecEven c chr) xs
+    = resizeBin _ _ [|BinCons {_} ~(mulConstBin' n {S c} chr xs) O|]
 pat n, c, chr, xs =>
-  mulConstBin n {S (plus (S c) (S c))} (HalfRecOdd c chr) xs
-    = resizeBin _ _ (addBin _ _ [|O|] [| BinCons {_} ~(mulConstBin n {S c} chr xs) O |] xs)
+  mulConstBin' n {S (plus (S c) (S c))} (HalfRecOdd c chr) xs
+    = resizeBin _ _ (addBin _ _ [|O|] [| BinCons {_} ~(mulConstBin' n {S c} chr xs) O |] xs)
+
+mulConstBin : (n, c : Nat) -> < Bin n > -> < Bin (plus (clog2 c) n) >
+pat n c xs =>
+  mulConstBin n c xs = mulConstBin' n {c} (halfRec c) xs
 
 {- A simple definition of multiplication but with lots of additions with zero that could be avoided
 mulBin : (n, m : Nat) -> < Bin n > -> < Bin m > -> < Bin (plus n m) >
@@ -177,17 +181,18 @@ pat n, w, prf, xs =>
   boundedToBin n w (MkB {n} {w} {prf} xs) = xs
 
 addB : (n, m : Nat) -> < Bounded' n > -> < Bounded' m > -> < Bounded' (plus n m) >
-pat n, prfn, m, prfm, xs, ys =>
-  addB n m [| MkB {n} {_} {prfn} xs |] [| MkB {m} {_} {prfm} ys |]
-    = [| let ans = ~(resizeBin _ (clog2 (S (plus n m))) (addBin _ _ [|O|] [|xs|] [|ys|]))
-         in MkB {_} {_} {Refl {_} {_}} ans
+pat n, m, xs, ys =>
+  addB n m [| MkB {n} {_} {_} xs |] [| MkB {m} {_} {_} ys |]
+    = [| let ans = ~(addBin _ _ [|O|] [|xs|] [|ys|])
+         in MkB {_} {_} {Refl {_} {_}} ~(resizeBin _ _ [|ans|])
       |]
 
-mulConstB : (n, c : Nat) ->
-            < Bounded' n > -> < Bounded' (mul c n) >
+mulConstB : (n, c : Nat) -> < Bounded' n > -> < Bounded' (mul c n) >
 pat n, c, xs =>
   mulConstB n c [| MkB {n} {_} {_} xs |]
-    = [| MkB {_} {_} {Refl {_} {_}} ~(resizeBin _ (clog2 (S (mul c n))) (mulConstBin _ {c} (halfRec c) [|xs|])) |]
+    = [| let ans = ~(mulConstBin _ c [|xs|])
+         in MkB {_} {_} {Refl {_} {_}} ~(resizeBin _ _ [|ans|])
+      |]
 
 myconstmul : < Bounded 6 3 -> Bounded (mul 6 5) 5 >
 myconstmul = [| \x => ~(mulConstB 6 5 [|x|])
@@ -226,8 +231,9 @@ pat j, n, w, ws, x, xs =>
   dotProd (S j) n (VCons' {_} {_} w ws) [|VCons {_} {_} x xs|]
     = [| let y = ~(addB _ _ (mulConstB _ w [|x|])
                             (dotProd _ _ ws [|xs|]))
-         in eqInd2 {_} {_} {_} {lemmaDotProd n w (sum j ws)}
-              {\h => Bounded' h} y
+         --in eqInd2 {_} {_} {_} {lemmaDotProd n w (sum j ws)}
+         --     {\h => Bounded' h} y
+         in y
       |]
 
 -- Little synthesisable example of using dotProd

@@ -1,0 +1,268 @@
+import Data.Nat
+import Data.Bool
+import Data.List
+import Data.Vect
+
+--------------------------------------------------------------------------------
+-- State Monad 
+
+data Unit : Type where
+  MkUnit : Unit
+
+data Pair : Type -> Type -> Type where
+  MkPair : {a,b : Type} -> a -> b -> Pair a b
+
+data Maybe : Type -> Type where
+  Nothing : {a : Type}      -> Maybe a
+  Just    : {a : Type} -> a -> Maybe a
+
+data State : Type -> Type -> Type where
+  MkState : {s, a : Type} -> (s -> Pair s a) -> State s a
+
+run : {s, a : Type} -> State s a -> s -> Pair s a
+pat s, a, f : (s -> Pair s a), initS =>
+  run {_} {_} (MkState {_} {_} f) initS = f initS
+
+pure : {s, a : Type} -> a -> State s a
+pat s, a, inp =>
+  pure {s} {a} inp = MkState {_} {_} (\state : s => MkPair {_} {_} state inp)
+
+bind : {s, a, b : Type} -> State s a -> (a -> State s b) -> State s b
+pat s, a, b, m, f =>
+  bind {s} {a} {b} m f
+    = MkState {_} {_}
+      \initS =>
+        case run {_} {_} m initS of
+        pat midS midOut => MkPair {_} {_} midS midOut ==>
+          run {_} {_} (f midOut) midS 
+
+get : {s : Type} -> State s s
+pat s =>
+  get {s} = MkState {_} {_}
+            \x => MkPair {_} {_} x x
+
+put : {s : Type} -> s -> State s Unit
+pat s, x =>
+  put {s} x = MkState {_} {_}
+              \a => MkPair {_} {_} x MkUnit
+
+--------------------------------------------------------------------------------
+-- Encoding transitions for AXI4-lite read channel
+
+ARReady : Type
+ARReady = Bool
+
+ARValid : Type
+ARValid = Bool
+
+ARAddr : Type
+ARAddr = Nat
+
+ARLen : Type
+ARLen = Nat
+
+RData : Type
+RData = Nat
+
+RValid : Type
+RValid = Bool
+
+RReady : Type
+RReady = Bool
+
+RLast : Type
+RLast = Bool
+
+Mem : Type
+Mem = List Nat
+
+ReadInputs : Type
+ReadInputs = Pair RReady (Maybe (Pair ARAddr ARLen))
+
+ReadOutputs : Type
+ReadOutputs = Pair ARReady (Maybe (Pair RData RLast))
+
+data ReadState : Type where
+  Idle     : Mem                    -> ReadState
+  Bursting : Mem -> ARAddr -> ARLen -> ReadState
+  Last     : Mem -> ARAddr          -> ReadState
+
+-- Helpers for state
+getMem : ReadState -> Mem
+pat mem =>
+  getMem (Idle mem) = mem
+pat mem, addr, len =>
+  getMem (Bursting mem addr len) = mem
+pat mem, addr =>
+  getMem (Last mem addr) = mem
+
+getData : Mem -> ARAddr -> RData
+pat addr =>
+  getData (Nil {_}) addr = Z
+pat w, ws =>
+  getData (Cons {_} w ws) Z = w
+pat w, ws, addr =>
+  getData (Cons {_} w ws) (S addr) = getData ws addr
+
+{- All transitions take roughly the same form here -}
+
+startSingle : ARAddr -> State ReadState ReadOutputs
+pat addr =>
+  startSingle addr
+    = bind {_} {_} {_} (get {_})                               \curState =>
+      bind {_} {_} {_} (put {_} (Last (getMem curState) addr)) \unit =>
+      pure {_} {_} (MkPair {_} {_}
+                           True
+                           (Just {_} (MkPair {_} {_} (getData (getMem curState) addr)
+                                                     True)))
+startBurst : ARAddr -> ARLen -> State ReadState ReadOutputs
+pat addr, len =>
+  startBurst addr len
+    = bind {_} {_} {_} (get {_})                               \curState =>
+      bind {_} {_} {_} (put {_} (Bursting (getMem curState) addr len)) \unit =>
+      pure {_} {_} (MkPair {_} {_}
+                           False
+                           (Just {_} (MkPair {_} {_} (getData (getMem curState) addr)
+                                                     False)))
+
+showMid : ARAddr -> ARLen -> State ReadState ReadOutputs
+pat addr, len =>
+  showMid addr len
+    = bind {_} {_} {_} (get {_})                               \curState =>
+      bind {_} {_} {_} (put {_} (Bursting (getMem curState) (plus 1 addr) len)) \unit =>
+      pure {_} {_} (MkPair {_} {_}
+                           False
+                           (Just {_} (MkPair {_} {_} (getData (getMem curState) (plus 1 addr))
+                                                     False)))
+
+showLast : ARAddr -> State ReadState ReadOutputs
+pat addr =>
+  showLast addr
+    = bind {_} {_} {_} (get {_})                               \curState =>
+      bind {_} {_} {_} (put {_} (Last (getMem curState) (plus 1 addr))) \unit =>
+      pure {_} {_} (MkPair {_} {_}
+                           False
+                           (Just {_} (MkPair {_} {_} (getData (getMem curState) (plus 1 addr))
+                                                     True)))
+
+finishRead : State ReadState ReadOutputs
+finishRead
+  = bind {_} {_} {_} (get {_})                          \curState =>
+    bind {_} {_} {_} (put {_} (Idle (getMem curState))) \unit =>
+    pure {_} {_} (MkPair {_} {_}
+                         True
+                         (Nothing {Pair RData RLast}))
+    
+stayIdle : State ReadState ReadOutputs
+stayIdle = pure {_} {_} (MkPair {_} {_} True (Nothing {_}))
+    
+stayMid : ARAddr -> State ReadState ReadOutputs
+pat addr =>
+  stayMid addr
+    = bind {_} {_} {_} (get {_}) \curState =>
+      pure {_} {_} (MkPair {_} {_} False (Just {_} (MkPair {_} {_} (getData (getMem curState) addr) False)))
+    
+stayLast : ARAddr -> State ReadState ReadOutputs
+pat addr =>
+  stayLast addr
+    = bind {_} {_} {_} (get {_}) \curState =>
+      pure {_} {_} (MkPair {_} {_} False (Just {_} (MkPair {_} {_} (getData (getMem curState) addr) False)))
+
+axiRead' : ReadInputs -> ReadState -> State ReadState ReadOutputs
+pat rready, addr, mem =>
+  axiRead' (MkPair {_} {_} rready (Just {_} (MkPair {_} {_} addr Z)))
+           (Idle mem)
+    = startSingle addr
+pat rready, addr, len, mem =>
+  axiRead' (MkPair {_} {_} rready (Just {_} (MkPair {_} {_} addr (S len))))
+           (Idle mem)
+    = startBurst addr (S len)
+pat rready, mem =>
+  axiRead' (MkPair {_} {_} rready (Nothing {Pair _ _}))
+           (Idle mem)
+    = stayIdle
+pat x, mem, addr, len =>
+  axiRead' (MkPair {_} {_} False x) (Bursting mem addr len) = stayMid addr
+pat x, mem, addr =>
+  axiRead' (MkPair {_} {_} True x) (Bursting mem addr Z) = showLast addr
+pat x, mem, addr, len =>
+  axiRead' (MkPair {_} {_} True x) (Bursting mem addr (S len)) = showMid addr len
+pat x, mem, addr =>
+  axiRead' (MkPair {_} {_} False x) (Last mem addr) = stayLast addr
+pat x, mem, addr =>
+  axiRead' (MkPair {_} {_} True x) (Last mem addr) = finishRead
+
+axiRead : ReadInputs -> State ReadState ReadOutputs
+pat ins =>
+  axiRead ins = bind {_} {_} {_} (get {_}) (axiRead' ins)
+
+{-
+   Playing with indexed monads now
+-}
+
+data IxState : Type -> Type -> Type -> Type where
+  MkIxState : {i,j,a : Type} -> (i -> Pair a j) -> IxState i j a
+
+ixRun : {i,j,a : Type} -> IxState i j a -> i -> Pair a j
+pat i, a, j, f : (i -> Pair a j), x =>
+  ixRun {_} {_} {_} (MkIxState {_} {_} {_} f) x = f x
+
+ixReturn : {i, a : Type} -> a -> IxState i i a
+pat i, a, x =>
+  ixReturn {i} {a} x
+    = MkIxState {i} {i} {a}
+      \initS => MkPair {_} {_} x initS
+
+ixBind : {i,j,k,a,b : Type} -> IxState i j a -> (a -> IxState j k b) -> IxState i k b
+pat i, j, k, a, b, m, f =>
+  ixBind {i} {j} {k} {a} {b} m f
+    = MkIxState {i} {_} {_}
+      \initS =>
+        case ixRun {_} {_} {_} m initS of
+          pat midA, midJ => MkPair {_} {_} midA midJ ==>
+            ixRun {_} {_} {_} (f midA) midJ
+
+ixGet : {i : Type} -> IxState i i i
+pat i =>
+  ixGet {i} = MkIxState {_} {_} {_} \si =>
+              MkPair {_} {_} si si
+
+ixPut : {i,j : Type} -> j -> IxState i j Unit
+pat i, j, so =>
+  ixPut {i} {j} so = MkIxState {_} {_} {_} \si =>
+                     MkPair {_} {_} MkUnit so
+
+{-
+data Rom : ReadState -> Type where
+  MkRom : (rs : ReadState) -> Rom rs
+
+ixStartSingle :
+  (mem : Mem) -> (addr : ARAddr) ->
+  IxState (Rom (Idle mem))
+          (Rom (Last mem addr)) ReadOutputs
+
+ixStartBurst :
+  (mem : Mem) -> (addr : ARAddr) -> (len : ARLen) ->
+  IxState (Rom (Idle mem))
+          (Rom (Bursting mem addr len)) ReadOutputs
+
+ixShowMid :
+  (mem : Mem) -> (addr : ARAddr) -> (len : ARLen) ->
+  IxState (Rom (Bursting mem addr (S len)))
+          (Rom (Bursting mem (S addr) len)) ReadOutputs
+
+ixStayMid :
+  (mem : Mem) -> (addr : ARAddr) -> (len : ARLen) ->
+  IxState (Rom (Bursting mem addr len))
+          (Rom (Bursting mem addr len)) ReadOutputs
+
+ixShowLast :
+  (mem : Mem) -> (addr : ARAddr) ->
+  IxState (Rom (Bursting mem addr 0))
+          (Rom (Last mem (S addr))) ReadOutputs
+
+ixStayLast :
+  (mem : Mem) -> (addr : ARAddr) ->
+  IxState (Rom (Last mem addr)) (Rom (Last mem addr)) ReadOutputs
+
+            -}

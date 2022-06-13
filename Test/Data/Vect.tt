@@ -1,4 +1,5 @@
 import Data.Nat
+import Proofs
 
 simple Vect : Nat -> Type -> Type where
      VNil : {a : Type} -> Vect Z a
