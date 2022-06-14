@@ -259,10 +259,10 @@ pat c, cin, xn, xb, yn, yb =>
     = [| let cinEsc = ~cin in
          case (addBit {_} {_} {_} cinEsc xb yb) of
            pat a, b, cin', lsb, prf
-           => (MkBitPair {a} {b} {c} {xn} {yn} {prf} cin' lsb) ==>
+           => (MkBitPair {a} {b} {_} {prf} cin' lsb) ==>
              case (addBit {_} {_} {_} cin' xb yb) of
                pat a', b', cout, msb, prf'
-                 => (MkBitPair {a'} {b'} {_} {xn} {yn} {prf'} cout msb) ==>
+                 => (MkBitPair {a'} {b'} {_} {prf'} cout msb) ==>
                    let ans = SCons {_} {_} {_} (SMsb {_} msb) lsb
                    in eqInd2 {_} {_} {_} {prfAdderN c xn yn b a b' a' cinEsc lsb cin' msb cout prf prf'} {\h => Signed 2 h} ans
       |]
@@ -271,7 +271,7 @@ pat w, c, cin, xsn, xsb : Signed (S w) xsn, xn, xb, ysn, ysb : Signed (S w) ysn,
   addSubS (S w) {_} {_} {c} [| SCons {w} {xn} {xsn} xsb xb |] [| SCons {w} {yn} {ysn} ysb yb |] cin
     = [| case (addBit {c} {xn} {yn} ~cin xb yb) of
            pat a, b, cin', lsb, prf
-           => (MkBitPair {a} {b} {c} {xn} {yn} {prf} cin' lsb) ==>
+           => (MkBitPair {a} {b} {_} {prf} cin' lsb) ==>
               let rec = ~(addSubS _ {_} {_} {_} [| xsb |] [| ysb |] [| cin' |])
                   ans = SCons {S w} {_} {_} rec lsb
               in eqInd2 {_} {_} {_} {prfAdderNRec c xn yn a b xsn ysn prf} {\h => Signed (S (S (S w))) h} ans

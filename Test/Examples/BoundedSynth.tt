@@ -231,9 +231,8 @@ pat j, n, w, ws, x, xs =>
   dotProd (S j) n (VCons' {_} {_} w ws) [|VCons {_} {_} x xs|]
     = [| let y = ~(addB _ _ (mulConstB _ w [|x|])
                             (dotProd _ _ ws [|xs|]))
-         --in eqInd2 {_} {_} {_} {lemmaDotProd n w (sum j ws)}
-         --     {\h => Bounded' h} y
-         in y
+         in eqInd2 {_} {_} {_} {lemmaDotProd n w (sum j ws)}
+              {\h => Bounded' h} y
       |]
 
 -- Little synthesisable example of using dotProd

@@ -134,10 +134,8 @@ pat w, xn, xsn, yn, ysn, c : Nat,
   addU (S w) {_} {_} {c} [| UCons {w} {xsn} {xn} xbs xb |]
                              [| UCons {w} {ysn} {yn} ybs yb |] cin
     = [| case (addBit {_} {_} {_} ~cin xb yb) of
-
-           pat a, b : Nat, cin' : Bit a, lsb : Bit b,
-               prf : Equal Nat (plus b (double a)) (plus c (plus xn yn))
-           => (MkBitPair {a} {b} {c} {xn} {yn} {prf} cin' lsb) ==>
+           pat a, b, cin', lsb, prf
+           => (MkBitPair {a} {b} {_} {prf} cin' lsb) ==>
 
                 let rec = ~(addU _ {_} {_} {_} [|xbs|] [|ybs|] [|cin'|])
                     ans = UCons {_} {_} {_} rec lsb

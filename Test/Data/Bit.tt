@@ -5,13 +5,10 @@ simple Bit : Nat -> Type where
   O : Bit 0
   I : Bit 1
 
-simple BitPair : Nat -> Nat -> Nat -> Type where
-  MkBitPair : {a,b,c,x,y : Nat} ->
-              {prf : Equal Nat
-                           (plus b (double a))
-                           (plus c (plus x y))
-              } ->
-              Bit a -> Bit b -> BitPair c x y
+simple BitPair : Nat -> Type where
+  MkBitPair : {a,b,c : Nat} ->
+              {prf : Equal Nat (plus b (double a)) c} ->
+              Bit a -> Bit b -> BitPair c
 
 -- AND gates
 
@@ -90,12 +87,12 @@ notGate {_} O = I
 notGate {_} I = O
 
 -- Full adder
-addBit : {c,x,y : Nat} -> Bit c -> Bit x -> Bit y -> BitPair c x y
-addBit {_} {_} {_} O O O = MkBitPair {0} {0} {0} {0} {0} {Refl {Nat} {0}} O O
-addBit {_} {_} {_} O O I = MkBitPair {0} {1} {0} {0} {1} {Refl {Nat} {1}} O I
-addBit {_} {_} {_} O I O = MkBitPair {0} {1} {0} {1} {0} {Refl {Nat} {1}} O I
-addBit {_} {_} {_} O I I = MkBitPair {1} {0} {0} {1} {1} {Refl {Nat} {2}} I O
-addBit {_} {_} {_} I O O = MkBitPair {0} {1} {1} {0} {0} {Refl {Nat} {1}} O I
-addBit {_} {_} {_} I O I = MkBitPair {1} {0} {1} {0} {1} {Refl {Nat} {2}} I O
-addBit {_} {_} {_} I I O = MkBitPair {1} {0} {1} {1} {0} {Refl {Nat} {2}} I O
-addBit {_} {_} {_} I I I = MkBitPair {1} {1} {1} {1} {1} {Refl {Nat} {3}} I I
+addBit : {c,x,y : Nat} -> Bit c -> Bit x -> Bit y -> BitPair (plus c (plus x y))
+addBit {_} {_} {_} O O O = MkBitPair {0} {0} {0} {Refl {Nat} {0}} O O
+addBit {_} {_} {_} O O I = MkBitPair {0} {1} {1} {Refl {Nat} {1}} O I
+addBit {_} {_} {_} O I O = MkBitPair {0} {1} {1} {Refl {Nat} {1}} O I
+addBit {_} {_} {_} O I I = MkBitPair {1} {0} {2} {Refl {Nat} {2}} I O
+addBit {_} {_} {_} I O O = MkBitPair {0} {1} {1} {Refl {Nat} {1}} O I
+addBit {_} {_} {_} I O I = MkBitPair {1} {0} {2} {Refl {Nat} {2}} I O
+addBit {_} {_} {_} I I O = MkBitPair {1} {0} {2} {Refl {Nat} {2}} I O
+addBit {_} {_} {_} I I I = MkBitPair {1} {1} {3} {Refl {Nat} {3}} I I
