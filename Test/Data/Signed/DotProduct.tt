@@ -1,0 +1,33 @@
+import Data.Signed
+import Data.Signed.ConstantMul
+import Data.HWords
+
+-- Description of wordlength along our dot product's adder chain
+dotProdBits : (j : Nat) -> (ws : Vect j Nat) -> (cs : Vect j ZZ) -> Nat
+pat j, ws, cs =>
+  dotProdBits j ws cs
+    = foldr j {_} {_} (\w : Nat => \acc : Nat => S (max w acc)) 0
+        (zipWith j {_} {_} {_} mulConstBitsS cs ws)
+
+-- A verified dot product with heterogeneous wordlengths
+dotProd : (j : Nat) -> (ws : Vect j Nat) -> {vals : Vect j ZZ} -> (cs : Vect j ZZ) ->
+          < HWords j ws vals > ->
+          < Signed (dotProdBits j ws cs)
+                   (sumZ j (zipWith j {ZZ} {ZZ} {ZZ} multZ cs vals)) >
+dotProd Z [] {[]} [] [|HNil|] = [|SNil|] 
+pat j, w, ws, val, vals, c, cs, x, xs =>
+  dotProd (S j) (VCons {_} {j} w ws) {VCons {_} {j} val vals}
+                (VCons {_} {j} c cs)
+                [|HCons {j} {_} {_} {_} {_} x xs|]
+    = addS' _ _ {_} {_} (mulConstS _ c {_} [|x|])
+                        [|~(dotProd _ _ {_} cs [|xs|])|]
+
+{- Little synthesisable example.
+   Note that we don't need to know `vals` ahead of time to make this synthesisable!
+
+mydotprod : {vals : Vect 2 ZZ} ->
+            < HWords 2 [4,5] vals ->
+              Signed 8 (sumZ 2 (zipWith 2 {_} {_} {_} multZ [Pos 4, NegS 0] vals)) >
+pat vals =>
+  mydotprod {vals} = [| \xs => ~(dotProd 2 [4,5] {vals} [Pos 4, NegS 0] [|xs|]) |]
+-}

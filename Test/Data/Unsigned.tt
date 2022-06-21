@@ -82,13 +82,11 @@ prfAddU : (c, xb, yb, a, b, xsb, ysb : Nat) ->
            (plus b (double (plus a (plus xsb ysb))))
            (plus c (plus (plus xb (double xsb)) (plus yb (double ysb))))
           )
-pat c, xb, yb, a, b, xsb, ysb,
-    prf : (Equal Nat (plus b (double a))
-                     (plus c (plus xb yb))) =>
+pat c, xb, yb, a, b, xsb, ysb, prf =>
   prfAddU c xb yb a b xsb ysb prf
     = let h0 = Refl {_} {plus b (double (plus a (plus xsb ysb)))}
           h1 = eqInd2 {_} {_} {_}
-                      {doubleAssociative a (plus xsb ysb)}
+                      {plusPairsCommutative a (plus xsb ysb) a (plus xsb ysb)}
                       {\n : Nat => Equal Nat (plus b (double (plus a (plus xsb ysb))))
                                              (plus b n)
                       } h0
@@ -103,7 +101,7 @@ pat c, xb, yb, a, b, xsb, ysb,
                                              (plus n (double (plus xsb ysb)))
                       } h2
           h4 = eqInd2 {_} {_} {_}
-                      {doubleAssociative xsb ysb}
+                      {plusPairsCommutative xsb ysb xsb ysb}
                       {\n : Nat => Equal Nat (plus b (double (plus a (plus xsb ysb))))
                                              (plus (plus c (plus xb yb)) n)
                       } h3
@@ -113,7 +111,7 @@ pat c, xb, yb, a, b, xsb, ysb,
                                              (n)
                       } h4
           h6 = eqInd2 {_} {_} {_}
-                      {plusPlusAssociative xb yb (double xsb) (double ysb)}
+                      {plusPairsCommutative xb yb (double xsb) (double ysb)}
                       {\n : Nat => Equal Nat (plus b (double (plus a (plus xsb ysb))))
                                              (plus c n)
                       } h5
@@ -124,19 +122,16 @@ addU : (w : Nat) -> {x,y,c : Nat} ->
            < Unsigned w x > -> < Unsigned w y > -> < Bit c > ->
            < Unsigned (S w) (plus c (plus x y)) >
 
-pat c : Nat, cin : <Bit c>, xs : <Unsigned 0 0>, ys : <Unsigned 0 0> =>
+pat c, cin =>
   addU 0 {0} {0} {c} [|UNil|] [|UNil|] cin
     = [| UCons {_} {0} {c} UNil ~cin |]
 
-pat w, xn, xsn, yn, ysn, c : Nat,
-    cin : <Bit c>, xb : Bit xn, yb : Bit yn,
-    xbs : Unsigned w xsn, ybs : Unsigned w ysn =>
+pat w, c, xsn, xn, xbs, xb, ysn, yn, ybs, yb, cin =>
   addU (S w) {_} {_} {c} [| UCons {w} {xsn} {xn} xbs xb |]
-                             [| UCons {w} {ysn} {yn} ybs yb |] cin
+                         [| UCons {w} {ysn} {yn} ybs yb |] cin
     = [| case (addBit {_} {_} {_} ~cin xb yb) of
-           pat a, b, cin', lsb, prf
+           pat a, b, prf, cin', lsb
            => (MkBitPair {a} {b} {_} {prf} cin' lsb) ==>
-
                 let rec = ~(addU _ {_} {_} {_} [|xbs|] [|ybs|] [|cin'|])
                     ans = UCons {_} {_} {_} rec lsb
                 in eqInd2 {_} {_} {_}

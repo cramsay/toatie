@@ -3,7 +3,6 @@ import Data.ZZ
 import Data.Bit
 import Proofs
 
-
 notIsNegPlus1 : (b : Nat) -> Bit b ->
                 Equal ZZ (Pos (not b)) (plusZ (negateZ (Pos b)) (Pos 1))
 notIsNegPlus1 Z O = Refl {_} {_}

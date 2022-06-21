@@ -136,10 +136,10 @@ pat a, b =>
                                   {\n => Equal Nat (double (plus a b)) n} h4
       in h5
 
-plusPlusAssociative : (a,b,c,d : Nat) -> Equal Nat (plus (plus a b) (plus c d))
+plusPairsCommutative : (a,b,c,d : Nat) -> Equal Nat (plus (plus a b) (plus c d))
                                                    (plus (plus a c) (plus b d))
 pat a,b,c,d =>
-  plusPlusAssociative a b c d
+  plusPairsCommutative a b c d
     = let h1 = Refl {Nat} {plus (plus a b) (plus c d)}
           h2 = eqInd2 {_} {_} {_} {eqSym {_} {_} {_} (plusAssociative a b (plus c d))}
                                   {\n => Equal Nat (plus (plus a b) (plus c d)) n} h1

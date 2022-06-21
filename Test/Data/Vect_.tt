@@ -56,10 +56,19 @@ foldl : (n : Nat) -> {acc : Type} -> {elem : Type} ->
         Vect n elem -> acc
 pat acc, elem, f, init =>
   foldl Z {acc} {elem} f init (VNil {elem}) =  init
-pat n, acc, elem, f, init, xs =>
-  foldl (S n) {acc} {elem} f init xs =
-    let init = f init (head {elem} {n} xs)
-    in foldl n {acc} {elem} f init (tail {elem} {n} xs)
+pat n, acc, elem, f, init, x, xs =>
+  foldl (S n) {acc} {elem} f init (VCons {_} {_} x xs) =
+    foldl n {acc} {elem} f (f init x) xs
+
+foldr : (n : Nat) -> {acc : Type} -> {elem : Type} ->
+        (f : elem -> acc -> acc) ->
+        (init : acc) ->
+        Vect n elem -> acc
+pat acc, elem, f, init =>
+  foldr Z {acc} {elem} f init (VNil {elem}) =  init
+pat n, acc, elem, f, init, x, xs =>
+  foldr (S n) {acc} {elem} f init (VCons {_} {_} x xs) =
+    f x (foldr n {acc} {elem} f init xs)
 
 zipWith : (n : Nat) -> {a, b, c : Type} ->
           (f : a -> b -> c) ->
@@ -110,10 +119,15 @@ pat n, a, x, x2, xs, y, y2, ys =>
 
 -- Specialsed arithmetic functions for ZZ (used in FFT example)
 
+sum : (n : Nat) -> Vect n Nat -> Nat
+sum Z (VNil {Nat}) = 0
+pat x =>
+  sum 1 [x] = x
+pat n, x, xs =>
+  sum (S n) (VCons {_} {_} x xs) = plus x (sum n xs)
+
 sumZ : (n : Nat) -> Vect n ZZ -> ZZ
 sumZ Z (VNil {ZZ}) = Pos 0
-pat x =>
-  sumZ 1 [x] = x
 pat n, x, xs =>
   sumZ (S n) (VCons {_} {_} x xs) = plusZ x (sumZ n xs)
 
@@ -420,20 +434,18 @@ multDistributesOverSumZ : (n : Nat) -> (c : ZZ) -> (xs : Vect n ZZ) ->
                           Equal ZZ (multZ c (sumZ n xs)) (sumZ n (map n {_} {_} (multZ c) xs))
 pat c =>
   multDistributesOverSumZ Z c [] = multZeroRightZeroZ c
-pat c, x =>
-  multDistributesOverSumZ 1 c [x] = Refl {_} {_}
 pat n, c, x, xs =>
-  multDistributesOverSumZ (S (S n)) c (VCons {_} {_} x xs)
-    = let h1 = Refl {_} {plusZ (multZ c x) (sumZ (S n) (map (S n) {ZZ} {ZZ} (multZ c) xs))}
-          h2 = eqInd2 {_} {_} {_} {eqSym {_} {_} {_} (multDistributesOverSumZ (S n) c xs)}
+  multDistributesOverSumZ (S n) c (VCons {_} {_} x xs)
+    = let h1 = Refl {_} {plusZ (multZ c x) (sumZ n (map n {ZZ} {ZZ} (multZ c) xs))}
+          h2 = eqInd2 {_} {_} {_} {eqSym {_} {_} {_} (multDistributesOverSumZ n c xs)}
                  {\h => Equal ZZ
                           (plusZ (multZ c x) h)
-                          (plusZ (multZ c x) (sumZ (S n) (map (S n) {ZZ} {ZZ} (multZ c) xs)))}
+                          (plusZ (multZ c x) (sumZ n (map n {ZZ} {ZZ} (multZ c) xs)))}
                  h1
-          h3 = eqInd2 {_} {_} {_} {eqSym {_} {_} {_} (multDistributesOverPlusRightZ c x (sumZ (S n) xs))}
+          h3 = eqInd2 {_} {_} {_} {eqSym {_} {_} {_} (multDistributesOverPlusRightZ c x (sumZ n xs))}
                  {\h => Equal ZZ
                           h
-                          (plusZ (multZ c x) (sumZ (S n) (map (S n) {ZZ} {ZZ} (multZ c) xs)))}
+                          (plusZ (multZ c x) (sumZ n (map n {ZZ} {ZZ} (multZ c) xs)))}
                  h2
       in h3
 
@@ -632,12 +644,23 @@ pat n, a, os, xs, prf =>
           h3 = eqForAllIndices n {a} os (odds n {a} xs) h2
       in h3
 
+{-
+(plusZ (plusZ a[1] (Pos 0)) (plusZ b[0] (Pos 0)))
+==
+(plusZ a[1]                 (plusZ b[0] (Pos 0)))
+
+-}
+
 eqSumEvenOdds : (n : Nat) -> (xs : Vect (double' n) ZZ) ->
                 Equal ZZ (plusZ (sumZ n (evens n {ZZ} xs)) (sumZ n (odds n {ZZ} xs)))
                          (sumZ (double' n) xs)
 eqSumEvenOdds Z [] = Refl {_} {_}
 pat a, b =>
-  eqSumEvenOdds 1 [a,b] = Refl {_} {_}
+  eqSumEvenOdds 1 [a,b]
+    = eqInd2 {_} {_} {_} {plusZeroRightNeutralZ a}
+        {\h => Equal ZZ (plusZ (plusZ a (Pos 0)) (plusZ b (Pos 0)))
+                        (plusZ h (plusZ b (Pos 0)))}
+        (Refl {_} {_})
 pat n, a, b, c, d, rest =>
   eqSumEvenOdds (S (S n)) (VCons {_} {_} a (VCons {_} {_} b (VCons {_} {_} c (VCons {_} {_} d rest))))
     = let h1 = eqCong {_} {_} {\x => plusZ a (plusZ b x)} {_} {_}
