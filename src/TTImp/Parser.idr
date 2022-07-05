@@ -61,6 +61,7 @@ atom fname
          pure (IVar x)
   <|> natLit fname
 
+
 getRight : Either a b -> Maybe b
 getRight (Left _) = Nothing
 getRight (Right v) = Just v
@@ -71,6 +72,7 @@ bindSymbol
          pure Explicit
 
 mutual
+
   listLit : FileName -> IndentInfo -> Rule RawImp
   listLit fname indents
       = do symbol "`["
@@ -104,8 +106,7 @@ mutual
 
   appExpr : FileName -> IndentInfo -> Rule RawImp
   appExpr fname indents
-      = case_ fname indents
-    <|> do f <- simpleExpr fname indents
+      = do f <- simpleExpr fname indents
            args <- many (argExpr fname indents)
            pure (apply f args)
 
@@ -132,8 +133,9 @@ mutual
     <|> eval_quote   fname indents
     <|> escape_quote fname indents
     <|> binder       fname indents
-    <|> listLit      fname indents
-    <|> vecLit       fname indents
+    <|> case_        fname indents
+    <|> listLit fname init
+    <|> vecLit  fname init
     <|> do symbol "("
            e <- expr fname indents
            symbol ")"
