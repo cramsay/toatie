@@ -265,7 +265,7 @@ mutual
             vars <- block (letVar fname)
             continue indents
             keyword "in"
-            scope <- typeExpr fname indents
+            scope <- expr fname indents
             end <- location
             pure (bindAll vars scope)
     where

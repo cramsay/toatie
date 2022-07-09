@@ -29,8 +29,9 @@
           buildPhase = ''
             make bin
           '';
-	  checkPhase = ''
-	    export PATH=$PWD/build/exec:$PATH
+          checkPhase = ''
+            export PATH=$PWD/build/exec:$PATH
+            export TOATIE_PATH=$PWD/libs
             make check
           '';
           installPhase = ''
@@ -46,6 +47,7 @@
         devShell = pkgs.mkShell {
           shellHook = ''
             export PATH=$PWD/build/exec:$PATH
+            export TOATIE_PATH=$PWD/libs
             alias devEmacs="${idris.packages.${system}.idris-emacs}/bin/emacs --eval \"(require 'idris2-mode)\" &"
             alias devTest="(cd $PWD; make check)"
             alias devBuild="(cd $PWD; make bin)"

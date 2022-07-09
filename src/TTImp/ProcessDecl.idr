@@ -39,15 +39,20 @@ checkUndefineds
                           )
 
 export
-defaultModulePaths : FileName -> List ModName
-defaultModulePaths fname
+defaultModulePaths : FileName -> Maybe String -> List ModName
+defaultModulePaths fname env
  = nub [ ""               -- Current dir
        , getBaseDir fname -- Dir of our source file
-       ] -- ^ Should eventually include a builtin lib dir too
+       ] ++ splitEnv (fromMaybe "" env)
+ where
+   splitEnv : String -> List String
+   splitEnv ""  = []
+   splitEnv env = let (dir, rest) = break (==':') env
+                  in dir :: splitEnv rest
 
 getImportFName : ModName -> DirName -> FileName
 getImportFName mname dir
-  = dir ++ mhead
+  = dir ++ "/" ++ mhead
   where replace : Char -> Char -> String -> String
         replace old new = pack . map (\c=>if c==old then new else c) . unpack
         mhead : String

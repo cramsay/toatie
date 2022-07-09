@@ -15,7 +15,12 @@ check: $(bin)
 
 install: $(bin)
 	mkdir -p $(out)/bin
-	cp -r build/exec/* $(out)/bin
+	mkdir -p $(out)/exec
+	cp -r build/exec/* $(out)/exec
+	cp -r libs $(out)/
+	echo '#! /bin/bash' > $(out)/bin/toatie
+	echo 'TOATIE_PATH=$(out)/libs $(out)/exec/toatie $$@' >> $(out)/bin/toatie
+	chmod +x $(out)/bin/toatie
 
 clean:
 	rm -r build

@@ -165,7 +165,10 @@ runMain fopts fname decls
          u <- newRef UST initUState
          s <- newRef Stg (the Stage 0)
          m <- newRef Mods []
-         let dirs = defaultModulePaths fname
+
+         envLibs <- coreLift $ getEnv "TOATIE_PATH"
+         let dirs = defaultModulePaths fname envLibs
+         coreLift $ putStrLn $ "dirs are " ++ show dirs
          traverse_ (processDecl dirs) decls
          checkUndefineds
 
