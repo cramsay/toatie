@@ -1,11 +1,11 @@
 # Toatie
 
-> A spicy Hardware Description Language with dependent types
+> A spicy hardware description language with dependent types
 
 We poke, bend, and otherwise abuse Tiny Idris --- introduced by [Edwin
 Brady](https://github.com/edwinb) at [SPLV20](https://github.com/edwinb/SPLV20).
 Our main additions to support hardware description include erasure/irrelevance of
-non synthesisable terms, staging for circuit generators, deriving bit
+non-synthesisable terms, staging for circuit generators, deriving bit
 representations, and the synthesis itself.
 
 This is a toy language, and a work in progress toy at that 🤷
