@@ -23,7 +23,8 @@ me@computer:~/toatie $ nix build .
 ```
 
 This builds the `toatie` executable found in `result/bin/` and runs all of our
-tests. Example source files can be found in the `Test` directory.
+tests. Example source files can be found in the `libs/Examples` and `Test`
+directories.
 
 ### Development
 
@@ -101,7 +102,11 @@ We'll work towards:
   - [X] Generating netlists from this ANF.
   - [ ] Encoding _synchronous_ logic
 
-##
+## License
+
+Released under a BSD-3 [license](./LICENSE), derived from [Tiny
+Idris](https://github.com/edwinb/SPLV20) and [Idris
+2](https://github.com/idris-lang/Idris2).
 
 <pre>
 "Y888888888888888888888888888888888888888888888888888888888Y"
