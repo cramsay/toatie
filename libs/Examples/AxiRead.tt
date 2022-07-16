@@ -1,3 +1,13 @@
+-- _Simulation_ of the read-channel of an AXI slave
+--
+-- This is not a synthesisable design, but rather a speculative example used in
+-- the corresponding thesis. Toatie doesn't support synchronous logic (yet!) so
+-- we're just encoding each state transition as its own function. We start with
+-- a simple state monad representation of our FSM and then work towards an
+-- indexed state moand for better type safety. The state types used with the
+-- indexed state monad appear under Pi-binders, so they currently cannot by
+-- `simple`/synthesisable types.
+
 import Data.Nat
 import Data.Bool
 import Data.List

@@ -1,6 +1,0 @@
--- An incomplete translation of our Idris code for FIR filters
---
-
-import Data.Nat
-import Data.List
-

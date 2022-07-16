@@ -1,3 +1,8 @@
+-- An example of mutual recursion.
+--
+-- We, by happy accident, allow mutual recursion between top-level functions.
+-- Just ensure that the type definitions of both are given up front.
+
 import Data.Bool
 import Data.Nat
 

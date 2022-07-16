@@ -1,3 +1,8 @@
+-- A miscellany of meaningless functions used during prototyping of the netlist generator.
+--
+-- There's nothing to be gained from reading this.
+-- ... no, really. Don't bother.
+
 import Data.Vect
 
 simple Bit : Type where
@@ -28,7 +33,6 @@ pat k, xs =>
                         pat b, bs
                         => VCons {_} {_} b bs ==> plus 1 k
 
-
 maybeNot : Vect 2 Bit -> Bit
 pat b =>
   maybeNot [O, b] = b
@@ -46,23 +50,4 @@ pat b, n => cGate I (S n) b = xor O b
 mycirc : Bit ->  Bit
 mycirc = \a => cGate O 1 a
 
-{- TODO
-
-Why does this compile?
-It's not covering.
-
-maybeNot : Vect 2 Bit -> Bit
-pat b =>
-  maybeNot [O, b] = b
-pat b =>
-  maybeNot [O, b] = xor I b
-
-Seems even if we write it in full, the case tree doesn't infer that the type of the scrutinee is Bit. Why's that?
-
-maybeNot : Vect 2 Bit -> Bit
-pat b =>
-  maybeNot (VCons {Bit} {1} O (VCons {Bit} {0} b (VNil {Bit}))) = b
-pat b =>
-  maybeNot (VCons {Bit} {1} O (VCons {Bit} {0} b (VNil {Bit}))) = xor I b
-
--}
+-- I told you so!

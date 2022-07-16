@@ -1,3 +1,11 @@
+-- A set of synthesisable examples for binary words indexed by their upper
+-- bound (not just their wordlength).
+--
+-- This makes it very easy to reason about the absolute minimum wordlengths
+-- needed to represent a given structure. We'll see that especially clearly in
+-- the constant multiplication and dot product examples. Used as an example in
+-- the corresponding thesis.
+
 import Data.Nat
 import Data.Nat.Half
 import Data.Fin

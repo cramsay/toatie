@@ -1,3 +1,11 @@
+-- An synthesisable Cooley-Tukey radix-2 DIT DFT.
+--
+-- We implement this quite readily, even leaving the power-of-two length, the
+-- exact twiddle factor implementation, and the input wordlengths completely
+-- generalised. We also provide a proof that the arithmetic performed by this
+-- structure is equivalent to the straightforward DFT equation, although this is
+-- much less concise!
+
 import Data.Nat
 import Data.Fin
 import Data.Signed

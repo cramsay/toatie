@@ -1,12 +1,11 @@
-{-
-
-I want to find a good example of why it might be a good to support recursive (or
-at least fancier types) in hardware. Might be interesting to think about how
-state machines could be encoded once we have memory. Nice presentation to work
-though @
-https://www.lambdadays.org/static/upload/media/1519637389130819oskarwickstromfinitestatemachines_.pdf
-
--}
+-- Our first speculative exploration off speculative exploration of (currently
+-- non-synthesisable) FSM encodings
+--
+-- We really have this as an early test to see
+--if toatie was power enough to encode things like state monads and indexed
+--state monads. We end up with an implementation of a rather prescriptive salad
+--construction protocol.
+--https://www.lambdadays.org/static/upload/media/1519637389130819oskarwickstromfinitestatemachines_.pdf
 
 import Data.Nat
 import Data.List

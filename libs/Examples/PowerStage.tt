@@ -1,8 +1,10 @@
 -- An example of our staging constucts with specialised power functions.
---
--- We work up to two versions of a power function where all of the unrolling is
--- performed at "compile"-time, but leaving the application with the base until
--- run-time.
+
+-- A power function where all of the unrolling is performed at "compile" time,
+-- but leaving the application with the base until run-time. In terms of
+-- hardware description, we'll use this to force evaluation of certain things
+-- during the elaboration of our circuit, and defer certain things until the
+-- circuit's run-time.
 
 import Data.Nat
 
