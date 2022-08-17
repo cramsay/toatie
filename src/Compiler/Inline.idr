@@ -770,16 +770,7 @@ typeOfPrj : {auto c : Ref Ctxt Defs} -> List (Term []) -> Name -> Nat -> Term []
 typeOfPrj tys conn field Erased = pure Erased -- TODO Remove
 typeOfPrj tys conn field ty
   = do u <- newRef UST initUState
-       opts <- dataConsForType [] ty
-       let Just conTy = lookup conn opts
-             | Nothing => throw $ InternalError $ "Couldn't find valid constructor (" ++
-                            show conn ++ ") for projection of type " ++ show ty
-       pure $ pickField field conTy
-  where pickField : Nat -> Term [] -> Term []
-        pickField Z     (Bind _ (Pi _ Explicit ty) sc) = ty
-        pickField (S n) (Bind _ (Pi _ Explicit ty) sc) = pickField n (subst Erased sc)
-        pickField n     (Bind _ (Pi _ Implicit ty) sc) = pickField n (subst Erased sc)
-        pickField _ _ = Erased
+       getFieldType [] ty conn field
 
 mutual
   annotateTyTm : {vars : _} -> {auto c : Ref Ctxt Defs} ->
@@ -808,12 +799,14 @@ mutual
     eraseMismatch a b
       = let (fn , args ) = getFnInfoArgs a
             (fn', args') = getFnInfoArgs b
-            matchedArgs = map (\(x,y) => if x==y then x else (fst x, Erased)) $ zip args args'
-        in apply fn matchedArgs
+            matchedArgs = map (\(x,y) => if x==y then x else (fst x, eraseMismatch (snd x) (snd y))) $ zip args args'
+        in if (fn==fn')
+              then apply fn matchedArgs
+              else Erased
   annotateTyTm tys (CLet x (CPrj con field (CLocal {idx} p)) ty sc)
     = do innerty <- typeOfLocal tys idx
          ty' <- typeOfPrj tys con field innerty
-         log "compiler.inline.annotateTyTm" 10 $ "Got prj type of " ++ show ty'
+         log "compiler.inline.annotateTyTm" 10 $ "Got prj type of " ++ show ty' ++ " from " ++ show innerty
          sc' <- annotateTyTm (ty'::tys) sc
          pure $ CLet x (CPrj con field (CLocal {idx} p)) ty' sc'
   annotateTyTm tys tm@(CLet x val ty sc)

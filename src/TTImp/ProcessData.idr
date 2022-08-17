@@ -87,7 +87,9 @@ typeForDataCon n argTys
   unifyArgTys env (Bind _ b sc) (aty::atys)
     = do res <- unify InTerm env (binderType b) (rewrite sym (appendNilRightNeutral vars)
                                                   in weakenNs vars aty)
-         unifyArgTys env (subst Erased sc) atys
+         nmeta <- genName "_dconarg"
+         meta <- newMeta env nmeta (rewrite sym (appendNilRightNeutral vars) in weakenNs vars aty) Hole
+         unifyArgTys env (subst meta sc) atys
   unifyArgTys _ fty args = throw $ InternalError $ "Mismatched number of args for constructor unification: "
                                      ++ show fty ++ " and " ++ show args
 
@@ -102,10 +104,7 @@ typeForDataCon n argTys
   substSolvedMetaArgs ty
     = do let (tycon, retArgs) = getFnInfoArgs ty
          retArgs' <- traverse (\(i,a)=>pure (i, !(substSolvedMetaArgs a))) $ filter ((==AExplicit) . fst) retArgs
-         -- Simplify any applications with an erased arg
-         if (any (\(_,a)=>a==Erased) retArgs')
-            then pure Erased
-            else pure $ apply tycon retArgs'
+         pure $ apply tycon retArgs'
 
 -- Get a list of the data constructors which could have produced a given type,
 -- along with their specialised constructor types after unification with our
@@ -118,7 +117,7 @@ dataConsForType : {auto c : Ref Ctxt Defs} ->
 dataConsForType env (Bind x b sc) = dataConsForType (b :: env) sc
 dataConsForType env ty
   = do let Just ntcon = getTyConName ty
-           | Nothing => throw $ GenericMsg $ "Couldn't determine the type constructor name for type: " ++ show ty
+           | Nothing => throw $ GenericMsg $ "Couldn't determine the type constructor name for type: " ++ show ty ++ " with " ++ show env
        defs <- get Ctxt
        Just (MkGlobalDef _ (TCon _ _ _ dcons) _) <- lookupDef ntcon defs
          | _ => throw $ InternalError $ "Type constructor name wasn't found in context: " ++ show ntcon

@@ -105,19 +105,21 @@ typeToSType ty = do wTag <- tyTagWidth [] ty
 
 tagForCons : {auto c : Ref Ctxt Defs} ->
              {auto u : Ref UST UState} ->
-             Term [] -> Name -> Core STag
+             Term [] -> Name -> Core (Maybe STag)
 tagForCons ty n
   = do opts <- dataConsForType [] ty
-       ntag <- findTag n Z opts
+       Just ntag <- findTag n Z opts
+         | Nothing => pure Nothing
        wtag <- tyTagWidth [] ty
-       pure $ Tag wtag ntag
+       pure $ Just $ Tag wtag ntag
   where
-  findTag : Name -> Nat -> List (Name, Term[]) -> Core Nat
+  findTag : Name -> Nat -> List (Name, Term[]) -> Core (Maybe Nat)
   findTag n tag ((conn,conty)::ms)
-    = if n==conn then pure tag
+    = if n==conn then pure $ Just tag
                  else findTag n (S tag) ms
-  findTag n tag [] = throw $ InternalError $ "Constructor " ++ show n ++
-                       " isn't a valid option for the type " ++ show ty
+  findTag n tag [] = pure Nothing
+  -- ^ This should only happen if we're scrutinising a term whose type we have
+  --   managed to refine via unification when we were annotating our CExp with types.
 
 tmToName : {vars : _} ->
             {auto c : Ref Ctxt Defs} ->
@@ -125,7 +127,8 @@ tmToName : {vars : _} ->
             Term [] ->
             CExp vars -> Core SAtom
 tmToName ty (CLocal {idx} p) = pure $ Signal (nameAt idx p)
-tmToName ty (CCon n []) = do tag <- tagForCons ty n
+tmToName ty (CCon n []) = do Just tag <- tagForCons ty n
+                               | Nothing => throw $ InternalError $ "Can't find tag during tmToName for constructor " ++ show n ++ " of type " ++ show ty
                              pure $ Const tag
 tmToName ty tm = throw $ InternalError $ "Can't convert term to SAtom: " ++ show tm
 
@@ -136,7 +139,8 @@ tmToSTree : {vars : _} ->
             CExp vars -> Core STree
 tmToSTree tys ty (CLocal {idx} p) = pure $ Tree (Signal $ nameAt idx p) []
 tmToSTree tys ty (CCon n args)
-  = do tag <- tagForCons ty n
+  = do Just tag <- tagForCons ty n
+         | Nothing => throw $ InternalError $ "Can't find tag during tmToSTree for constructor " ++ show n ++ " of type " ++ show ty
        let iargs = zip [0 .. length args] args
        args' <- traverse argToSTree iargs
        pure $ Tree (Const tag) args'
@@ -159,7 +163,8 @@ netlistTm nl tys (CLet x (CLocal {idx} p) ty sc)
 netlistTm nl tys (CLet x (CCon n args) ty sc)
   = do nl' <- netlistTm nl (ty::tys) sc
        let nl' = addSignal nl' x !(typeToSType ty)
-       tag <- tagForCons ty n
+       Just tag <- tagForCons ty n
+         | Nothing => throw $ InternalError $ "Can't find tag during netlistTm CCon for constructor " ++ show n ++ " of type " ++ show ty
        args' <- traverse argToSTree (zip [0 .. length args] args)
        Z <- getConsPadding [] ty n
          | pad => do let j = (SJoin x tag (args'++[Tree (Const $ Tag pad 0) []]))
@@ -181,15 +186,18 @@ netlistTm nl tys (CLet x (CConCase (CLocal {idx} p) alts def) ty sc)
        (tagu, tagl) <- getTagPos [] scTy
        alts' <- traverse (netlistAlt scTy ty) alts
        let alts' = mapMaybe id alts'
-       def'  <- netlistDef ty def
-       let cs = SMux x tagu tagl (nameAt idx p) alts' def'
-       pure $ addAssignment nl' cs
+       case alts' of
+         [(tag,tree)] => pure $ addAssignment nl' (SJoin x (Tag 0 0) [tree])
+         alts' => do def'  <- netlistDef ty def
+                     let cs = SMux x tagu tagl (nameAt idx p) alts' def'
+                     pure $ addAssignment nl' cs
   where
 
   netlistAlt : Term [] -> Term [] -> CConAlt vars -> Core (Maybe (STag,STree))
   netlistAlt scTy ty (MkConAlt n args tm)
     = do let tys' = map (const Erased) args ++ tys
-         tag <- tagForCons scTy n
+         Just tag <- tagForCons scTy n
+           | Nothing => pure Nothing
          tree <- tmToSTree tys' ty tm
          let Just tree' = pruneSTree tree
                | Nothing => pure Nothing
