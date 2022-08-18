@@ -97,7 +97,7 @@ export
 mkPat' : AppInfo -> List (AppInfo, Pat) -> Term [] -> Term [] -> Pat
 mkPat' i args orig (Ref Bound n) = PLoc i n
 mkPat' i args orig (Ref (DataCon t a) n) = PCon i n t a args
-mkPat' i args orig (Quote ty tm) = PQuote i (mkPat' i [] orig ty) (mkPat' i [] orig tm)
+mkPat' i args orig (Quote ty tm) = PQuote i (mkPat' i [] orig ty) (mkPat' AImplicit [] orig tm)
 mkPat' i args orig (App info fn arg)
     = let parg = mkPat' (combineInfo info i) [] arg arg
       in mkPat' i ((combineInfo info i, parg) :: args) orig fn
