@@ -1,0 +1,30 @@
+import Data.Nat
+import Data.Vect
+
+simple Bit : Type where
+  O : Bit
+  I : Bit
+
+len : (n : Nat) -> < Vect n Bit > -> < Nat >
+pat bs =>
+  len Z bs = [| 0 |]
+pat n, b, bs =>
+  len (S n) [| VCons {_} {_} b bs |]
+    = [| case b of
+           O ==> plus 1 ~(len n [|bs|])
+           I ==> ~(len n [|bs|])
+      |]
+
+unlen : (n : Nat) -> < Nat > -> < Vect n Bit >
+pat n => 
+  unlen Z n = [| VNil {_} |]
+pat n, b =>
+  unlen (S n) b =
+    [| case ~b of
+         Z ==> VCons {_} {n} O ~(unlen n [| Z |])
+         pat y =>
+           (S y) ==> VCons {_} {n} I ~(unlen n [| y |])
+    |]
+
+id : < Vect 1 Bit -> Vect 1 Bit >
+id = [| \xs =>  ~(unlen 1 (len 1 [|xs|])) |]
