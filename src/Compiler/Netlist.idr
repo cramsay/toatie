@@ -143,6 +143,8 @@ tmToSTree tys ty (CCon n args)
          | Nothing => throw $ InternalError $ "Can't find tag during tmToSTree for constructor " ++ show n ++ " of type " ++ show ty
        let iargs = zip [0 .. length args] args
        args' <- traverse argToSTree iargs
+       Z <- getConsPadding [] ty n
+         | pad => pure $ Tree (Const tag) (args'++[Tree (Const $ Tag pad 0) []])
        pure $ Tree (Const tag) args'
   where
   argToSTree : (Nat, CExp vars) -> Core STree
