@@ -8,6 +8,7 @@ import public Core.TT
 
 import Data.SortedMap
 import Data.String
+import Data.List
 
 public export
 data Def : Type where
@@ -62,6 +63,20 @@ lookupDefPure n defs = SortedMap.lookup n defs
 export
 lookupDefType : Name -> Defs -> Core (Maybe (Term []))
 lookupDefType n defs = pure (map type $ SortedMap.lookup n defs)
+
+export
+lookupDefDConParent : Name -> Defs -> Core (Maybe Name)
+lookupDefDConParent n defs
+  = do let ms = map match $ Data.SortedMap.toList defs
+       let [m] = mapMaybe id ms
+           | _ => pure Nothing
+       pure $ Just m
+  where
+    match : (Name, GlobalDef) -> Maybe Name
+    match (tc, MkGlobalDef _ (TCon _ _ _ dcons) _) = if elem n dcons
+                                                       then Just tc
+                                                       else Nothing
+    match (_, _) = Nothing
 
 export
 initDefs : Core Defs

@@ -109,6 +109,15 @@ isConUnboxable x
        log "compiler.inline.isConUnboxable" 10 $ "Is unboxable! " ++ show x
        pure True
 
+isParamCon : {auto c : Ref Ctxt Defs} ->
+             Name -> Core Bool
+isParamCon n =
+  do defs <- get Ctxt
+     Just tn <- lookupDefDConParent n defs
+       | _ => throw $ InternalError $ "Couldn't find the parent type constructor for data constructor: " ++ show n
+     Just (MkGlobalDef ty (TCon i _ _ _) _) <- lookupDef tn defs
+       | _ => throw $ InternalError $ "Was not passed a type constructor for isParamTy: " ++ show tn
+     pure $ i == TyConParam
 
 mutual
   used : {free : _} ->
@@ -191,6 +200,17 @@ parameters (mode : EvalMode)
           _  => eval env stk (weakenNs xs v)
     evalLocal {vars=x::xs} stk (v::env) (Later y)
       = evalLocal stk env y
+
+    isParam : {vars, free : _} ->
+              {auto c : Ref Ctxt Defs} ->
+              {auto p : Ref InlineFuel Nat} ->
+              {auto l : Ref LVar Int} ->
+              EEnv free vars ->
+              CExp (vars ++ free) ->
+              Core Bool
+    isParam env (CCon cn args) = isParamCon cn
+    isParam env (CLocal idx) = isParam env (weakenNs vars $ !(evalLocal [] env idx))
+    isParam env _ = pure False
 
     tryApply : {vars, free : _} ->
                {auto c : Ref Ctxt Defs} ->
@@ -311,13 +331,33 @@ parameters (mode : EvalMode)
            Nothing <- pickAlt env' stk scr' alts def
              | Just val => do pure val
            def' <- traverseOpt (eval env' stk) def
-           -- TODO Just before returning, we could apply all the case transformations (see CaseOpt.idr in Idris2)
            alts' <- traverse (evalAlt env' stk) alts
-           let sc' = CConCase scr' alts' def'
-           pure sc'
-           --xn <- genName "cr"
-           --pure $ CLet xn sc' CErased (CLocal First) -- TODO work out types too
+           case scr' of
+             -- Case of Case optimisation (helps eliminate parameter types)
+             (CConCase xscr xalts@((MkConAlt xn xargs xsc)::_) xdef) =>
+                  do 
+                     (bs, env') <- extendLoc [] xargs
+                     xsc' <- eval env' [] (rewrite appendNilRightNeutral xargs in xsc)
+                     coreLift $ putStrLn $ "CaseOfCase for scr " ++ show xsc
+                     coreLift $ putStrLn $ "... of " ++ show xsc'
+                     isParamXsc <- isParam [] xsc'
+                     case isParamXsc of
+                       True => do xalts' <- traverse (caseOfCaseAlt alts' def') xalts
+                                  pa <- pickAlt [] [] scr' xalts' Nothing
+                                  eval [] [] $ CConCase xscr xalts' Nothing
+                       False => pure $ CConCase scr' alts' def'
+             _ => pure $ CConCase scr' alts' def'
       where
+        caseOfCaseAlt : List (CConAlt free) -> Maybe (CExp free) -> CConAlt free -> Core (CConAlt free)
+        caseOfCaseAlt alts' def' (MkConAlt n args sc)
+          = do let env' = extendLoc env args
+                   cAlts = map (weakenNs args) alts'
+                   cDef  = map (weakenNs args) def'
+               pa <- pickAlt [] [] sc cAlts cDef
+               case pa of
+                 Nothing => pure $ MkConAlt n args $ CConCase sc cAlts cDef
+                 Just val => pure $ MkConAlt n args $ val
+
         updateLoc : {idx, vs : _} ->
                     (0 p : IsVar x idx (vs ++ free)) ->
                     EEnv free vs -> CExp free -> EEnv free vs
@@ -366,9 +406,24 @@ parameters (mode : EvalMode)
               CExp free -> List (CConAlt (vars ++ free)) ->
               Maybe (CExp (vars ++ free)) ->
               Core (Maybe (CExp free))
-    pickAlt env stk (CCon n args) [] def
+  {-
+    pickAlt env stk scr [MkConAlt cn args sc] Nothing
+      = do let tm = wrapWithLets (weakenNs vars scr) cn 0 args sc
+           map Just $ eval env stk tm
+  -}
+    pickAlt env stk scr alts def = pickAlt' env stk scr alts def
+
+    pickAlt' : {vars, free : _} ->
+              {auto c : Ref Ctxt Defs} ->
+              {auto p : Ref InlineFuel Nat} ->
+              {auto l : Ref LVar Int} ->
+              EEnv free vars -> Stack free ->
+              CExp free -> List (CConAlt (vars ++ free)) ->
+              Maybe (CExp (vars ++ free)) ->
+              Core (Maybe (CExp free))
+    pickAlt' env stk (CCon n args) [] def
       = traverseOpt (eval env stk) def
-    pickAlt {vars} {free} env stk con@(CCon n args) (MkConAlt n' args' sc :: alts) def
+    pickAlt' {vars} {free} env stk con@(CCon n args) (MkConAlt n' args' sc :: alts) def
       = if n == n'
            then case checkLengthMatch args args' of
                   Nothing => pure Nothing
@@ -378,11 +433,11 @@ parameters (mode : EvalMode)
                        pure $ Just !(eval env' stk
                                (rewrite sym (appendAssociative args' vars free) in
                                 sc))
-           else pickAlt env stk con alts def
-    pickAlt env stk scr alts def
+           else pickAlt' env stk con alts def
+    pickAlt' env stk scr alts def
       = do --Try evaluating away let bindings and see if we get a CCon
            case !(evalTop NoLets env stk $ weakenNs vars scr) of
-             CCon n args => pickAlt env stk (CCon n args) alts def
+             CCon n args => pickAlt' env stk (CCon n args) alts def
              _           => pure Nothing
 
 evalTop mode env stk tm = eval mode env stk tm
@@ -526,6 +581,7 @@ getRefs _ = empty
 
 mutual
   liftLetsTm : {vars:_} ->
+               {auto c : Ref Ctxt Defs} ->
                {auto l : Ref LVar Int} ->
                CExp vars ->
                Core (lvars **
@@ -547,8 +603,11 @@ mutual
          pure $ ((sclv++(x::vallv)) ** (lets',sc'))
   liftLetsTm (CCon x args)
     = do --args' <- traverse abstractArg args
+         isParam <- isParamCon x
          (lv ** (lets, args')) <- liftLetsArgs True args
-         pure $ (lv ** (lets, CCon x args'))
+         case isParam of
+           False => pure $ (lv ** (lets, CCon x args'))
+           True  => do pure $ ([] ** (id, CCon x args )) -- CCon x args')))
   liftLetsTm (CApp f args)
     = do (lv ** (lets, args')) <- liftLetsArgs False args
          (flv ** (flets, fsc)) <- liftLetsTm $ weakenNs lv f
@@ -618,6 +677,7 @@ mutual
               )
 
   liftLetsArgs : {vars:_} ->
+                 {auto c : Ref Ctxt Defs} ->
                  {auto l : Ref LVar Int} ->
                  Bool -> -- ^ Should we lift constructors out to a local def?
                  List (CExp vars) ->
@@ -650,6 +710,7 @@ mutual
          pure (alv++rlv ** (lets',args'))
 
   liftLetsAlts : {vars:_} ->
+                 {auto c : Ref Ctxt Defs} ->
                  {auto l : Ref LVar Int} ->
                  CExp vars -> -- Scrutinee
                  List (CConAlt vars) ->
@@ -683,6 +744,7 @@ mutual
 
   -- Specialisation of liftLetsAlts for where we eliminate a single CConAlt
   liftLetsAlt : {vars:_} ->
+                {auto c : Ref Ctxt Defs} ->
                 {auto l : Ref LVar Int} ->
                 CExp vars -> -- Scrutinee
                 CConAlt vars ->
@@ -795,11 +857,19 @@ mutual
          sc' <- annotateTyTm (ty'::tys) sc
          pure $ CLet x (CConCase (CLocal {idx} p) alts def) ty' sc'
     where
+    match : Term [] -> Term [] -> Bool
+    match Erased x = True
+    match x Erased = True
+    match x y = x==y
+    take : (AppInfo, Term []) -> (AppInfo, Term []) -> (AppInfo, Term [])
+    take (_,Erased) x = x
+    take x (_,Erased) = x
+    take x y = x
     eraseMismatch : Term [] -> Term [] -> Term []
     eraseMismatch a b
       = let (fn , args ) = getFnInfoArgs a
             (fn', args') = getFnInfoArgs b
-            matchedArgs = map (\(x,y) => if x==y then x else (fst x, eraseMismatch (snd x) (snd y))) $ zip args args'
+            matchedArgs = map (\(x,y) => if match (snd x) (snd y) then take x y else (fst x, eraseMismatch (snd x) (snd y))) $ zip args args'
         in if (fn==fn')
               then apply fn matchedArgs
               else Erased
@@ -865,6 +935,8 @@ liftLetsDef n
     = do defs <- get Ctxt
          Just def <- lookupDef n defs   | Nothing => pure ()
          let Just cexpr = compexpr def  | Nothing => pure ()
+         coreLift $ putStrLn $ "Before lift lets: "
+         coreLift $ putStrLn $ show cexpr
          setCompiled n !(liftLets cexpr)
 
 export
